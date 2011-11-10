@@ -11,12 +11,47 @@ class Service(object):
     def __init__(self, name):
         self.name = name
         self.config = ServiceConfig(self.BASE_PATH + "/" + self.name)
-        self.config.listen(self.name, self._update)
         self.novaclient = None
-        
+
+    def manage(self):
+        # Load the configuration and configure the service.
+        logging.info("Managing service %s" % (self.name))
         self.config.load()
+        self._configure()
         
-    
+        # We need to ensure that the instance is blessed. This is simply done by
+        # sending the bless command.
+        try:
+            logging.info("Blessing instance id=%s for service %s" % (self.config.nova_instanceid, self.name))
+            self.novaclient.bless_instance(self.config.nova_instanceid)
+        except Exception, e:
+            # There is a chance that this instance was already blessed. This is not
+            # an issue, so we just need to ignore. There is also a chance that we could
+            # not connected to nova, or there is some error. In any event, we can't do much
+            # so let's log a warning.
+            logging.warn("Failed to bless a service instance (service=%s, instances_id=%s). Error=%s" 
+                         % (self.name, self.config.nova_instanceid, e) )
+        
+        # Update ourselves which will ensure that we have the min/max number of instances running
+        self._update()
+        
+        # Hook into the config so that we are notified if any of the parameters change. 
+        self.config.listen(self.name, self._update)
+
+    def unmanage(self):
+        # Delete all the launched instances, and unbless the instance. Essentially, return it
+        # back to the unmanaged.
+        logging.info("Unmanaging service %s" % (self.name))
+        self._configure()
+        
+        # Delete all the launched instances.
+        for instance in self.instances():
+            logging.info("Deleting launched instance %s (id=%s) for service %s" % (instance['name'],instance['id'], self.name))
+            self.novaclient.delete_instance(instance['id'])
+        
+        logging.info("Unblessing instance id=%s for service %s" % (self.config.nova_instanceid, self.name))
+        self.novaclient.unbless_instance(self.config.nova_instanceid) 
+
     def _update(self):
         self._configure()
         
