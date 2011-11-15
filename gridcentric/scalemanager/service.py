@@ -1,16 +1,16 @@
 
 import logging
 
-from gridcentric.nova.client import NovaClient
+from gridcentric.nova.client.client import NovaClient
 from gridcentric.scalemanager.serviceconfig import ServiceConfig
 
 class Service(object):
     
-    BASE_PATH="/home/dscannell/projects/gridcentric/cloud/scalemanager/testenv"
+    BASE_PATH="/home/dscannell/projects/gridcentric/cloud/scalemanager/testenv/configs"
     
-    def __init__(self, name):
+    def __init__(self, config_url, name):
         self.name = name
-        self.config = ServiceConfig(self.BASE_PATH + "/" + self.name)
+        self.config = ServiceConfig(config_url, self.BASE_PATH + "/" + self.name)
         self.novaclient = None
 
     def manage(self):
