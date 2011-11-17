@@ -1,0 +1,13 @@
+upstream ${netloc} {
+    % for address in addresses:
+    server ${address};
+    % endfor
+}
+ 
+server {
+    listen 80;
+    server_name testscale.gridcentric.com;
+    location / {
+      proxy_pass ${url};
+    }
+}

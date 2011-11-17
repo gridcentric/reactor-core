@@ -1,17 +1,21 @@
 
+import hashlib
 import logging
+import os
 
 from gridcentric.nova.client.client import NovaClient
 from gridcentric.scalemanager.serviceconfig import ServiceConfig
+import gridcentric.scalemanager.loadbalancer.connection as lb_connection
 
 class Service(object):
     
-    BASE_PATH="/home/dscannell/projects/gridcentric/cloud/scalemanager/testenv/configs"
+    BASE_PATH="/home/dscannell/projects/gridcentric/cloud/scalemanager/testenv"
     
     def __init__(self, config_url, name):
         self.name = name
-        self.config = ServiceConfig(config_url, self.BASE_PATH + "/" + self.name)
+        self.config = ServiceConfig(config_url, os.path.join(self.BASE_PATH,"configs", self.name))
         self.novaclient = None
+        self.lb_conn = lb_connection.get_connection(os.path.join(self.BASE_PATH, "nginx.conf.d", "%s.conf" %(self.name)))
 
     def manage(self):
         # Load the configuration and configure the service.
@@ -87,3 +91,6 @@ class Service(object):
                 for network_addrs in network_addresses:
                     addresses.append(network_addrs['addr'])
         return addresses
+   
+    def update_loadbalancer(self):
+        self.lb_conn.update(self.config.service_url, self.addresses())
