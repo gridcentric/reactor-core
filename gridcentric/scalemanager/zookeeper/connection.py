@@ -2,11 +2,13 @@
 import zookeeper
 
 ZOO_OPEN_ACL_UNSAFE = {"perms":0x1f, "scheme":"world", "id":"anyone"}
+
 class ZookeeperConnection(object):
     
     def __init__(self, servers, acl=ZOO_OPEN_ACL_UNSAFE):
         self.handle = zookeeper.init(servers)
         self.acl = acl
+        self.watches = {}
     
     def write(self, path, contents):
         """ 
@@ -48,4 +50,16 @@ class ZookeeperConnection(object):
         pass
     
     def watch_children(self, path, fn):
-        pass
+        if not zookeeper.exists(self.handle, path):
+            self.write(path, "")
+        
+        self.watches[path] = [fn] + self.watches.get(path, [])
+        return zookeeper.get_children(self.handle, path, self.zookeeper_watch)
+
+    def zookeeper_watch(self, zh, event, state, path):
+        fns = self.watches.get(path, None)
+        if fns:
+            result = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
+            for fn in fns:
+                fn(result)
+        

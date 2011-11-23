@@ -11,16 +11,15 @@ class Service(object):
     
     BASE_PATH="/home/dscannell/projects/gridcentric/cloud/scalemanager/testenv"
     
-    def __init__(self, config_url, name):
+    def __init__(self, name, service_config):
         self.name = name
-        self.config = ServiceConfig(config_url, os.path.join(self.BASE_PATH,"configs", self.name))
+        self.config = service_config
         self.novaclient = None
         self.lb_conn = lb_connection.get_connection(os.path.join(self.BASE_PATH, "nginx.conf.d", "%s.conf" %(self.name)))
 
     def manage(self):
         # Load the configuration and configure the service.
         logging.info("Managing service %s" % (self.name))
-        self.config.load()
         self._configure()
         
         # We need to ensure that the instance is blessed. This is simply done by
@@ -38,9 +37,6 @@ class Service(object):
         
         # Update ourselves which will ensure that we have the min/max number of instances running
         self._update()
-        
-        # Hook into the config so that we are notified if any of the parameters change. 
-        self.config.listen(self.name, self._update)
 
     def unmanage(self):
         # Delete all the launched instances, and unbless the instance. Essentially, return it
@@ -65,7 +61,7 @@ class Service(object):
         # Launch instances until we reach the min setting value.
         while num_instances < int(self.config.min_instances):
             logging.info("Launching new instance for server %s (current server num: %s)" % (self.name, num_instances))
-            self.novaclient.launch_instance(self.config.nova_instanceid)
+            self._launch_instance()
             num_instances += 1
         
         # Delete instances until we reach the max setting value.
@@ -74,6 +70,14 @@ class Service(object):
             self.novaclient.delete_instance(instances[-1]['id'])
             instances = instances[0:-1]
             num_instances -= 1
+    
+    def _launch_instance(self):
+        # Notify the ScaleManager that we are launching a new instance, and that we are expecting
+        # an IP address to be pinged back.
+        
+        # Launch the instance.
+        self.novaclient.launch_instance(self.config.nova_instanceid)
+        
     
     def _configure(self):
         self.novaclient = NovaClient(self.config.nova_authurl, self.config.nova_user, \
