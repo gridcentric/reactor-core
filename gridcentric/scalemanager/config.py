@@ -51,3 +51,9 @@ class ServiceConfig(Config):
         super(ServiceConfig, self).__init__("service")
         self.load(config_str)
         
+    def reload(self, config_str):
+        if self.config == None:
+            self.load(config_str)
+        else:
+            self.config.readfp(StringIO(config_str))
+        

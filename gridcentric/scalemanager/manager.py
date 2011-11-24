@@ -14,6 +14,7 @@ from gridcentric.scalemanager.zookeeper.connection import ZookeeperConnection
 class ScaleManager(threading.Thread):
     
     def __init__(self):
+        super(ScaleManager, self).__init__()
         self.uuid = uuid.uuid4()
         self.services = {}
     
@@ -56,6 +57,8 @@ class ScaleManager(threading.Thread):
             # This service is currently unmanaged.
             service.manage()
             self.zk_conn.write("%s/managed" % (service_path),"True")
+        
+        self.zk_conn.watch_contents(service_path, service.update_config)
             
     
     def remove_service(self, service_name):
@@ -68,8 +71,10 @@ class ScaleManager(threading.Thread):
             logging.info("Unmanaging service %s" %(service_name))
             service.unmanage()
     
+    def update_service_config(self, service_config):
+        pass
+    
     def run(self):
-        self.serve(self.zk_servers)
         while True:
             time.sleep(86400)
         

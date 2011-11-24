@@ -36,7 +36,7 @@ class Service(object):
                          % (self.name, self.config.nova_instanceid, e) )
         
         # Update ourselves which will ensure that we have the min/max number of instances running
-        self._update()
+        self.update()
 
     def unmanage(self):
         # Delete all the launched instances, and unbless the instance. Essentially, return it
@@ -52,7 +52,7 @@ class Service(object):
         logging.info("Unblessing instance id=%s for service %s" % (self.config.nova_instanceid, self.name))
         self.novaclient.unbless_instance(self.config.nova_instanceid) 
 
-    def _update(self):
+    def update(self):
         self._configure()
         
         instances = self.instances()
@@ -70,6 +70,10 @@ class Service(object):
             self.novaclient.delete_instance(instances[-1]['id'])
             instances = instances[0:-1]
             num_instances -= 1
+    
+    def update_config(self, config_str):
+        self.config.reload(config_str)
+        self.update()
     
     def _launch_instance(self):
         # Notify the ScaleManager that we are launching a new instance, and that we are expecting

@@ -1,0 +1,86 @@
+#!/usr/bin/env python
+
+
+
+from ConfigParser import SafeConfigParser
+import getopt
+import logging
+from StringIO import StringIO
+import sys
+
+from gridcentric.scalemanager.client import ScaleManagerClient
+
+def usage():
+    print "usage: scalemanager [-z --zookeeper=]"
+    
+opts, args = getopt.getopt(sys.argv[1:], "hz:", ["help","zookeeper="])
+
+zk_servers = ""
+for o, a in opts:
+    if o in ('-h', '--help'):
+        usage()
+        sys.exit(0)
+    elif o in ('-z', '--zookeeper'):
+        zk_servers += "," + a
+
+if len(args) < 1:
+    usage()
+    exit(0)
+
+command = args[0]
+client = ScaleManagerClient(zk_servers[1:])
+if command == "list-services":
+    services = client.list_managed_services()
+    if services:
+        for service in services: 
+            print service
+
+elif command == "manage":
+    service_name = args[1]
+    service_conf = ""
+    for line in sys.stdin.readlines():
+        service_conf += line
+    
+    client.manage_service(service_name, service_conf)
+
+elif command == "unmanage":
+    service_name = args[1]
+    client.unmanage_service(service_name)
+
+elif command == "update":
+    service_name = args[1]
+    new_conf = ""
+    for line in sys.stdin.readlines():
+        new_conf += line
+    
+    # Read in the existing configuration and update it with
+    # with the new configuration. This allows people to do a
+    # partial update.
+    service_conf = client.get_service_config(service_name)
+    config = SafeConfigParser()
+    config.readfp(StringIO(service_conf))
+    config.readfp(StringIO(new_conf))
+    
+    # Write out the full contents of the updated configuration.
+    config_value = StringIO()
+    config.write(config_value)
+    client.update_service(service_name, config_value.getvalue())
+    
+
+elif command == "show":
+    service_name = args[1]
+    config = client.get_service_config(service_name)
+    
+    print config
+    
+elif command == "runserver":
+    from gridcentric.scalemanager.manager import ScaleManager
+    logging.basicConfig(level=logging.INFO)
+    manager = ScaleManager()
+    manager.serve(zk_servers)
+    manager.start()
+
+else:
+    usage()
+    exit(1)
+
