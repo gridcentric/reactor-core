@@ -11,10 +11,9 @@ from gridcentric.scalemanager.service import Service
 from gridcentric.scalemanager.zookeeper.connection import ZookeeperConnection
 
 
-class ScaleManager(threading.Thread):
+class ScaleManager(object):
     
     def __init__(self):
-        super(ScaleManager, self).__init__()
         self.uuid = uuid.uuid4()
         self.services = {}
     
@@ -70,10 +69,7 @@ class ScaleManager(threading.Thread):
         if service:
             logging.info("Unmanaging service %s" %(service_name))
             service.unmanage()
-    
-    def update_service_config(self, service_config):
-        pass
-    
+
     def run(self):
         while True:
             time.sleep(86400)
