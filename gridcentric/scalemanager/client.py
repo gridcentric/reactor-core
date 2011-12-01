@@ -20,3 +20,6 @@ class ScaleManagerClient(object):
     
     def get_service_config(self, service_name):
         return self.zk_conn.read("/gridcentric/scalemanager/service/%s" % (service_name))
+    
+    def record_new_ipaddress(self, ip_address):
+        self.zk_conn.write("/gridcentric/scalemanager/new-ips/%s" % (ip_address), "")

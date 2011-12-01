@@ -13,7 +13,30 @@ import sys
 from gridcentric.scalemanager.client import ScaleManagerClient
 
 def usage():
-    print "usage: scalemanager [-z --zookeeper=]"
+    print "usage: scalemanager [-h] [--help] -z |--zookeeper=<zookeeper instance> command"
+    print ""
+    print "Optional arguments:"
+    print "   -h,--help              Display this help message"
+    print ""
+    print "Required arguments:"
+    print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option multiple"
+    print "                          times to specific a pool of zookeeper instances."
+    print ""
+    print "Commands:"
+    print "    list-services            List all the services currently being managed."
+    print ""
+    print "    manage <service_name>    Manage a new serivce with the given name. The service's"
+    print "                             configuration is read from stdin."
+    print ""
+    print "    unmange <service_name>   Unmanged the service with the given name."
+    print ""
+    print "    update <service_name>    Update the managed service's configuration by reading the"
+    print "                             values from stdin."
+    print ""
+    print "    show <service_name>      Show the current configuration for the service."
+    print ""
+    print "    runserver                Run the scale manager server."
+    
     
 opts, args = getopt.getopt(sys.argv[1:], "hz:", ["help","zookeeper="])
 
@@ -25,9 +48,9 @@ for o, a in opts:
     elif o in ('-z', '--zookeeper'):
         zk_servers += "," + a
 
-if len(args) < 1:
+if len(args) < 1 or zk_servers == "":
     usage()
-    exit(0)
+    sys.exit(1)
 
 command = args[0]
 client = ScaleManagerClient(zk_servers[1:])
@@ -59,6 +82,7 @@ elif command == "update":
     # with the new configuration. This allows people to do a
     # partial update.
     service_conf = client.get_service_config(service_name)
+    print service_conf
     config = SafeConfigParser()
     config.readfp(StringIO(service_conf))
     config.readfp(StringIO(new_conf))
@@ -83,7 +107,14 @@ elif command == "runserver":
     manager.serve(zk_servers)
     manager.run()
 
+elif command == 'runapi':
+    from paste.httpserver import serve
+    from gridcentric.scalemanager.api import ScaleManagerApi
+    
+    api = ScaleManagerApi(zk_servers)
+    serve(api.get_wsgi_app(), host='0.0.0.0')
+
 else:
     usage()
-    exit(1)
+    sys.exit(1)
 

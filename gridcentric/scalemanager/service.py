@@ -11,9 +11,10 @@ class Service(object):
     
     BASE_PATH="/home/dscannell/projects/gridcentric/cloud/scalemanager/testenv"
     
-    def __init__(self, name, service_config):
+    def __init__(self, name, service_config, scale_manager):
         self.name = name
         self.config = service_config
+        self.scale_manager = scale_manager
         self.novaclient = None
         self.lb_conn = lb_connection.get_connection(os.path.join(self.BASE_PATH, "nginx.conf.d", "%s.conf" %(self.name)))
 
@@ -34,9 +35,6 @@ class Service(object):
             # so let's log a warning.
             logging.warn("Failed to bless a service instance (service=%s, instances_id=%s). Error=%s" 
                          % (self.name, self.config.nova_instanceid, e) )
-        
-        # Update ourselves which will ensure that we have the min/max number of instances running
-        self.update()
 
     def unmanage(self):
         # Delete all the launched instances, and unbless the instance. Essentially, return it
@@ -79,6 +77,7 @@ class Service(object):
         # Notify the ScaleManager that we are launching a new instance, and that we are expecting
         # an IP address to be pinged back.
         
+        self.scale_manager.watch_for_new_ip(self)
         # Launch the instance.
         self.novaclient.launch_instance(self.config.nova_instanceid)
         

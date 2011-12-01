@@ -16,6 +16,7 @@ class ScaleManager(object):
     def __init__(self):
         self.uuid = uuid.uuid4()
         self.services = {}
+        self.watching_ips ={}
     
     def serve(self, zk_servers):
         # Create a connection to zk_configuration and read
@@ -29,6 +30,8 @@ class ScaleManager(object):
                     self.zk_conn.watch_children("/gridcentric/scalemanager/service", self.service_change)) 
     
     def service_change(self, services):
+        
+        logging.info("Services have changed: new=%s, existing=%s" %(services, self.services.keys()))
         for service_name in services:
             if service_name not in self.services:
                 self.create_service(service_name)
@@ -48,7 +51,7 @@ class ScaleManager(object):
         
         service_path  = "/gridcentric/scalemanager/service/%s" % (service_name)
         service_config = ServiceConfig(self.zk_conn.read(service_path))
-        service = Service(service_name, service_config)
+        service = Service(service_name, service_config, self)
         self.services[service_name] = service
         
         if self.zk_conn.read("%s/managed" % (service_path)) == None:
@@ -57,6 +60,7 @@ class ScaleManager(object):
             service.manage()
             self.zk_conn.write("%s/managed" % (service_path),"True")
         
+        service.update()
         self.zk_conn.watch_contents(service_path, service.update_config)
             
     
@@ -69,6 +73,37 @@ class ScaleManager(object):
         if service:
             logging.info("Unmanaging service %s" %(service_name))
             service.unmanage()
+
+    def watch_for_new_ip(self, service):
+        """
+        This sets the scale manager to watch for a new IP address that will belong to this
+        service.
+        """
+        if len(self.watching_ips) == 0:
+            # Initialize the watch
+            self.zk_conn.watch_children("/gridcentric/scalemanager/new-ips", self.ip_changed)
+            
+        self.watching_ips[service] = self.watching_ips.get(service,0) + 1
+
+    def ip_changed(self, ips):
+        
+        delete_watches = []
+        logging.info("New IP was added.")
+        for service in self.watching_ips:
+            service_ips = service.addresses()
+            for ip in ips:
+                logging.info("service found for IP")
+                if ip in service_ips:
+                    # We found the service that was waiting for this ip address.
+                    # Remove this ip address from ZK, and decrement this watch count.
+                    if self.watching_ips[service] == 1:
+                        delete_watches += [service]
+                    self.zk_conn.delete("/gridcentric/scalemanager/new-ips/%s" % (ip))
+                    service.update_loadbalancer()
+        
+        # Delete watches, etc.
+        for service in delete_watches:
+            del self.watching_ips[service]
 
     def run(self):
         while True:
