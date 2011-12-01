@@ -9,6 +9,7 @@ import uuid
 from gridcentric.scalemanager.config import ManagerConfig, ServiceConfig
 from gridcentric.scalemanager.service import Service
 from gridcentric.scalemanager.zookeeper.connection import ZookeeperConnection
+import gridcentric.scalemanager.zookeeper.paths as paths
 
 
 class ScaleManager(object):
@@ -23,11 +24,11 @@ class ScaleManager(object):
         # in the ScaleManager service config
         
         self.zk_conn = ZookeeperConnection(zk_servers)
-        manager_config = self.zk_conn.read("/gridcentric/scalemanager/config")
+        manager_config = self.zk_conn.read(paths.config)
         self.config = ManagerConfig(manager_config)
         
         self.service_change(
-                    self.zk_conn.watch_children("/gridcentric/scalemanager/service", self.service_change)) 
+                    self.zk_conn.watch_children(paths.services, self.service_change)) 
     
     def service_change(self, services):
         
@@ -49,16 +50,16 @@ class ScaleManager(object):
         
         logging.info("Assigning service %s to manager %s" %(service_name, self.uuid))
         
-        service_path  = "/gridcentric/scalemanager/service/%s" % (service_name)
+        service_path  = paths.service(service_name)
         service_config = ServiceConfig(self.zk_conn.read(service_path))
         service = Service(service_name, service_config, self)
         self.services[service_name] = service
         
-        if self.zk_conn.read("%s/managed" % (service_path)) == None:
+        if self.zk_conn.read(paths.service_managed(service_name)) == None:
             logging.info("New service %s found to be managed." %(service_name))
             # This service is currently unmanaged.
             service.manage()
-            self.zk_conn.write("%s/managed" % (service_path),"True")
+            self.zk_conn.write(paths.service_managed(service_name),"True")
         
         service.update()
         self.zk_conn.watch_contents(service_path, service.update_config)
@@ -81,7 +82,7 @@ class ScaleManager(object):
         """
         if len(self.watching_ips) == 0:
             # Initialize the watch
-            self.zk_conn.watch_children("/gridcentric/scalemanager/new-ips", self.ip_changed)
+            self.zk_conn.watch_children(paths.new_ips, self.ip_changed)
             
         self.watching_ips[service] = self.watching_ips.get(service,0) + 1
 
@@ -98,7 +99,7 @@ class ScaleManager(object):
                     # Remove this ip address from ZK, and decrement this watch count.
                     if self.watching_ips[service] == 1:
                         delete_watches += [service]
-                    self.zk_conn.delete("/gridcentric/scalemanager/new-ips/%s" % (ip))
+                    self.zk_conn.delete(paths.new_ip(ip))
                     service.update_loadbalancer()
         
         # Delete watches, etc.
