@@ -58,15 +58,20 @@ class Service(object):
         
         # Launch instances until we reach the min setting value.
         while num_instances < int(self.config.min_instances):
-            logging.info("Launching new instance for server %s (current server num: %s)" % (self.name, num_instances))
+            logging.info("Launching new instance for server %s (server num change: %s->%s)" % (self.name, num_instances, num_instances+1))
             self._launch_instance()
             num_instances += 1
         
         # Delete instances until we reach the max setting value.
-        while num_instances > int(self.config.max_instances):
-            logging.info("Shutting down instance for server %s (current server num: %s)" % (self.name, num_instances))
-            self.novaclient.delete_instance(instances[-1]['id'])
-            instances = instances[0:-1]
+        instances_to_delete = instances[int(self.config.max_instances):]
+        instances = instances[:int(self.config.max_instances)]
+        # Update the load balancer before bringing down the instances.
+        self.update_loadbalancer(addresses=self.extract_addresses_from(instances))
+        # It might be good to wait a little bit for the servers to clear out any requests they
+        # are currently serving.
+        for instance in instances_to_delete:
+            logging.info("Shutting down instance for server %s (server num change: %s->%s)" % (self.name, num_instances, num_instances-1))
+            self.novaclient.delete_instance(instance['id'])
             num_instances -= 1
     
     def update_config(self, config_str):
@@ -92,12 +97,21 @@ class Service(object):
         return self.novaclient.list_launched_instances(self.config.nova_instanceid)
     
     def addresses(self):
-        addresses = []
-        for instance in self.instances():
-            for network_addresses in instance.get('addresses', {}).values():
-                for network_addrs in network_addresses:
-                    addresses.append(network_addrs['addr'])
-        return addresses
+        return self.extract_addresses_from(self.instances())
    
-    def update_loadbalancer(self):
-        self.lb_conn.update(self.config.service_url, self.addresses())
+    def extract_addresses_from(self, instances):
+       addresses = []
+       for instance in instances:
+           for network_addresses in instance.get('addresses', {}).values():
+               for network_addrs in network_addresses:
+                   addresses.append(network_addrs['addr'])
+       return addresses
+   
+    def update_loadbalancer(self, addresses = None):
+        if addresses == None:
+            addresses = self.addresses()
+        logging.info("Updating loadbalancer for service %s with addresses %s" % (self.name, addresses))
+        self.lb_conn.update(self.config.service_url, addresses)
+        
+        
+        
