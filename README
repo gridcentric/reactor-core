@@ -1,0 +1,48 @@
+==Quick Start==
+1. Ensure that the dependent projects (outlined below) are installed and that the zookeeper
+server is running.
+
+2. Using Openstack, with the gridcentric extensions installed, boot a new instance.
+
+3. Copy example/setup.sh to the new instance and run the script to create an example web application:
+e$ scp example/setup.sh root@new-instance
+$ ssh root@new-instance
+# ./setup.sh user@development-machine /path/to/example/dir
+
+4. Modify the example service.conf. In particular update the nova_instance id to point to the
+newly created instance.
+
+5. Run the scale manager server
+$ sudo bin/scalemanager -z localhost:2181 runserver
+
+6. Run the scale manager API that allows communication with the scale manager.
+$ bin/scalemanager -z localhost:2181 runapi
+
+7. Create a new service to autoscale, using the modified example service.conf from step 4.
+$ bin/scalemanager -z localhost:2181 create testscale < example/service.conf
+
+8. The scale manager will now bless the instances, and launch new instances up to the specified
+minimum number of instances. The load balancer configuration will also be modified once the in-guest
+agent has registered with the manager so that we no the IP is up and running.
+
+==Dependencies==
+
+nginx
+    The load balancer used by the scalemanager
+
+zookeeper (3.4.0) (http://zookeeper.apache.org/)
+    This the main datastore / control mechanism
+
+mako (http://www.makotemplates.org/)
+    A simple python templating engine used to update load balancer configurations
+
+pyramid (http://docs.pylonsproject.org/projects/pyramid/en/1.2-branch/index.html)
+    A simple web framework used by the API
+
+==Project Contents==
+
+bin
+    Contains scripts that are used to start and configure the scalemanager service / API
+
+gridcentric
+    The top-level python package
