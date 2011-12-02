@@ -36,6 +36,8 @@ def usage():
     print "    show <service_name>      Show the current configuration for the service."
     print ""
     print "    runserver                Run the scale manager server."
+    print ""
+    print"     runapi                   Runs the API server."
     
     
 opts, args = getopt.getopt(sys.argv[1:], "hz:", ["help","zookeeper="])

@@ -19,3 +19,4 @@ class ScaleManagerApi:
     def new_ip_address(self, context, request):
         self.client.record_new_ipaddress(request.matchdict['ipaddress'])
         return Response()
+    

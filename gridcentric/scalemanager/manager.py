@@ -109,8 +109,3 @@ class ScaleManager(object):
     def run(self):
         while True:
             time.sleep(86400)
-        
-if __name__ == "__main__":
-    manager = ScaleManager(['localhost:2181'])
-    manager.start()
-    manaager.join()
