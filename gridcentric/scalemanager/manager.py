@@ -86,6 +86,9 @@ class ScaleManager(object):
             
         self.watching_ips[service] = self.watching_ips.get(service,0) + 1
 
+    def drop_ip(self, service, ip_address):
+        pass
+
     def ip_changed(self, ips):
         
         delete_watches = []
@@ -99,8 +102,9 @@ class ScaleManager(object):
                     # Remove this ip address from ZK, and decrement this watch count.
                     if self.watching_ips[service] == 1:
                         delete_watches += [service]
+                    self.zk_conn.write(paths.confirmed_ip(service.name, ip), "")
                     self.zk_conn.delete(paths.new_ip(ip))
-                    service.update_loadbalancer()
+                    service.update_loadbalancer(self.zk_conn.read(paths.confirmed_ips(service.name)))
         
         # Delete watches, etc.
         for service in delete_watches:

@@ -16,8 +16,9 @@ class Service(object):
         self.config = service_config
         self.scale_manager = scale_manager
         self.novaclient = None
+        self.confirmed_addresses = {}
         self.lb_conn = lb_connection.get_connection(os.path.join(self.BASE_PATH, "nginx.conf.d", "%s.conf" %(self.name)))
-
+        
     def manage(self):
         # Load the configuration and configure the service.
         logging.info("Managing service %s" % (self.name))
@@ -71,17 +72,25 @@ class Service(object):
         # are currently serving.
         for instance in instances_to_delete:
             logging.info("Shutting down instance for server %s (server num change: %s->%s)" % (self.name, num_instances, num_instances-1))
-            self.novaclient.delete_instance(instance['id'])
+            self._delete_instance(instance)
             num_instances -= 1
     
     def update_config(self, config_str):
         self.config.reload(config_str)
         self.update()
-    
+
+    def _delete_instance(self, instance):
+        
+        # Notify the ScaleManager to drop this ip address
+        for address in self.extract_addresses_from([instance]):
+            self.scale_manager.drop_ip(self.name, address)
+
+        # Delete the instance from nova            
+        self.novaclient.delete_instance(instance['id'])
+        
     def _launch_instance(self):
         # Notify the ScaleManager that we are launching a new instance, and that we are expecting
         # an IP address to be pinged back.
-        
         self.scale_manager.watch_for_new_ip(self)
         # Launch the instance.
         self.novaclient.launch_instance(self.config.nova_instanceid)
