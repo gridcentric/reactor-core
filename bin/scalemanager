@@ -13,14 +13,13 @@ import sys
 from gridcentric.scalemanager.client import ScaleManagerClient
 
 def usage():
-    print "usage: scalemanager [-h] [--help] -z |--zookeeper=<zookeeper instance> command"
+    print "usage: scalemanager [-h] [--help] [-z |--zookeeper=<zookeeper instance>] command"
     print ""
     print "Optional arguments:"
     print "   -h,--help              Display this help message"
-    print ""
-    print "Required arguments:"
     print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option multiple"
-    print "                          times to specific a pool of zookeeper instances."
+    print "                          times to specific a pool of zookeeper instances. Default to"
+    print "                          localhost:2181" 
     print ""
     print "Commands:"
     print "    list-services            List all the services currently being managed."
@@ -50,7 +49,10 @@ for o, a in opts:
     elif o in ('-z', '--zookeeper'):
         zk_servers += "," + a
 
-if len(args) < 1 or zk_servers == "":
+if zk_servers == "":
+    zk_servers = ",localhost:2181"
+
+if len(args) < 1:
     usage()
     sys.exit(1)
 
