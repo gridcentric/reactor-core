@@ -67,7 +67,8 @@ class Service(object):
         instances_to_delete = instances[int(self.config.max_instances):]
         instances = instances[:int(self.config.max_instances)]
         # Update the load balancer before bringing down the instances.
-        self.update_loadbalancer(addresses=self.extract_addresses_from(instances))
+        self._drop_addresses(instances_to_delete)
+        self.update_loadbalancer()
         # It might be good to wait a little bit for the servers to clear out any requests they
         # are currently serving.
         for instance in instances_to_delete:
@@ -79,12 +80,13 @@ class Service(object):
         self.config.reload(config_str)
         self.update()
 
-    def _delete_instance(self, instance):
-        
-        # Notify the ScaleManager to drop this ip address
-        for address in self.extract_addresses_from([instance]):
+    def _drop_addresses(self, instances):
+        # Drops all the addresses associated with these instances.
+        for address in self.extract_addresses_from(instances):
             self.scale_manager.drop_ip(self.name, address)
 
+    def _delete_instance(self, instance):
+        
         # Delete the instance from nova            
         self.novaclient.delete_instance(instance['id'])
         
@@ -118,7 +120,7 @@ class Service(object):
    
     def update_loadbalancer(self, addresses = None):
         if addresses == None:
-            addresses = self.addresses()
+            addresses = self.scale_manager.confirmed_ips(self.name)
         logging.info("Updating loadbalancer for service %s with addresses %s" % (self.name, addresses))
         self.lb_conn.update(self.config.service_url, addresses)
         

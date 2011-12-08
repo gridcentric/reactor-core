@@ -93,8 +93,6 @@ class ZookeeperConnection(object):
             elif event == ZOO_EVENT_NODE_DATA_CHANGED:
                 result, _ = zookeeper.get(self.handle, path, self.zookeeper_watch)
             
-            logging.info("Zookeeper connection - event: %s, result=%s" % (event, result))
-            
             if result != None:
                 for fn in fns:
                     fn(result)

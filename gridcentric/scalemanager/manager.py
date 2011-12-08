@@ -86,25 +86,36 @@ class ScaleManager(object):
             
         self.watching_ips[service] = self.watching_ips.get(service,0) + 1
 
-    def drop_ip(self, service, ip_address):
-        pass
+    def confirmed_ips(self, service_name):
+        """
+        Returns a list of all the confirmed ips for the the service.
+        """
+        ips = self.zk_conn.list_children(paths.confirmed_ips(service_name))
+        if ips == None:
+            ips = []
+        return ips
+
+    def drop_ip(self, service_name, ip_address):
+        self.zk_conn.delete(paths.confirmed_ip(service_name, ip_address))
 
     def ip_changed(self, ips):
         
         delete_watches = []
-        logging.info("New IP was added.")
         for service in self.watching_ips:
+            logging.info("Service %s is watching ips. Checking if any match: %s." % (service.name, ips))
             service_ips = service.addresses()
             for ip in ips:
-                logging.info("service found for IP")
                 if ip in service_ips:
+	            logging.info("service %s found for IP %s" %(service.name, ip))
                     # We found the service that was waiting for this ip address.
                     # Remove this ip address from ZK, and decrement this watch count.
                     if self.watching_ips[service] == 1:
                         delete_watches += [service]
+                    else:
+                        self.watching_ips[service] = self.watching_ips[service] - 1
                     self.zk_conn.write(paths.confirmed_ip(service.name, ip), "")
                     self.zk_conn.delete(paths.new_ip(ip))
-                    service.update_loadbalancer(self.zk_conn.read(paths.confirmed_ips(service.name)))
+                    service.update_loadbalancer()
         
         # Delete watches, etc.
         for service in delete_watches:
