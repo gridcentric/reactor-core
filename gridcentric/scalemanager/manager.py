@@ -121,6 +121,15 @@ class ScaleManager(object):
         for service in delete_watches:
             del self.watching_ips[service]
 
+    def health_check(self):
+        # Does a health check on all the services that are being managed.
+        for service in self.services:
+            service.health_check()
+
     def run(self):
         while True:
+<<<<<<< local
+            time.sleep(self.config.health_check)
+            self.health_check()=======
             time.sleep(86400)
+>>>>>>> other

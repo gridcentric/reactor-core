@@ -36,7 +36,7 @@ class ManagerConfig(Config):
     def __init__(self, config_str):
         super(ManagerConfig, self).__init__("manager", StringIO("""
         [manager]
-        
+        health_check=60
         """))
         
         self.load(config_str)

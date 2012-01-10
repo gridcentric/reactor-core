@@ -118,11 +118,30 @@ class Service(object):
                    addresses.append(network_addrs['addr'])
        return addresses
    
+    def instance_to_addresses(self):
+        result = {}
+        for instance in self.instances():
+            result[instance] = self.extract_addresses_from([instance])
+        return result
+   
     def update_loadbalancer(self, addresses = None):
         if addresses == None:
             addresses = self.scale_manager.confirmed_ips(self.name)
         logging.info("Updating loadbalancer for service %s with addresses %s" % (self.name, addresses))
         self.lb_conn.update(self.config.service_url, addresses)
         
+
+    def health_check(self):
+        # Check if any expected machines have failed to come up and confirm their IP address.
+        all_instances = self.instance_to_addresses()
+        confirmed_ips = self.scale_manager.confirmed_ips()
         
+<<<<<<< local
+        for instance in all_instances:
+            pass
+        # TODO(dscannell) Check if any confirmed instance has failed to check in with its stats. This
+        # might indicate that the machine is toast.
+        pass
+        =======
         
+>>>>>>> other
