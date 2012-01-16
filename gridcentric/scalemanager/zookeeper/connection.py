@@ -42,13 +42,15 @@ class ZookeeperConnection(object):
         else:
             zookeeper.create(self.handle, path, contents, [self.acl], 0)
 
-    def read(self, path):
+    def read(self, path, default=None):
         """
-        Returns the conents in the path. None is returned if the path does not exists.
+        Returns the conents in the path. default is returned if the path does not exists.
         """
+        value = default
         if zookeeper.exists(self.handle, path):
             value, timeinfo = zookeeper.get(self.handle, path)
-            return value
+        
+        return value
     
     def list_children(self, path):
         """

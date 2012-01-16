@@ -25,19 +25,21 @@ class Config(object):
         return result
     
     def load(self, config_str):
+        
+        self.config = ConfigParser.SafeConfigParser()
+        if self.defaultcfg != None:
+            self.config.readfp(self.defaultcfg)
         if config_str != None:
-            self.config = ConfigParser.SafeConfigParser()
-            if self.defaultcfg != None:
-                self.config.readfp(self.defaultcfg)
             self.config.readfp(StringIO(config_str))
 
 class ManagerConfig(Config):
         
     def __init__(self, config_str):
         super(ManagerConfig, self).__init__("manager", StringIO("""
-        [manager]
-        health_check=60
-        """))
+[manager]
+health_check=60
+mark_maximum=5
+"""))
         
         self.load(config_str)
     
