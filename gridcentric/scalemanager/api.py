@@ -1,3 +1,5 @@
+import logging
+
 from pyramid.config import Configurator
 from pyramid.response import Response
 
@@ -17,6 +19,8 @@ class ScaleManagerApi:
         return self.config.make_wsgi_app()
     
     def new_ip_address(self, context, request):
-        self.client.record_new_ipaddress(request.matchdict['ipaddress'])
+        ip_address = request.matchdict['ipaddress']
+        logging.info("New IP address %s has been recieved." % (ip_address))
+        self.client.record_new_ipaddress(ip_address)
         return Response()
     
