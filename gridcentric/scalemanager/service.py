@@ -81,7 +81,8 @@ class Service(object):
         """
         # Update the load balancer before bringing down the instances.
         self._drop_addresses(instances)
-        self.update_loadbalancer()
+        if len(instances) > 0:
+            self.update_loadbalancer()
         # It might be good to wait a little bit for the servers to clear out any requests they
         # are currently serving.
         for instance in instances:
@@ -99,9 +100,6 @@ class Service(object):
         self.novaclient.delete_instance(instance['id'])
         
     def _launch_instance(self):
-        # Notify the ScaleManager that we are launching a new instance, and that we are expecting
-        # an IP address to be pinged back.
-        self.scale_manager.watch_for_new_ip(self)
         # Launch the instance.
         self.novaclient.launch_instance(self.config.nova_instanceid)
         
