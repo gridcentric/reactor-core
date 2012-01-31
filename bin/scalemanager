@@ -9,8 +9,7 @@ import signal
 from StringIO import StringIO
 import sys
 
-
-from gridcentric.scalemanager.client import ScaleManagerClient
+from gridcentric.scalemanager.api import ScaleManagerApiClient
 
 def usage():
     print "usage: scalemanager [-h] [--help] [-z |--zookeeper=<zookeeper instance>] command"
@@ -27,7 +26,7 @@ def usage():
     print "    manage <service_name>    Manage a new serivce with the given name. The service's"
     print "                             configuration is read from stdin."
     print ""
-    print "    unmange <service_name>   Unmanged the service with the given name."
+    print "    unmanage <service_name>  Unmanged the service with the given name."
     print ""
     print "    update <service_name>    Update the managed service's configuration by reading the"
     print "                             values from stdin."
@@ -57,9 +56,9 @@ if len(args) < 1:
     sys.exit(1)
 
 command = args[0]
-client = ScaleManagerClient(zk_servers[1:])
+api_client = ScaleManagerApiClient('http://localhost:8080')
 if command == "list-services":
-    services = client.list_managed_services()
+    services = api_client.list_managed_services()
     if services:
         for service in services: 
             print service
@@ -70,11 +69,11 @@ elif command == "manage":
     for line in sys.stdin.readlines():
         service_conf += line
     
-    client.manage_service(service_name, service_conf)
+    api_client.manage_service(service_name, service_conf)
 
 elif command == "unmanage":
     service_name = args[1]
-    client.unmanage_service(service_name)
+    api_client.unmanage_service(service_name)
 
 elif command == "update":
     service_name = args[1]
@@ -85,8 +84,7 @@ elif command == "update":
     # Read in the existing configuration and update it with
     # with the new configuration. This allows people to do a
     # partial update.
-    service_conf = client.get_service_config(service_name)
-    print service_conf
+    service_conf = api_client.get_service_config(service_name)
     config = SafeConfigParser()
     config.readfp(StringIO(service_conf))
     config.readfp(StringIO(new_conf))
@@ -94,12 +92,12 @@ elif command == "update":
     # Write out the full contents of the updated configuration.
     config_value = StringIO()
     config.write(config_value)
-    client.update_service(service_name, config_value.getvalue())
+    api_client.update_service(service_name, config_value.getvalue())
     
 
 elif command == "show":
     service_name = args[1]
-    config = client.get_service_config(service_name)
+    config = api_client.get_service_config(service_name)
     
     print config
     
