@@ -6,6 +6,9 @@ This defines the various paths used in zookeeper
 # The root path that all other paths hang off from.
 root = "/gridcentric/scalemanager"
 
+# The path to the authorization hash used by the API to validate requests.
+auth_hash = "%s/auth" % (root)
+
 # The main system configuration for all of the scale managers.
 config = "%s/config" %(root)
 

@@ -1,3 +1,4 @@
+import hashlib
 import httplib2
 import json
 import logging
@@ -13,10 +14,11 @@ class ScaleManagerApiClient(httplib2.Http):
     used in third-party applications that want python bindings to interact with the system.
     """
     
-    def __init__(self, api_url):
+    def __init__(self, api_url, api_key=None):
         super(ScaleManagerApiClient, self).__init__()
         
         self.api_url = api_url
+        self.api_key = api_key
         # Needed to httplib2
         self.force_exception_to_status_code = True
 
@@ -57,11 +59,15 @@ class ScaleManagerApiClient(httplib2.Http):
                                                  'GET')
         return body.get('config',"")
 
+    def update_api_key(self, api_key):
+        """
+        Changes the API key in the system.
+        """
+        self._authenticated_request('/gridcentric/scalemanager/auth_key', 'POST', body={'auth_key':api_key})
+
     def _authenticated_request(self, url, method, **kwargs):
-        # TODO(dscannell) We need to figure out some authentication scheme so that only
-        # authenticated requests can interact with the API. Once this scheme is figured out
-        # we need to ensure that we are authenticated.
-        
+        if self.api_key != None:
+            kwargs.setdefault('headers', {})['X-Auth-Key'] = self.api_key
         resp, body = self.request(self.api_url + url, method, **kwargs)
         return resp, body
 
@@ -73,6 +79,8 @@ class ScaleManagerApiClient(httplib2.Http):
 
         resp, body = super(ScaleManagerApiClient, self).request(*args, **kwargs)
 
+        if resp.status in (401,):
+            raise Exception("Permission denied.")
         if body:
             try:
                 body = json.loads(body)
@@ -86,18 +94,67 @@ class ScaleManagerApi:
         self.client = ScaleManagerClient(zk_servers)
         self.config = Configurator()
         
+        self.config.add_route('auth-key', '/gridcentric/scalemanager/auth_key')
+        self.config.add_view(self.set_auth_key, route_name='auth-key')
+        
         self.config.add_route('new-ip', '/gridcentric/scalemanager/new-ip/{ipaddress}')
         self.config.add_view(self.new_ip_address, route_name='new-ip')
 
-        self.config.add_route('service_action', '/gridcentric/scalemanager/services/{service_name}')
-        self.config.add_view(self.handle_service_action, route_name='service_action')
+        self.config.add_route('service-action', '/gridcentric/scalemanager/services/{service_name}')
+        self.config.add_view(self.handle_service_action, route_name='service-action')
         
         self.config.add_route('service-list', '/gridcentric/scalemanager/services')
         self.config.add_view(self.list_services, route_name='service-list')
 
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
+     
+    def authorized(request_handler):
+        """
+        A Decorator that does a simpel check to see if the request is authorized before
+        executing the actual handler. 
+        """
+        def fn(self, context, request):
+             if self._authorize(context, request):
+                 return request_handler(self, context, request)
+             else:
+                 # Return an unauthorized response.
+                return Response(status=401)
+         
+        return fn
     
+    def _authorize(self, context, request):
+        
+        auth_hash = self.client.auth_hash()
+        if auth_hash != None:
+            auth_key = request.headers.get('X-Auth-Key', None)
+            if auth_key != None:
+                auth_token = self._get_auth_token(auth_key)
+                return auth_hash == auth_token
+            else:
+                return False
+        else:
+            # If there is not auth hash then authentication has not been turned on
+            # so all requests are allowed by default.
+            return True
+
+    def _get_auth_token(self, auth_key):
+        salt = 'gridcentricscalemanager'
+        return hashlib.sha1("%s%s" %(salt, auth_key)).hexdigest()
+        
+    @authorized
+    def set_auth_key(self, context, request):
+        """
+        Updates the auth key in the system.
+        """
+        if request.method == 'POST':
+            auth_key = json.loads(request.body)['auth_key']
+            logging.info("Updating API Key.")
+            self.client.set_auth_hash(self._get_auth_token(auth_key))
+            
+        return Response()
+    
+    @authorized
     def handle_service_action(self, context, request):
         """
         This Handles a general service action:
@@ -122,6 +179,7 @@ class ScaleManagerApi:
             
         return response
         
+    @authorized
     def list_services(self, context, request):
         """
         Returns a list of services currently being managed.

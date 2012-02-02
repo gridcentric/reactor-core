@@ -24,3 +24,9 @@ class ScaleManagerClient(object):
     
     def record_new_ipaddress(self, ip_address):
         self.zk_conn.write(paths.new_ip(ip_address), "")
+    
+    def auth_hash(self):
+        return self.zk_conn.read(paths.auth_hash)
+    
+    def set_auth_hash(self, auth_hash):
+        self.zk_conn.write(paths.auth_hash, auth_hash)
