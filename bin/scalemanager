@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-
-
 from ConfigParser import SafeConfigParser
 import getopt
 import logging
@@ -63,70 +61,75 @@ if len(args) < 1:
 
 command = args[0]
 api_client = ScaleManagerApiClient('http://localhost:8080', password)
-if command == "list-services":
-    services = api_client.list_managed_services()
-    if services:
-        for service in services: 
-            print service
-
-elif command == "manage":
-    service_name = args[1]
-    service_conf = ""
-    for line in sys.stdin.readlines():
-        service_conf += line
+try:
+    if command == "list-services":
+        services = api_client.list_managed_services()
+        if services:
+            for service in services: 
+                print service
     
-    api_client.manage_service(service_name, service_conf)
-
-elif command == "unmanage":
-    service_name = args[1]
-    api_client.unmanage_service(service_name)
-
-elif command == "update":
-    service_name = args[1]
-    new_conf = ""
-    for line in sys.stdin.readlines():
-        new_conf += line
+    elif command == "manage":
+        service_name = args[1]
+        service_conf = ""
+        for line in sys.stdin.readlines():
+            service_conf += line
+        
+        api_client.manage_service(service_name, service_conf)
     
-    # Read in the existing configuration and update it with
-    # with the new configuration. This allows people to do a
-    # partial update.
-    service_conf = api_client.get_service_config(service_name)
-    config = SafeConfigParser()
-    config.readfp(StringIO(service_conf))
-    config.readfp(StringIO(new_conf))
+    elif command == "unmanage":
+        service_name = args[1]
+        api_client.unmanage_service(service_name)
     
-    # Write out the full contents of the updated configuration.
-    config_value = StringIO()
-    config.write(config_value)
-    api_client.update_service(service_name, config_value.getvalue())
+    elif command == "update":
+        service_name = args[1]
+        new_conf = ""
+        for line in sys.stdin.readlines():
+            new_conf += line
+        
+        # Read in the existing configuration and update it with
+        # with the new configuration. This allows people to do a
+        # partial update.
+        service_conf = api_client.get_service_config(service_name)
+        config = SafeConfigParser()
+        config.readfp(StringIO(service_conf))
+        config.readfp(StringIO(new_conf))
+        
+        # Write out the full contents of the updated configuration.
+        config_value = StringIO()
+        config.write(config_value)
+        api_client.update_service(service_name, config_value.getvalue())
+        
     
-
-elif command == "show":
-    service_name = args[1]
-    config = api_client.get_service_config(service_name)
+    elif command == "show":
+        service_name = args[1]
+        config = api_client.get_service_config(service_name)
+        
+        print config
     
-    print config
-
-elif command == "passwd":
-    new_password = args[1]
-    api_client.update_api_key(new_password)
+    elif command == "passwd":
+        new_password = args[1]
+        api_client.update_api_key(new_password)
+        
+    elif command == "runserver":
+        
+        from gridcentric.scalemanager.manager import ScaleManager
+        logging.basicConfig(level=logging.INFO)
+        manager = ScaleManager()
+        manager.serve(zk_servers)
+        manager.run()
     
-elif command == "runserver":
+    elif command == 'runapi':
+        from paste.httpserver import serve
+        from gridcentric.scalemanager.api import ScaleManagerApi
+        logging.basicConfig(level=logging.INFO)
+        api = ScaleManagerApi(zk_servers)
+        serve(api.get_wsgi_app(), host='0.0.0.0')
     
-    from gridcentric.scalemanager.manager import ScaleManager
-    logging.basicConfig(level=logging.INFO)
-    manager = ScaleManager()
-    manager.serve(zk_servers)
-    manager.run()
-
-elif command == 'runapi':
-    from paste.httpserver import serve
-    from gridcentric.scalemanager.api import ScaleManagerApi
-    logging.basicConfig(level=logging.INFO)
-    api = ScaleManagerApi(zk_servers)
-    serve(api.get_wsgi_app(), host='0.0.0.0')
-
-else:
-    usage()
+    else:
+        usage()
+        sys.exit(1)
+        
+except Exception, e:
+    sys.stderr.write("%s\n" %(e))
     sys.exit(1)
 
