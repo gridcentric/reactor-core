@@ -30,3 +30,7 @@ class ScaleManagerClient(object):
     
     def set_auth_hash(self, auth_hash):
         self.zk_conn.write(paths.auth_hash, auth_hash)
+    
+    def update_agent_stats(self, agent, identifier, stat):
+        print "Writing %s to %s" %(stat, paths.agent_stats(agent, identifier) )
+        self.zk_conn.write(paths.agent_stats(agent, identifier), stat)

@@ -50,3 +50,11 @@ new_ips = "%s/new-ips" % (root)
 def new_ip(ip_address):
     return "%s/%s" %(new_ips, ip_address)
 
+# The agents subtree that holds the collected stats from the different agents.
+agents = "%s/agents" % (root)
+
+def agent(agent_name):
+    return "%s/%s" % (agents, agent_name)
+
+def agent_stats(agent_name, identifier):
+    return "%s/%s" %(agent(agent_name), identifier)

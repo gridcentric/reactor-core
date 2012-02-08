@@ -65,6 +65,13 @@ class ScaleManagerApiClient(httplib2.Http):
         """
         self._authenticated_request('/gridcentric/scalemanager/auth_key', 'POST', body={'auth_key':api_key})
 
+    def update_agent_stats(self, agent_name, stats):
+        """
+        Updates the agent stats.
+        Stats should be a dictionary of the form { identifier : value }
+        """
+        self._authenticated_request('/gridcentric/scalemanager/agent/%s' %(agent_name), 'POST', body=stats)
+
     def _authenticated_request(self, url, method, **kwargs):
         if self.api_key != None:
             kwargs.setdefault('headers', {})['X-Auth-Key'] = self.api_key
@@ -105,6 +112,9 @@ class ScaleManagerApi:
         
         self.config.add_route('service-list', '/gridcentric/scalemanager/services')
         self.config.add_view(self.list_services, route_name='service-list')
+
+        self.config.add_route('agent-stat', '/gridcentric/scalemanager/agent/{agent_name}')
+        self.config.add_view(self.update_agent_stats, route_name='agent-stat')
 
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
@@ -191,5 +201,14 @@ class ScaleManagerApi:
         ip_address = request.matchdict['ipaddress']
         logging.info("New IP address %s has been recieved." % (ip_address))
         self.client.record_new_ipaddress(ip_address)
+        return Response()
+    
+    def update_agent_stats(self, context, request):
+        agent_name = request.matchdict['agent_name']
+        logging.info("New stats from agent %s" % (agent_name))
+        if request.method == 'POST':
+            agent_stats = json.loads(request.body)
+            for identifier, stats in agent_stats.iteritems():
+                self.client.update_agent_stats(agent_name, identifier, str(stats))
         return Response()
     
