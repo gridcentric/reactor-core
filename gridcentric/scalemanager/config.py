@@ -1,5 +1,7 @@
 
 import ConfigParser
+import logging
+import socket
 from StringIO import StringIO
 
 from gridcentric.scalemanager.exceptions import ConfigFileNotFound
@@ -58,4 +60,18 @@ class ServiceConfig(Config):
             self.load(config_str)
         else:
             self.config.readfp(StringIO(config_str))
+    
+    def static_ips(self):
+        """ Returns a list of static ips associated with the configured static instances """
+        static_instances = self.static_instances.split(",")
         
+        # (dscannell) The static instances can be specified either as IP addresses or hostname. 
+        # If its an IP address then we are done. If its a hostname then we need to do a lookup
+        # to determine its IP address.
+        ip_addresses = []
+        for static_instance in static_instances:
+            try:
+                ip_addresses += [socket.gethostbyname(static_instance)]
+            except:
+                logging.warn("Failed to determine the ip address for the static instance %s." %( static_instance))
+        return ip_addresses

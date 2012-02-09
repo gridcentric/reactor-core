@@ -136,6 +136,7 @@ class Service(object):
     def update_loadbalancer(self, addresses = None):
         if addresses == None:
             addresses = self.scale_manager.confirmed_ips(self.name)
+            addresses += self.config.static_instances.split(",")
         logging.info("Updating loadbalancer for service %s with addresses %s" % (self.name, addresses))
         self.lb_conn.update(self.config.service_url, addresses)
         
