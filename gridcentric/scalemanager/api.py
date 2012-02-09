@@ -59,6 +59,15 @@ class ScaleManagerApiClient(httplib2.Http):
                                                  'GET')
         return body.get('config',"")
 
+    def list_service_ips(self, service_name):
+        """
+        Returns a list of the ip addresses (both dynamically confirmed and manually configured) for
+        this service.
+        """
+        resp, body = self._authenticated_request('/gridcentric/scalemanager/service/%s/ips' % (service_name), 
+                                                 'GET')
+        return body.get('ip_addresses',[])
+
     def update_api_key(self, api_key):
         """
         Changes the API key in the system.
@@ -112,6 +121,9 @@ class ScaleManagerApi:
         
         self.config.add_route('service-list', '/gridcentric/scalemanager/services')
         self.config.add_view(self.list_services, route_name='service-list')
+
+        self.config.add_route('service-ip-list', '/gridcentric/scalemanager/service/{service_name}/ips')
+        self.config.add_view(self.list_service_ips, route_name='service-ip-list')
 
         self.config.add_route('agent-stat', '/gridcentric/scalemanager/agent/{agent_name}')
         self.config.add_view(self.update_agent_stats, route_name='agent-stat')
@@ -188,7 +200,16 @@ class ScaleManagerApi:
             self.client.update_service(service_name, service_config.get('config',""))
             
         return response
-        
+    
+    @authorized
+    def list_service_ips(self, context, request):
+        service_name = request.matchdict['service_name']
+        if request.method == 'GET':
+            return Response(body=json.dumps(
+                        {'ip_addresses': self.client.get_service_ip_addresses(service_name)}))
+        return Response()
+            
+    
     @authorized
     def list_services(self, context, request):
         """

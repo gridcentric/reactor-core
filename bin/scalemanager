@@ -32,6 +32,8 @@ def usage():
     print ""
     print "    show <service_name>      Show the current configuration for the service."
     print ""
+    print "    list-ips <service_name>  Displays all of the IP addresses associated with the service."
+    print ""
     print "    passwd <password>        Updates the API's password."
     print ""
     print "    runserver                Run the scale manager server."
@@ -105,7 +107,13 @@ try:
         config = api_client.get_service_config(service_name)
         
         print config
-    
+        
+    elif command == "list-ips":
+        service_name = args[1]
+        ip_addresses = api_client.list_service_ips(service_name)
+        for ip in ip_addresses:
+            print ip
+        
     elif command == "passwd":
         new_password = args[1]
         api_client.update_api_key(new_password)
