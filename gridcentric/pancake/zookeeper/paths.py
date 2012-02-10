@@ -5,24 +5,31 @@ This defines the various paths used in zookeeper
 """
 
 # The root path that all other paths hang off from.
-root = "/gridcentric/pancake"
+ROOT = "/gridcentric/pancake"
 
 # The path to the authorization hash used by the API to validate requests.
-auth_hash = "%s/auth" % (root)
+AUTH_HASH = "%s/auth" % (ROOT)
+def auth_hash():
+    return AUTH_HASH
 
 # The main system configuration for all of the scale managers.
-config = "%s/config" %(root)
+CONFIG = "%s/config" %(ROOT)
+def config():
+    return CONFIG
 
 # The services subtree. Basically anything related to a particular
 # service should be rooted here.
-services = "%s/service" % (root)
+SERVICES = "%s/service" % (ROOT)
+def services():
+    return SERVICES
+
 # The subtree for a particular service.
 def service(name):
-    return "%s/%s" %(services, name)
+    return "%s/%s" %(SERVICES, name)
 
 # A leaf node to determine if the service is already being managed.
 def service_managed(name):
-    return "%s/%s/managed" %(services, name)
+    return "%s/%s/managed" %(SERVICES, name)
 
 # The ips that have been confirmed by the system for a particular service. An ip is
 # confirmed once it sends a message to a pancake.
@@ -45,17 +52,21 @@ def marked_instance(name, instance_id):
     return "%s/%s" %(marked_instances(name), instance_id)
 
 # New IPs currently not associated with any service are logged here
-new_ips = "%s/new-ips" % (root)
+NEW_IPS = "%s/new-ips" % (ROOT)
+def new_ips():
+    return NEW_IPS
 
 # A particular new ip
 def new_ip(ip_address):
-    return "%s/%s" %(new_ips, ip_address)
+    return "%s/%s" %(NEW_IPS, ip_address)
 
 # The agents subtree that holds the collected stats from the different agents.
-agents = "%s/agents" % (root)
+AGENTS = "%s/agents" % (ROOT)
+def agents():
+    return AGENTS
 
 def agent(agent_name):
-    return "%s/%s" % (agents, agent_name)
+    return "%s/%s" % (AGENTS, agent_name)
 
 def agent_stats(agent_name, identifier):
     return "%s/%s" %(agent(agent_name), identifier)

@@ -25,12 +25,12 @@ class pancake(object):
         # in the pancake service config
         
         self.zk_conn = ZookeeperConnection(zk_servers)
-        manager_config = self.zk_conn.read(paths.config)
+        manager_config = self.zk_conn.read(paths.config())
         self.config = ManagerConfig(manager_config)
         
-        self.zk_conn.watch_children(paths.new_ips, self.register_ip)
+        self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
         self.service_change(
-                    self.zk_conn.watch_children(paths.services, self.service_change)) 
+                    self.zk_conn.watch_children(paths.services(), self.service_change)) 
     
     def service_change(self, services):
         
