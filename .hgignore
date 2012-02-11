@@ -1,0 +1,13 @@
+.*\.pyc
+^build/.*
+^.*.pyc
+^.*/rpmbuild/.*
+^.*/debbuild/.*
+^.*/dist/.*
+^.*/pylint.txt
+^.*/pylint.report
+^.*\.orig
+^zookeeper.*/.*
+^zookeeper.*gz
+^testenv/.*
+^integration-tests/.*.log

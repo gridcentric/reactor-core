@@ -13,13 +13,13 @@ $ ssh root@new-instance
 newly created instance.
 
 5. Run the scale manager server
-$ sudo bin/scalemanager -z localhost:2181 runserver
+$ sudo bin/pancake -z localhost:2181 runserver
 
 6. Run the scale manager API that allows communication with the scale manager.
-$ bin/scalemanager -z localhost:2181 runapi
+$ bin/pancake -z localhost:2181 runapi
 
 7. Create a new service to autoscale, using the modified example service.conf from step 4.
-$ bin/scalemanager -z localhost:2181 create testscale < example/service.conf
+$ bin/pancake -z localhost:2181 create testscale < example/service.conf
 
 8. The scale manager will now bless the instances, and launch new instances up to the specified
 minimum number of instances. The load balancer configuration will also be modified once the in-guest
@@ -28,7 +28,7 @@ agent has registered with the manager so that we no the IP is up and running.
 ==Dependencies==
 
 nginx
-    The load balancer used by the scalemanager
+    The load balancer used by the pancake
 
 zookeeper (3.4.0) (http://zookeeper.apache.org/)
     This the main datastore / control mechanism
@@ -42,7 +42,7 @@ pyramid (http://docs.pylonsproject.org/projects/pyramid/en/1.2-branch/index.html
 ==Project Contents==
 
 bin
-    Contains scripts that are used to start and configure the scalemanager service / API
+    Contains scripts that are used to start and configure the pancake service / API
 
 gridcentric
     The top-level python package
