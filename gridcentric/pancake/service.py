@@ -1,15 +1,16 @@
+#!/usr/bin/env python
 
 import hashlib
 import logging
 import os
 
 from gridcentric.nova.client.client import NovaClient
-from gridcentric.scalemanager.serviceconfig import ServiceConfig
-import gridcentric.scalemanager.loadbalancer.connection as lb_connection
+from gridcentric.pancake.serviceconfig import ServiceConfig
+import gridcentric.pancake.loadbalancer.connection as lb_connection
 
 class Service(object):
     
-    BASE_PATH="/home/dscannell/projects/gridcentric/cloud/scalemanager/testenv"
+    BASE_PATH="/home/dscannell/projects/gridcentric/cloud/pancake/testenv"
     
     def __init__(self, name, service_config, scale_manager):
         self.name = name

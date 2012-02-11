@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 
-from ConfigParser import SafeConfigParser
 import getopt
 import logging
 import signal
-from StringIO import StringIO
 import sys
+from StringIO import StringIO
+from ConfigParser import SafeConfigParser
 
-from gridcentric.scalemanager.api import ScaleManagerApiClient
+from gridcentric.pancake.api import pancakeApiClient
 
 def usage():
-    print "usage: scalemanager [-h] [--help] [-z |--zookeeper=<zookeeper instance>] command"
+    print "usage: pancake [-h] [--help] [-z |--zookeeper=<zookeeper instance>] command"
     print ""
     print "Optional arguments:"
     print "   -h,--help              Display this help message"
@@ -62,7 +62,7 @@ if len(args) < 1:
     sys.exit(1)
 
 command = args[0]
-api_client = ScaleManagerApiClient('http://localhost:8080', password)
+api_client = pancakeApiClient('http://localhost:8080', password)
 try:
     if command == "list-services":
         services = api_client.list_managed_services()
@@ -120,17 +120,17 @@ try:
         
     elif command == "runserver":
         
-        from gridcentric.scalemanager.manager import ScaleManager
+        from gridcentric.pancake.manager import pancake
         logging.basicConfig(level=logging.INFO)
-        manager = ScaleManager()
+        manager = pancake()
         manager.serve(zk_servers)
         manager.run()
     
     elif command == 'runapi':
         from paste.httpserver import serve
-        from gridcentric.scalemanager.api import ScaleManagerApi
+        from gridcentric.pancake.api import pancakeApi
         logging.basicConfig(level=logging.INFO)
-        api = ScaleManagerApi(zk_servers)
+        api = pancakeApi(zk_servers)
         serve(api.get_wsgi_app(), host='0.0.0.0')
     
     else:
@@ -140,4 +140,3 @@ try:
 except Exception, e:
     sys.stderr.write("%s\n" %(e))
     sys.exit(1)
-

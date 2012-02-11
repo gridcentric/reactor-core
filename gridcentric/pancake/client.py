@@ -1,9 +1,10 @@
+#!/usr/bin/env python
 
-from gridcentric.scalemanager.config import ServiceConfig
-from gridcentric.scalemanager.zookeeper.connection import ZookeeperConnection
-import gridcentric.scalemanager.zookeeper.paths as paths
+from gridcentric.pancake.config import ServiceConfig
+from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
+import gridcentric.pancake.zookeeper.paths as paths
 
-class ScaleManagerClient(object):
+class pancakeClient(object):
     
     def __init__(self, zk_servers):
         self.zk_conn = ZookeeperConnection(zk_servers)

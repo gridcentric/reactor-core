@@ -52,14 +52,14 @@ def main():
 
     if my_ip_address != ip_address:
         # My ip_address has changed!
-        logger.info("ip address changed from %s -> %s. Notifying scalemanager." %(my_ip_address, ip_address))
+        logger.info("ip address changed from %s -> %s. Notifying pancake." %(my_ip_address, ip_address))
         my_ip_address = ip_address
         f = file(ip_filename,'w')
         f.write(my_ip_address)
         f.flush()
         f.close()
 
-        subprocess.call(['curl','http://dscannell-desktop.gridcentric.ca:8080/gridcentric/scalemanager/new-ip/%s' %(my_ip_address)])
+        subprocess.call(['curl','http://dscannell-desktop.gridcentric.ca:8080/gridcentric/pancake/new-ip/%s' %(my_ip_address)])
 
     
 while True:

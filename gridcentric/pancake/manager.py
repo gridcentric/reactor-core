@@ -1,18 +1,19 @@
+#!/usr/bin/env python
 
 import ConfigParser
 import logging
-from StringIO import StringIO
 import threading
 import time
 import uuid
+from StringIO import StringIO
 
-from gridcentric.scalemanager.config import ManagerConfig, ServiceConfig
-from gridcentric.scalemanager.service import Service
-from gridcentric.scalemanager.zookeeper.connection import ZookeeperConnection
-import gridcentric.scalemanager.zookeeper.paths as paths
+from gridcentric.pancake.config import ManagerConfig, ServiceConfig
+from gridcentric.pancake.service import Service
+from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
+import gridcentric.pancake.zookeeper.paths as paths
 
 
-class ScaleManager(object):
+class pancake(object):
     
     def __init__(self):
         self.uuid = uuid.uuid4()
@@ -21,7 +22,7 @@ class ScaleManager(object):
     
     def serve(self, zk_servers):
         # Create a connection to zk_configuration and read
-        # in the ScaleManager service config
+        # in the pancake service config
         
         self.zk_conn = ZookeeperConnection(zk_servers)
         manager_config = self.zk_conn.read(paths.config)

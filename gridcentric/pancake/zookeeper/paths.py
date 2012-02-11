@@ -1,10 +1,11 @@
+#!/usr/bin/env python
 
 """
 This defines the various paths used in zookeeper
 """
 
 # The root path that all other paths hang off from.
-root = "/gridcentric/scalemanager"
+root = "/gridcentric/pancake"
 
 # The path to the authorization hash used by the API to validate requests.
 auth_hash = "%s/auth" % (root)
@@ -24,7 +25,7 @@ def service_managed(name):
     return "%s/%s/managed" %(services, name)
 
 # The ips that have been confirmed by the system for a particular service. An ip is
-# confirmed once it sends a message to a scalemanager.
+# confirmed once it sends a message to a pancake.
 def confirmed_ips(name):
     return "%s/confirmed_ip" % (service(name))
 

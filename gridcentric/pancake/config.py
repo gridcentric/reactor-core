@@ -1,11 +1,11 @@
+#!/usr/bin/env python
 
 import ConfigParser
 import logging
 import socket
 from StringIO import StringIO
 
-from gridcentric.scalemanager.exceptions import ConfigFileNotFound
-import gridcentric.scalemanager.configrepo.repo_connection as repo_connection
+from gridcentric.pancake.exceptions import ConfigFileNotFound
 
 class Config(object):
     

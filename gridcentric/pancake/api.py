@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import hashlib
 import httplib2
 import json
@@ -6,16 +8,16 @@ import logging
 from pyramid.config import Configurator
 from pyramid.response import Response
 
-from gridcentric.scalemanager.client import ScaleManagerClient
+from gridcentric.pancake.client import pancakeClient
 
-class ScaleManagerApiClient(httplib2.Http):
+class pancakeApiClient(httplib2.Http):
     """
-    A simple client that interacts with the REST interface of the ScalemanagerApi. This is to be
+    A simple client that interacts with the REST interface of the pancakeApi. This is to be
     used in third-party applications that want python bindings to interact with the system.
     """
     
     def __init__(self, api_url, api_key=None):
-        super(ScaleManagerApiClient, self).__init__()
+        super(pancakeApiClient, self).__init__()
         
         self.api_url = api_url
         self.api_key = api_key
@@ -24,16 +26,16 @@ class ScaleManagerApiClient(httplib2.Http):
 
     def list_managed_services(self):
         """
-        Returns a list of all the services currently being managed by the ScaleManager.
+        Returns a list of all the services currently being managed by the pancake.
         """
-        resp, body = self._authenticated_request('/gridcentric/scalemanager/services', 'GET')
+        resp, body = self._authenticated_request('/gridcentric/pancake/services', 'GET')
         return body.get('services',[])
     
     def manage_service(self, service_name, config):
         """
         Manage the service using the given configuration.
         """
-        self._authenticated_request('/gridcentric/scalemanager/services/%s' %(service_name), 
+        self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 
                                     'POST',
                                     body={'config':config})
     
@@ -41,21 +43,21 @@ class ScaleManagerApiClient(httplib2.Http):
         """
         Unmanage the service
         """
-        self._authenticated_request('/gridcentric/scalemanager/services/%s' %(service_name), 'DELETE')
+        self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 'DELETE')
         
     def update_service(self, service_name, config):
         """
         Update the managed service with given configuration values. Note that the config
         can be partial and only those values will be updated.
         """
-        self._authenticated_request('/gridcentric/scalemanager/services/%s' %(service_name), 'POST',
+        self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 'POST',
                                     body={'config':config})
     
     def get_service_config(self, service_name):
         """
         Return the service's configuration
         """
-        resp, body = self._authenticated_request('/gridcentric/scalemanager/services/%s' %(service_name), 
+        resp, body = self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 
                                                  'GET')
         return body.get('config',"")
 
@@ -64,7 +66,7 @@ class ScaleManagerApiClient(httplib2.Http):
         Returns a list of the ip addresses (both dynamically confirmed and manually configured) for
         this service.
         """
-        resp, body = self._authenticated_request('/gridcentric/scalemanager/service/%s/ips' % (service_name), 
+        resp, body = self._authenticated_request('/gridcentric/pancake/service/%s/ips' % (service_name), 
                                                  'GET')
         return body.get('ip_addresses',[])
 
@@ -72,14 +74,14 @@ class ScaleManagerApiClient(httplib2.Http):
         """
         Changes the API key in the system.
         """
-        self._authenticated_request('/gridcentric/scalemanager/auth_key', 'POST', body={'auth_key':api_key})
+        self._authenticated_request('/gridcentric/pancake/auth_key', 'POST', body={'auth_key':api_key})
 
     def update_agent_stats(self, agent_name, stats):
         """
         Updates the agent stats.
         Stats should be a dictionary of the form { identifier : value }
         """
-        self._authenticated_request('/gridcentric/scalemanager/agent/%s' %(agent_name), 'POST', body=stats)
+        self._authenticated_request('/gridcentric/pancake/agent/%s' %(agent_name), 'POST', body=stats)
 
     def _authenticated_request(self, url, method, **kwargs):
         if self.api_key != None:
@@ -93,7 +95,7 @@ class ScaleManagerApiClient(httplib2.Http):
             kwargs['headers']['Content-Type'] = 'application/json'
             kwargs['body'] = json.dumps(kwargs['body'])
 
-        resp, body = super(ScaleManagerApiClient, self).request(*args, **kwargs)
+        resp, body = super(pancakeApiClient, self).request(*args, **kwargs)
 
         if resp.status in (401,):
             raise Exception("Permission denied.")
@@ -104,28 +106,28 @@ class ScaleManagerApiClient(httplib2.Http):
                 pass
         return resp, body
 
-class ScaleManagerApi:
+class pancakeApi:
     
     def __init__(self, zk_servers):
-        self.client = ScaleManagerClient(zk_servers)
+        self.client = pancakeClient(zk_servers)
         self.config = Configurator()
         
-        self.config.add_route('auth-key', '/gridcentric/scalemanager/auth_key')
+        self.config.add_route('auth-key', '/gridcentric/pancake/auth_key')
         self.config.add_view(self.set_auth_key, route_name='auth-key')
         
-        self.config.add_route('new-ip', '/gridcentric/scalemanager/new-ip/{ipaddress}')
+        self.config.add_route('new-ip', '/gridcentric/pancake/new-ip/{ipaddress}')
         self.config.add_view(self.new_ip_address, route_name='new-ip')
 
-        self.config.add_route('service-action', '/gridcentric/scalemanager/services/{service_name}')
+        self.config.add_route('service-action', '/gridcentric/pancake/services/{service_name}')
         self.config.add_view(self.handle_service_action, route_name='service-action')
         
-        self.config.add_route('service-list', '/gridcentric/scalemanager/services')
+        self.config.add_route('service-list', '/gridcentric/pancake/services')
         self.config.add_view(self.list_services, route_name='service-list')
 
-        self.config.add_route('service-ip-list', '/gridcentric/scalemanager/service/{service_name}/ips')
+        self.config.add_route('service-ip-list', '/gridcentric/pancake/service/{service_name}/ips')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list')
 
-        self.config.add_route('agent-stat', '/gridcentric/scalemanager/agent/{agent_name}')
+        self.config.add_route('agent-stat', '/gridcentric/pancake/agent/{agent_name}')
         self.config.add_view(self.update_agent_stats, route_name='agent-stat')
 
     def get_wsgi_app(self):
@@ -161,7 +163,7 @@ class ScaleManagerApi:
             return True
 
     def _get_auth_token(self, auth_key):
-        salt = 'gridcentricscalemanager'
+        salt = 'gridcentricpancake'
         return hashlib.sha1("%s%s" %(salt, auth_key)).hexdigest()
         
     @authorized

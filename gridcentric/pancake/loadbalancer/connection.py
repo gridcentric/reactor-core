@@ -1,7 +1,7 @@
-
+#!/usr/bin/env python
 
 def get_connection(config_path):
-    from gridcentric.scalemanager.loadbalancer.nginx import NginxLoadBalancerConnection
+    from gridcentric.pancake.loadbalancer.nginx import NginxLoadBalancerConnection
     return NginxLoadBalancerConnection(config_path)
 
 class LoadBalancerConnection(object):

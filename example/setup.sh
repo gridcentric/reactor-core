@@ -5,7 +5,7 @@ then
     echo "usage: setup.sh example_server path"
     echo ""
     echo "e.g. setup.sh openstack@openstack-management.gridcentric.ca ''"
-    echo "e.g. setup.sh dscannell@dscannll-desktop /home/dscannell/projects/gridcentric/cloud/scalemanager/example"
+    echo "e.g. setup.sh dscannell@dscannll-desktop /home/dscannell/projects/gridcentric/cloud/pancake/example"
     exit 1
 fi
 

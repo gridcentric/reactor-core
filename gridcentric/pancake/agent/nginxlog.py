@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 An agent that runs on the same host as the load balancer (nginx) and will send data
 from information gathered from the log files.
@@ -10,7 +12,7 @@ import re
 import threading
 import time
 
-from gridcentric.scalemanager.api import ScaleManagerApiClient
+from gridcentric.pancake.api import pancakeApiClient
 
 class HttpRequestThread(threading.Thread):
     
@@ -88,7 +90,7 @@ class NginxRequestAgent(object):
         self.reset_record()
         self.log.connect()
         last_push = datetime.datetime.now()
-        client = ScaleManagerApiClient(self.api_url)
+        client = pancakeApiClient(self.api_url)
         while self.execute:
             line = self.log.nextline()
             if line == "":

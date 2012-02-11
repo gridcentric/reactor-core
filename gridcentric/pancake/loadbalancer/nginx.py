@@ -1,10 +1,12 @@
+#!/usr/bin/env python
+
 import os
 import signal
 import urlparse
 
 from mako.template import Template
 
-from gridcentric.scalemanager.loadbalancer.connection import LoadBalancerConnection
+from gridcentric.pancake.loadbalancer.connection import LoadBalancerConnection
 
 class NginxLoadBalancerConnection(LoadBalancerConnection):
     
