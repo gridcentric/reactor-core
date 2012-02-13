@@ -19,6 +19,7 @@ class pancake(object):
     def __init__(self):
         self.uuid = uuid.uuid4()
         self.services = {}
+        self.key_to_sevices = {}
         self.watching_ips ={}
         self.load_balancer = None
     
@@ -60,6 +61,8 @@ class pancake(object):
         service_config = ServiceConfig(self.zk_conn.read(service_path))
         service = Service(service_name, service_config, self)
         self.services[service_name] = service
+        service_key = service.key()
+        self.key_to_sevices[service_key] = self.key_to_sevices.get(service.key(),[]) + [service_name]
         
         if self.zk_conn.read(paths.service_managed(service_name)) == None:
             logging.info("New service %s found to be managed." %(service_name))
@@ -79,6 +82,7 @@ class pancake(object):
         service = self.services.get(service_name, None)
         if service:
             logging.info("Unmanaging service %s" %(service_name))
+            self.key_to_sevices.get(service.key(), []).remove(service_name)
             service.unmanage()
 
     def confirmed_ips(self, service_name):
@@ -100,7 +104,7 @@ class pancake(object):
             service_ips = service.addresses()
             for ip in ips:
                 if ip in service_ips:
-	            logging.info("service %s found for IP %s" %(service.name, ip))
+                    logging.info("service %s found for IP %s" %(service.name, ip))
                     # We found the service that this IP address belongs. Confirm this IP address
                     # and remove it from the new-ip address. Finally update the loadbalancer.
                     self.zk_conn.write(paths.confirmed_ip(service.name, ip), "")
@@ -109,9 +113,11 @@ class pancake(object):
 
     def update_loadbalancer(self, service, addresses = None):
         if addresses == None:
-            addresses = self.confirmed_ips(service.name)
-            addresses += service.config.static_instances.split(",")
-        logging.info("Updating loadbalancer for service %s with addresses %s" % (service.name, addresses))
+            addresses = []
+            for service_name in self.key_to_sevices.get(service.key(), []):
+                addresses += self.confirmed_ips(service_name)
+                addresses += self.services[service_name].config.static_instances.split(",")
+        logging.info("Updating loadbalancer for url %s with addresses %s" % (service.config.service_url, addresses))
         self.load_balancer.update(service.config.service_url, addresses)
 
     def mark_instance(self, service_name, instance_id):

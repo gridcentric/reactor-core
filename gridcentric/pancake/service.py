@@ -15,7 +15,10 @@ class Service(object):
         self.scale_manager = scale_manager
         self.novaclient = None
         self.confirmed_addresses = {}
-        
+    
+    def key(self):
+        return hashlib.md5(self.config.service_url).hexdigest()
+    
     def manage(self):
         # Load the configuration and configure the service.
         logging.info("Managing service %s" % (self.name))
@@ -42,8 +45,7 @@ class Service(object):
         
         # Delete all the launched instances.
         for instance in self.instances():
-            logging.info("Deleting launched instance %s (id=%s) for service %s" % (instance['name'],instance['id'], self.name))
-            self.novaclient.delete_instance(instance['id'])
+            self.drop_instances(self.instances(), "service is becoming unmanaged")
         
         logging.info("Unblessing instance id=%s for service %s" % (self.config.nova_instanceid, self.name))
         self.novaclient.unbless_instance(self.config.nova_instanceid) 
