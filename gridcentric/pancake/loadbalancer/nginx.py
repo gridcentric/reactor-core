@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import hashlib
 import os
 import signal
 import urlparse
@@ -24,12 +25,16 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
             return int(pid)
     
     def update(self, url, addresses):
+        
+        # We use a simple hash of the URL as the file name for the configuration file.
+        conf_filename = hashlib.md5(url).hexdigest()
+        
         # Parse the url because we need to know the netloc
         (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(url)
         conf = self.template.render(url=url, netloc=netloc, addresses=addresses)
         
         # Write out the config file
-        config_file = file(self.config_path, 'wb')
+        config_file = file(os.path.join(self.config_path,conf_filename), 'wb')
         config_file.write(conf)
         config_file.flush()
         config_file.close()

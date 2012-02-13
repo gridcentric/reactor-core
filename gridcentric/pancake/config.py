@@ -41,6 +41,7 @@ class ManagerConfig(Config):
 [manager]
 health_check=60
 mark_maximum=5
+lb_path=/etc/nginx/conf.d
 """))
         
         self.load(config_str)

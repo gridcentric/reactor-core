@@ -9,6 +9,7 @@ from StringIO import StringIO
 
 from gridcentric.pancake.config import ManagerConfig, ServiceConfig
 from gridcentric.pancake.service import Service
+import gridcentric.pancake.loadbalancer.connection as lb_connection
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 import gridcentric.pancake.zookeeper.paths as paths
 
@@ -19,6 +20,7 @@ class pancake(object):
         self.uuid = uuid.uuid4()
         self.services = {}
         self.watching_ips ={}
+        self.load_balancer = None
     
     def serve(self, zk_servers):
         # Create a connection to zk_configuration and read
@@ -27,6 +29,8 @@ class pancake(object):
         self.zk_conn = ZookeeperConnection(zk_servers)
         manager_config = self.zk_conn.read(paths.config())
         self.config = ManagerConfig(manager_config)
+        
+        self.load_balancer = lb_connection.get_connection(self.config.lb_path)
         
         self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
         self.service_change(
@@ -101,7 +105,14 @@ class pancake(object):
                     # and remove it from the new-ip address. Finally update the loadbalancer.
                     self.zk_conn.write(paths.confirmed_ip(service.name, ip), "")
                     self.zk_conn.delete(paths.new_ip(ip))
-                    service.update_loadbalancer()
+                    self.update_loadbalancer(service)
+
+    def update_loadbalancer(self, service, addresses = None):
+        if addresses == None:
+            addresses = self.confirmed_ips(service.name)
+            addresses += service.config.static_instances.split(",")
+        logging.info("Updating loadbalancer for service %s with addresses %s" % (service.name, addresses))
+        self.load_balancer.update(service.config.service_url, addresses)
 
     def mark_instance(self, service_name, instance_id):
         

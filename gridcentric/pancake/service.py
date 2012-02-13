@@ -6,11 +6,8 @@ import os
 
 from gridcentric.nova.client.client import NovaClient
 from gridcentric.pancake.serviceconfig import ServiceConfig
-import gridcentric.pancake.loadbalancer.connection as lb_connection
 
 class Service(object):
-    
-    BASE_PATH="/home/dscannell/projects/gridcentric/cloud/pancake/testenv"
     
     def __init__(self, name, service_config, scale_manager):
         self.name = name
@@ -18,7 +15,6 @@ class Service(object):
         self.scale_manager = scale_manager
         self.novaclient = None
         self.confirmed_addresses = {}
-        self.lb_conn = lb_connection.get_connection(os.path.join(self.BASE_PATH, "nginx.conf.d", "%s.conf" %(self.name)))
         
     def manage(self):
         # Load the configuration and configure the service.
@@ -83,7 +79,7 @@ class Service(object):
         # Update the load balancer before bringing down the instances.
         self._drop_addresses(instances)
         if len(instances) > 0:
-            self.update_loadbalancer()
+            self._update_loadbalancer()
         # It might be good to wait a little bit for the servers to clear out any requests they
         # are currently serving.
         for instance in instances:
@@ -134,12 +130,8 @@ class Service(object):
         return result
     """
    
-    def update_loadbalancer(self, addresses = None):
-        if addresses == None:
-            addresses = self.scale_manager.confirmed_ips(self.name)
-            addresses += self.config.static_instances.split(",")
-        logging.info("Updating loadbalancer for service %s with addresses %s" % (self.name, addresses))
-        self.lb_conn.update(self.config.service_url, addresses)
+    def _update_loadbalancer(self, addresses = None):
+        self.scale_manager.update_loadbalancer(self, addresses)
         
 
     def health_check(self):
