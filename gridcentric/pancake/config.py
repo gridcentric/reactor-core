@@ -9,22 +9,12 @@ from gridcentric.pancake.exceptions import ConfigFileNotFound
 
 class Config(object):
     
-    def __init__(self, conf_section, defaultcfg = None):
+    def __init__(self, defaultcfg = None):
         self.defaultcfg = defaultcfg
-        self.conf_section = conf_section
         self.config = None
     
-    def __getattr__(self, attr):
-        result = None
-        if attr[0] != '_':
-            try:
-                result = self.config.get(self.conf_section, attr)
-            except:
-                pass
-            
-        if result == None:
-            result = object.__getattribute__(self, attr)
-        return result
+    def get(self, section, key):
+        return self.config.get(section, key)
     
     def load(self, config_str):
         
@@ -37,11 +27,13 @@ class Config(object):
 class ManagerConfig(Config):
         
     def __init__(self, config_str):
-        super(ManagerConfig, self).__init__("manager", StringIO("""
+        super(ManagerConfig, self).__init__(StringIO("""
 [manager]
 health_check=60
 mark_maximum=5
-lb_path=/etc/nginx/conf.d
+
+[loadbalancer]
+config_path=/etc/nginx/conf.d
 """))
         
         self.load(config_str)
@@ -53,7 +45,7 @@ lb_path=/etc/nginx/conf.d
 class ServiceConfig(Config):
     
     def __init__(self, config_str):
-        super(ServiceConfig, self).__init__("service")
+        super(ServiceConfig, self).__init__()
         self.load(config_str)
         
     def reload(self, config_str):
@@ -64,7 +56,7 @@ class ServiceConfig(Config):
     
     def static_ips(self):
         """ Returns a list of static ips associated with the configured static instances """
-        static_instances = self.static_instances.split(",")
+        static_instances = self.get("service","static_instances").split(",")
         
         # (dscannell) The static instances can be specified either as IP addresses or hostname. 
         # If its an IP address then we are done. If its a hostname then we need to do a lookup

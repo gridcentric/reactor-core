@@ -19,7 +19,7 @@ class ScaleManager(object):
     def __init__(self):
         self.uuid = uuid.uuid4()
         self.services = {}
-        self.key_to_sevices = {}
+        self.key_to_services = {}
         self.watching_ips ={}
         self.load_balancer = None
     
@@ -31,7 +31,7 @@ class ScaleManager(object):
         manager_config = self.zk_conn.read(paths.config())
         self.config = ManagerConfig(manager_config)
         
-        self.load_balancer = lb_connection.get_connection(self.config.lb_path)
+        self.load_balancer = lb_connection.get_connection(self.config.get("loadbalancer","config_path"))
         
         self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
         self.service_change(
@@ -62,7 +62,7 @@ class ScaleManager(object):
         service = Service(service_name, service_config, self)
         self.services[service_name] = service
         service_key = service.key()
-        self.key_to_sevices[service_key] = self.key_to_sevices.get(service.key(),[]) + [service_name]
+        self.key_to_services[service_key] = self.key_to_services.get(service.key(),[]) + [service_name]
         
         if self.zk_conn.read(paths.service_managed(service_name)) == None:
             logging.info("New service %s found to be managed." %(service_name))
@@ -82,7 +82,11 @@ class ScaleManager(object):
         service = self.services.get(service_name, None)
         if service:
             logging.info("Unmanaging service %s" %(service_name))
-            self.key_to_sevices.get(service.key(), []).remove(service_name)
+            service_names = self.key_to_services.get(service.key(), [])
+            if service_name in service_names:
+                # Remove the service name from the list of services with the same key. If the service
+                # name is not in the list, then it is fine because we are just removing it anyway.
+                service_names.remove(service_name)
             service.unmanage()
 
     def confirmed_ips(self, service_name):
@@ -114,11 +118,11 @@ class ScaleManager(object):
     def update_loadbalancer(self, service, addresses = None):
         if addresses == None:
             addresses = []
-            for service_name in self.key_to_sevices.get(service.key(), []):
+            for service_name in self.key_to_services.get(service.key(), []):
                 addresses += self.confirmed_ips(service_name)
-                addresses += self.services[service_name].config.static_instances.split(",")
-        logging.info("Updating loadbalancer for url %s with addresses %s" % (service.config.service_url, addresses))
-        self.load_balancer.update(service.config.service_url, addresses)
+                addresses += self.services[service_name].static_addresses()
+        logging.info("Updating loadbalancer for url %s with addresses %s" % (service.service_url(), addresses))
+        self.load_balancer.update(service.service_url(), addresses)
 
     def mark_instance(self, service_name, instance_id):
         
@@ -126,7 +130,7 @@ class ScaleManager(object):
         mark_counter = int(self.zk_conn.read(paths.marked_instance(service_name, instance_id), '0'))
         # Increment the mark counter
         mark_counter += 1
-        if mark_counter >= int(self.config.mark_maximum):
+        if mark_counter >= int(self.config.get("manager","mark_maximum")):
             # This instance has been marked too many times. There is likely something really
             # wrong with it, so we'll clean it up.
             remove_instance=True
@@ -145,6 +149,6 @@ class ScaleManager(object):
 
     def run(self):
         while True:
-            time.sleep(float(self.config.health_check))
+            time.sleep(float(self.config.get("manager","health_check")))
             self.health_check()
 

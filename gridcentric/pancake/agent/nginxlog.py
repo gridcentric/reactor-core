@@ -12,7 +12,7 @@ import re
 import threading
 import time
 
-from gridcentric.pancake.api import pancakeApiClient
+from gridcentric.pancake.api import PancakeApiClient
 
 class HttpRequestThread(threading.Thread):
     
@@ -90,7 +90,7 @@ class NginxRequestAgent(object):
         self.reset_record()
         self.log.connect()
         last_push = datetime.datetime.now()
-        client = pancakeApiClient(self.api_url)
+        client = PancakeApiClient(self.api_url)
         while self.execute:
             line = self.log.nextline()
             if line == "":

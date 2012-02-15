@@ -17,7 +17,7 @@ class PancakeApiClient(httplib2.Http):
     """
     
     def __init__(self, api_url, api_key=None):
-        super(pancakeApiClient, self).__init__()
+        super(PancakeApiClient, self).__init__()
         
         self.api_url = api_url
         self.api_key = api_key
@@ -95,7 +95,7 @@ class PancakeApiClient(httplib2.Http):
             kwargs['headers']['Content-Type'] = 'application/json'
             kwargs['body'] = json.dumps(kwargs['body'])
 
-        resp, body = super(pancakeApiClient, self).request(*args, **kwargs)
+        resp, body = super(PancakeApiClient, self).request(*args, **kwargs)
 
         if resp.status in (401,):
             raise Exception("Permission denied.")
@@ -109,7 +109,7 @@ class PancakeApiClient(httplib2.Http):
 class PancakeApi:
     
     def __init__(self, zk_servers):
-        self.client = pancakeClient(zk_servers)
+        self.client = PancakeClient(zk_servers)
         self.config = Configurator()
         
         self.config.add_route('auth-key', '/gridcentric/pancake/auth_key')
