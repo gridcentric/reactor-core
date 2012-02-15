@@ -5,7 +5,7 @@ import logging
 import os
 
 from gridcentric.nova.client.client import NovaClient
-from gridcentric.pancake.serviceconfig import ServiceConfig
+from gridcentric.pancake.config import ServiceConfig
 
 class Service(object):
     

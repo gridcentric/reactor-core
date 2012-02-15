@@ -122,7 +122,7 @@ try:
         
         from gridcentric.pancake.manager import ScaleManager
         logging.basicConfig(level=logging.INFO)
-        manager = ScaleManger()
+        manager = ScaleManager()
         manager.serve(zk_servers)
         manager.run()
     
