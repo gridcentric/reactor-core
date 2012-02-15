@@ -17,7 +17,7 @@ class Service(object):
         self.confirmed_addresses = {}
     
     def key(self):
-        return hashlib.md5(self.config.service_url).hexdigest()
+        return hashlib.md5(self.config.get("service","url")).hexdigest()
     
     def manage(self):
         # Load the configuration and configure the service.
@@ -27,15 +27,15 @@ class Service(object):
         # We need to ensure that the instance is blessed. This is simply done by
         # sending the bless command.
         try:
-            logging.info("Blessing instance id=%s for service %s" % (self.config.nova_instanceid, self.name))
-            self.novaclient.bless_instance(self.config.nova_instanceid)
+            logging.info("Blessing instance id=%s for service %s" % (self.config.get("nova","instance_id"), self.name))
+            self.novaclient.bless_instance(self.config.get("nova","instance_id"))
         except Exception, e:
             # There is a chance that this instance was already blessed. This is not
             # an issue, so we just need to ignore. There is also a chance that we could
             # not connected to nova, or there is some error. In any event, we can't do much
             # so let's log a warning.
             logging.warn("Failed to bless a service instance (service=%s, instances_id=%s). Error=%s" 
-                         % (self.name, self.config.nova_instanceid, e) )
+                         % (self.name, self.config.get("nova","instance_id"), e) )
 
     def unmanage(self):
         # Delete all the launched instances, and unbless the instance. Essentially, return it
@@ -47,8 +47,8 @@ class Service(object):
         for instance in self.instances():
             self.drop_instances(self.instances(), "service is becoming unmanaged")
         
-        logging.info("Unblessing instance id=%s for service %s" % (self.config.nova_instanceid, self.name))
-        self.novaclient.unbless_instance(self.config.nova_instanceid) 
+        logging.info("Unblessing instance id=%s for service %s" % (self.config.get("nova","instance_id"), self.name))
+        self.novaclient.unbless_instance(self.config.get("nova","instance_id")) 
 
     def update(self, reconfigure=True):
         if reconfigure:
@@ -58,16 +58,16 @@ class Service(object):
         num_instances = len(instances)
         
         # Launch instances until we reach the min setting value.
-        while num_instances < int(self.config.min_instances):
-            logging.info("Launching new instance for server %s (reason: bringing minimum instances up to %s)" % (self.name, self.config.min_instances))
+        while num_instances < int(self.config.get("scaling","min_instances")):
+            logging.info("Launching new instance for server %s (reason: bringing minimum instances up to %s)" % (self.name, self.config.get("scaling","min_instances")))
             self._launch_instance()
             num_instances += 1
         
         # Delete instances until we reach the max setting value.
-        instances_to_delete = instances[int(self.config.max_instances):]
-        instances = instances[:int(self.config.max_instances)]
+        instances_to_delete = instances[int(self.config.get("scaling","max_instances")):]
+        instances = instances[:int(self.config.get("scaling","max_instances"))]
         
-        self.drop_instances(instances_to_delete, "bringing maximum instance down to %s" % self.config.max_instances)
+        self.drop_instances(instances_to_delete, "bringing maximum instance down to %s" % self.config.get("scaling","max_instances"))
     
     def update_config(self, config_str):
         self.config.reload(config_str)
@@ -100,17 +100,20 @@ class Service(object):
         
     def _launch_instance(self):
         # Launch the instance.
-        self.novaclient.launch_instance(self.config.nova_instanceid)
+        self.novaclient.launch_instance(self.config.get("nova","instance_id"))
         
     
     def _configure(self):
-        self.novaclient = NovaClient(self.config.nova_authurl, self.config.nova_user, \
-                                     self.config.nova_apikey, self.config.nova_project, 'v1.1')
+        self.novaclient = NovaClient(self.config.get("nova","authurl"), self.config.get("nova","user"), \
+                                     self.config.get("nova","apikey"), self.config.get("nova","project"), 'v1.1')
     def service_url(self):
-        return self.config.service_url
+        return self.config.get("service","url")
+    
+    def static_addresses(self):
+        return self.config.get("service","static_instances").split(",")
     
     def instances(self):
-        return self.novaclient.list_launched_instances(self.config.nova_instanceid)
+        return self.novaclient.list_launched_instances(self.config.get("nova","instance_id"))
     
     def addresses(self):
         return self.extract_addresses_from(self.instances())
