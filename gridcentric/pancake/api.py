@@ -8,9 +8,9 @@ import logging
 from pyramid.config import Configurator
 from pyramid.response import Response
 
-from gridcentric.pancake.client import pancakeClient
+from gridcentric.pancake.client import PancakeClient
 
-class pancakeApiClient(httplib2.Http):
+class PancakeApiClient(httplib2.Http):
     """
     A simple client that interacts with the REST interface of the pancakeApi. This is to be
     used in third-party applications that want python bindings to interact with the system.
@@ -106,7 +106,7 @@ class pancakeApiClient(httplib2.Http):
                 pass
         return resp, body
 
-class pancakeApi:
+class PancakeApi:
     
     def __init__(self, zk_servers):
         self.client = pancakeClient(zk_servers)
