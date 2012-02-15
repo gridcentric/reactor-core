@@ -4,6 +4,7 @@ import getopt
 import logging
 import signal
 import sys
+import traceback
 from StringIO import StringIO
 from ConfigParser import SafeConfigParser
 
@@ -17,7 +18,9 @@ def usage():
     print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option multiple"
     print "                          times to specific a pool of zookeeper instances. Default to"
     print "                          localhost:2181" 
-    print"    -p, --password=        The password used to connect to the API."
+    print "   -p, --password=        The password used to connect to the API."
+    print ""
+    print "   -d, --debug            Enables debugging log and full stack trace errors."
     print ""
     print "Commands:"
     print "    list-services            List all the services currently being managed."
@@ -38,13 +41,14 @@ def usage():
     print ""
     print "    runserver                Run the scale manager server."
     print ""
-    print"     runapi                   Runs the API server."
+    print "    runapi                   Runs the API server."
     
     
-opts, args = getopt.getopt(sys.argv[1:], "hzp:", ["help","zookeeper=","password="])
+opts, args = getopt.getopt(sys.argv[1:], "hdz:p:", ["help","zookeeper=","password=","debug"])
 
 zk_servers = ""
 password = None
+debug = False
 for o, a in opts:
     if o in ('-h', '--help'):
         usage()
@@ -53,6 +57,9 @@ for o, a in opts:
         zk_servers += "," + a
     elif o in ('-p', '--password'):
         password = a
+    elif o in ('-d', '--debug'):
+        debug=True
+        
 
 if zk_servers == "":
     zk_servers = ",localhost:2181"
@@ -121,7 +128,10 @@ try:
     elif command == "runserver":
         
         from gridcentric.pancake.manager import ScaleManager
-        logging.basicConfig(level=logging.INFO)
+        if debug:
+            logging.basicConfig(level=logging.DEBUG)
+        else:
+            logging.basicConfig(level=logging.INFO)
         manager = ScaleManager()
         manager.serve(zk_servers)
         manager.run()
@@ -129,7 +139,10 @@ try:
     elif command == 'runapi':
         from paste.httpserver import serve
         from gridcentric.pancake.api import PancakeApi
-        logging.basicConfig(level=logging.INFO)
+        if debug:
+            logging.basicConfig(level=logging.DEBUG)
+        else:
+            logging.basicConfig(level=logging.INFO)
         api = PancakeApi(zk_servers)
         serve(api.get_wsgi_app(), host='0.0.0.0')
     
@@ -138,5 +151,8 @@ try:
         sys.exit(1)
         
 except Exception, e:
-    sys.stderr.write("%s\n" %(e))
-    sys.exit(1)
+    if debug:
+        traceback.print_exc()
+    else:
+        sys.stderr.write("%s\n" %(e))
+        sys.exit(1)
