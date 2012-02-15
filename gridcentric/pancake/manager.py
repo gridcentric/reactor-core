@@ -14,7 +14,7 @@ from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 import gridcentric.pancake.zookeeper.paths as paths
 
 
-class pancake(object):
+class ScaleManager(object):
     
     def __init__(self):
         self.uuid = uuid.uuid4()

@@ -4,7 +4,7 @@ from gridcentric.pancake.config import ServiceConfig
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 import gridcentric.pancake.zookeeper.paths as paths
 
-class pancakeClient(object):
+class PancakeClient(object):
     
     def __init__(self, zk_servers):
         self.zk_conn = ZookeeperConnection(zk_servers)

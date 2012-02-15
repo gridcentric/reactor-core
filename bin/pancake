@@ -7,7 +7,7 @@ import sys
 from StringIO import StringIO
 from ConfigParser import SafeConfigParser
 
-from gridcentric.pancake.api import pancakeApiClient
+from gridcentric.pancake.api import PancakeApiClient
 
 def usage():
     print "usage: pancake [-h] [--help] [-z |--zookeeper=<zookeeper instance>] command"
@@ -62,7 +62,7 @@ if len(args) < 1:
     sys.exit(1)
 
 command = args[0]
-api_client = pancakeApiClient('http://localhost:8080', password)
+api_client = PancakeApiClient('http://localhost:8080', password)
 try:
     if command == "list-services":
         services = api_client.list_managed_services()
@@ -120,17 +120,17 @@ try:
         
     elif command == "runserver":
         
-        from gridcentric.pancake.manager import pancake
+        from gridcentric.pancake.manager import ScaleManager
         logging.basicConfig(level=logging.INFO)
-        manager = pancake()
+        manager = ScaleManger()
         manager.serve(zk_servers)
         manager.run()
     
     elif command == 'runapi':
         from paste.httpserver import serve
-        from gridcentric.pancake.api import pancakeApi
+        from gridcentric.pancake.api import PancakeApi
         logging.basicConfig(level=logging.INFO)
-        api = pancakeApi(zk_servers)
+        api = PancakeApi(zk_servers)
         serve(api.get_wsgi_app(), host='0.0.0.0')
     
     else:
