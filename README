@@ -1,6 +1,6 @@
 ==Quick Start==
 1. Ensure that the dependent projects (outlined below) are installed and that the zookeeper
-server is running.
+server is running. `make env` can be used to install the dependent projects.
 
 2. Using Openstack, with the gridcentric extensions installed, boot a new instance.
 
@@ -9,7 +9,7 @@ e$ scp example/setup.sh root@new-instance
 $ ssh root@new-instance
 # ./setup.sh user@development-machine /path/to/example/dir
 
-4. Modify the example service.conf. In particular update the nova_instance id to point to the
+4. Modify the example service.conf. In particular update the nova/instance_id to point to the
 newly created instance.
 
 5. Run the scale manager server
@@ -28,9 +28,9 @@ agent has registered with the manager so that we no the IP is up and running.
 ==Dependencies==
 
 nginx
-    The load balancer used by the pancake
+    The load balancer used by pancake
 
-zookeeper (3.4.0) (http://zookeeper.apache.org/)
+zookeeper (3.4.x) (http://zookeeper.apache.org/)
     This the main datastore / control mechanism
 
 mako (http://www.makotemplates.org/)
@@ -46,3 +46,7 @@ bin
 
 gridcentric
     The top-level python package
+
+smoke-tests
+    A simple test harness to perform smoke tests without the need for an actual cloud instance to 
+    interact with. Basically simulates users' and cloud interactions to test the pancake code.
