@@ -10,4 +10,4 @@
 ^zookeeper.*/.*
 ^zookeeper.*gz
 ^testenv/.*
-^integration-tests/.*.log
+^smoke-tests/.*.log
