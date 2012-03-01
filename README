@@ -27,6 +27,9 @@ agent has registered with the manager so that we no the IP is up and running.
 
 ==Dependencies==
 
+gridcentric-nova
+    The Gridcentric nova bindings.
+
 nginx
     The load balancer used by pancake
     Add the following access log format to the nginx.conf (/etc/nginx/nginx.conf) in the http section:
@@ -36,6 +39,9 @@ nginx
 
 zookeeper (3.4.x) (http://zookeeper.apache.org/)
     This the main datastore / control mechanism
+
+python-zookeeper
+    Python bindings for Zookeeper.
 
 mako (http://www.makotemplates.org/)
     A simple python templating engine used to update load balancer configurations
