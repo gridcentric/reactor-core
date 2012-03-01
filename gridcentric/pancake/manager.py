@@ -51,7 +51,7 @@ class ScaleManager(object):
             del self.services[service]
 
     def service_update(self):
-        for service in self.services:
+        for service in self.services.values():
             self.update_loadbalancer(service)
 
     def create_service(self, service_name):
