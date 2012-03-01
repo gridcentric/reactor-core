@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import os
+import traceback
 
 from gridcentric.nova.client.client import NovaClient
 from gridcentric.pancake.config import ServiceConfig
@@ -47,28 +48,39 @@ class Service(object):
         for instance in self.instances():
             self.drop_instances(self.instances(), "service is becoming unmanaged")
         
-        logging.info("Unblessing instance id=%s for service %s" % (self.config.get("nova","instance_id"), self.name))
+        logging.info("Unblessing instance id=%s for service %s" %
+                (self.config.get("nova","instance_id"), self.name))
         self.novaclient.unbless_instance(self.config.get("nova","instance_id")) 
 
     def update(self, reconfigure=True):
+        try:
+            self._update(reconfigure)
+        except Exception, e:
+            traceback.print_exc()
+            logging.error("Error updating service %s: %s" % (self.name, str(e)))
+
+    def _update(self, reconfigure):
         if reconfigure:
             self._configure()
-        
+
         instances = self.instances()
         num_instances = len(instances)
-        
+
         # Launch instances until we reach the min setting value.
         while num_instances < int(self.config.get("scaling","min_instances")):
-            logging.info("Launching new instance for server %s (reason: bringing minimum instances up to %s)" % (self.name, self.config.get("scaling","min_instances")))
+            logging.info(("Launching new instance for server %s " +
+                         "(reason: bringing minimum instances up to %s)") %
+                         (self.name, self.config.get("scaling","min_instances")))
             self._launch_instance()
             num_instances += 1
-        
+
         # Delete instances until we reach the max setting value.
         instances_to_delete = instances[int(self.config.get("scaling","max_instances")):]
         instances = instances[:int(self.config.get("scaling","max_instances"))]
         
-        self.drop_instances(instances_to_delete, "bringing maximum instance down to %s" % self.config.get("scaling","max_instances"))
-    
+        self.drop_instances(instances_to_delete,
+            "bringing maximum instance down to %s" % self.config.get("scaling","max_instances"))
+
     def update_config(self, config_str):
         self.config.reload(config_str)
         self.update()
@@ -82,10 +94,12 @@ class Service(object):
         self._drop_addresses(instances)
         if len(instances) > 0:
             self._update_loadbalancer()
+
         # It might be good to wait a little bit for the servers to clear out any requests they
         # are currently serving.
         for instance in instances:
-            logging.info("Shutting down instance %s for server %s (%s)" % (instance['id'], self.name, reason))
+            logging.info("Shutting down instance %s for server %s (%s)" %
+                    (instance['id'], self.name, reason))
             self._delete_instance(instance)
 
     def _drop_addresses(self, instances):
@@ -104,8 +118,15 @@ class Service(object):
         
     
     def _configure(self):
-        self.novaclient = NovaClient(self.config.get("nova","authurl"), self.config.get("nova","user"), \
-                                     self.config.get("nova","apikey"), self.config.get("nova","project"), 'v1.1')
+        try:
+            self.novaclient = NovaClient(self.config.get("nova","authurl"), \
+                                         self.config.get("nova","user"), \
+                                         self.config.get("nova","apikey"),
+                                         self.config.get("nova","project"), 'v1.1')
+        except Exception, e:
+            traceback.print_exc()
+            logging.error("Error creating nova client: %s" % str(e))
+
     def service_url(self):
         return self.config.get("service","url")
     
@@ -114,7 +135,7 @@ class Service(object):
     
     def instances(self):
         return self.novaclient.list_launched_instances(self.config.get("nova","instance_id"))
-    
+
     def addresses(self):
         return self.extract_addresses_from(self.instances())
    
@@ -125,15 +146,6 @@ class Service(object):
                for network_addrs in network_addresses:
                    addresses.append(network_addrs['addr'])
        return addresses
-   
-    """
-    def instance_to_addresses(self):
-        result = {}
-        for instance in self.instances():
-            print instance
-            result[instance] = self.extract_addresses_from([instance])
-        return result
-    """
    
     def _update_loadbalancer(self, addresses = None):
         self.scale_manager.update_loadbalancer(self, addresses)

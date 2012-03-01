@@ -54,25 +54,24 @@ class ScaleManager(object):
             del self.services[service]
 
     def create_service(self, service_name):
-        
-        logging.info("Assigning service %s to manager %s" %(service_name, self.uuid))
-        
+        logging.info("Assigning service %s to manager %s" % (service_name, self.uuid))
+
         service_path  = paths.service(service_name)
         service_config = ServiceConfig(self.zk_conn.read(service_path))
         service = Service(service_name, service_config, self)
         self.services[service_name] = service
         service_key = service.key()
-        self.key_to_services[service_key] = self.key_to_services.get(service.key(),[]) + [service_name]
-        
+        self.key_to_services[service_key] = \
+            self.key_to_services.get(service.key(),[]) + [service_name]
+
         if self.zk_conn.read(paths.service_managed(service_name)) == None:
             logging.info("New service %s found to be managed." %(service_name))
             # This service is currently unmanaged.
             service.manage()
             self.zk_conn.write(paths.service_managed(service_name),"True")
-        
+
         service.update()
         self.zk_conn.watch_contents(service_path, service.update_config)
-            
     
     def remove_service(self, service_name):
         """

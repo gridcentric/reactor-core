@@ -17,7 +17,6 @@ class Config(object):
         return self.config.get(section, key)
     
     def load(self, config_str):
-        
         self.config = ConfigParser.SafeConfigParser()
         if self.defaultcfg != None:
             self.config.readfp(self.defaultcfg)
@@ -66,5 +65,6 @@ class ServiceConfig(Config):
             try:
                 ip_addresses += [socket.gethostbyname(static_instance)]
             except:
-                logging.warn("Failed to determine the ip address for the static instance %s." %( static_instance))
+                logging.warn("Failed to determine the ip address for the static instance %s." %
+                             static_instance)
         return ip_addresses
