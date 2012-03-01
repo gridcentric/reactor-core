@@ -1,0 +1,8 @@
+*.pyc
+build/
+dist/
+zookeeper-*/
+zookeeper-*tar.gz
+testenv/
+smoke-tests/*.log
+*.egg-info/

@@ -234,4 +234,3 @@ class PancakeApi:
             for identifier, stats in agent_stats.iteritems():
                 self.client.update_agent_stats(agent_name, identifier, str(stats))
         return Response()
-    
