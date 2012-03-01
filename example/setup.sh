@@ -18,6 +18,10 @@ passwd
 # Acquire the necessary packages
 apt-get install nano zip apache2 libapache2-mod-wsgi python-django curl
 
+# Install vms-agent
+apt-get install vms-agent
+/etc/init.d/vmsagent start
+
 # Get the django application
 mkdir -p /web
 scp $EXAMPLE_SERVER:$EXAMPLE_PATH/ip_test.zip /web/ip_test.zip
@@ -25,15 +29,10 @@ unzip /web/ip_test.zip -d /web
 ln -s /web/punchvid/templates /templates
 
 # Get the agent application
-scp $EXAMPLE_SERVER:$EXAMPLE_PATH/agent.py /web/agent.py
+scp $EXAMPLE_SERVER:$EXAMPLE_PATH/../clone.d/99pancake /etc/gridcentric/clone.d
 
 # Configure apache
 cat /etc/apache2/sites-available/default | sed 's:</VirtualHost>:WSGIScriptAlias / /web/punchvid/django.wsgi\n</VirtualHost>:' - > /etc/apache2/sites-available/punchvid
 a2ensite punchvid
 a2dissite default
 service apache2 reload
-
-# Setup the agent
-cat /etc/init/cron.conf | sed 's:expect fork::' - | sed 's:exec cron:exec /web/agent.py:' - > /etc/init/gc-agent.conf
-service gc-agent start
-
