@@ -23,7 +23,9 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
             pid = pid_file.readline().strip()
             pid_file.close()
             return int(pid)
-    
+        else:
+            return None
+
     def update(self, url, addresses):
         
         # We use a simple hash of the URL as the file name for the configuration file.
@@ -38,7 +40,8 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         config_file.write(conf)
         config_file.flush()
         config_file.close()
-        
+
         # Send a signal to NginX to reload the configuration
         # (Note: we might need permission to do this!!)
-        os.kill(self.nginx_pid, signal.SIGHUP)
+        if self.nginx_pid:
+            os.kill(self.nginx_pid, signal.SIGHUP)

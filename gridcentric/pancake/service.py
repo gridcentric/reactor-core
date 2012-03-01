@@ -16,7 +16,7 @@ class Service(object):
         self.scale_manager = scale_manager
         self.novaclient = None
         self.confirmed_addresses = {}
-    
+
     def key(self):
         return hashlib.md5(self.config.get("service","url")).hexdigest()
     
@@ -77,7 +77,7 @@ class Service(object):
         # Delete instances until we reach the max setting value.
         instances_to_delete = instances[int(self.config.get("scaling","max_instances")):]
         instances = instances[:int(self.config.get("scaling","max_instances"))]
-        
+
         self.drop_instances(instances_to_delete,
             "bringing maximum instance down to %s" % self.config.get("scaling","max_instances"))
 
@@ -131,8 +131,8 @@ class Service(object):
         return self.config.get("service","url")
     
     def static_addresses(self):
-        return self.config.get("service","static_instances").split(",")
-    
+        return self.config.static_ips()
+
     def instances(self):
         return self.novaclient.list_launched_instances(self.config.get("nova","instance_id"))
 
@@ -169,7 +169,10 @@ class Service(object):
                 if self.scale_manager.mark_instance(self.name, instance['id']):
                     #This instance has been deemed to be dead and should be cleaned up.
                     dead_instances += [instance]
-        self.drop_instances(dead_instances, "instance has been marked for destruction.")
-        
 
+        # Launch instances to replace our dead ones.
+        for instance in dead_instances:
+            self._launch_instance()
 
+        # We assume they're dead, so we can prune them.
+        self.drop_instances(dead_instances, "instance has been marked for destruction")

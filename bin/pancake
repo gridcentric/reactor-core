@@ -43,7 +43,6 @@ def usage():
     print ""
     print "    runapi                   Runs the API server."
     
-    
 opts, args = getopt.getopt(sys.argv[1:], "hdz:p:", ["help","zookeeper=","password=","debug"])
 
 zk_servers = ""
@@ -60,7 +59,6 @@ for o, a in opts:
     elif o in ('-d', '--debug'):
         debug=True
         
-
 if zk_servers == "":
     zk_servers = ",localhost:2181"
 
@@ -76,25 +74,25 @@ try:
         if services:
             for service in services: 
                 print service
-    
+
     elif command == "manage":
         service_name = args[1]
         service_conf = ""
         for line in sys.stdin.readlines():
             service_conf += line
-        
+
         api_client.manage_service(service_name, service_conf)
-    
+
     elif command == "unmanage":
         service_name = args[1]
         api_client.unmanage_service(service_name)
-    
+
     elif command == "update":
         service_name = args[1]
         new_conf = ""
         for line in sys.stdin.readlines():
             new_conf += line
-        
+
         # Read in the existing configuration and update it with
         # with the new configuration. This allows people to do a
         # partial update.
@@ -102,31 +100,28 @@ try:
         config = SafeConfigParser()
         config.readfp(StringIO(service_conf))
         config.readfp(StringIO(new_conf))
-        
+
         # Write out the full contents of the updated configuration.
         config_value = StringIO()
         config.write(config_value)
         api_client.update_service(service_name, config_value.getvalue())
-        
-    
+
     elif command == "show":
         service_name = args[1]
         config = api_client.get_service_config(service_name)
-        
-        print config
-        
+        print config.strip()
+
     elif command == "list-ips":
         service_name = args[1]
         ip_addresses = api_client.list_service_ips(service_name)
         for ip in ip_addresses:
             print ip
-        
+
     elif command == "passwd":
         new_password = args[1]
         api_client.update_api_key(new_password)
-        
+
     elif command == "runserver":
-        
         from gridcentric.pancake.manager import ScaleManager
         if debug:
             logging.basicConfig(level=logging.DEBUG)
@@ -135,7 +130,7 @@ try:
         manager = ScaleManager()
         manager.serve(zk_servers)
         manager.run()
-    
+
     elif command == 'runapi':
         from paste.httpserver import serve
         from gridcentric.pancake.api import PancakeApi
@@ -145,11 +140,11 @@ try:
             logging.basicConfig(level=logging.INFO)
         api = PancakeApi(zk_servers)
         serve(api.get_wsgi_app(), host='0.0.0.0')
-    
+
     else:
         usage()
         sys.exit(1)
-        
+
 except Exception, e:
     if debug:
         traceback.print_exc()

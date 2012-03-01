@@ -14,8 +14,11 @@ class Config(object):
         self.config = None
     
     def get(self, section, key):
-        return self.config.get(section, key)
-    
+        if self.config.has_option(section, key):
+            return self.config.get(section, key)
+        else:
+            return None
+
     def load(self, config_str):
         self.config = ConfigParser.SafeConfigParser()
         if self.defaultcfg != None:
@@ -56,7 +59,7 @@ class ServiceConfig(Config):
     def static_ips(self):
         """ Returns a list of static ips associated with the configured static instances """
         static_instances = self.get("service","static_instances").split(",")
-        
+
         # (dscannell) The static instances can be specified either as IP addresses or hostname. 
         # If its an IP address then we are done. If its a hostname then we need to do a lookup
         # to determine its IP address.

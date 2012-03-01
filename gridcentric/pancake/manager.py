@@ -125,17 +125,20 @@ class ScaleManager(object):
 
     def mark_instance(self, service_name, instance_id):
         
-        remove_instance=False
+        remove_instance = False
         mark_counter = int(self.zk_conn.read(paths.marked_instance(service_name, instance_id), '0'))
+
         # Increment the mark counter
         mark_counter += 1
+
         if mark_counter >= int(self.config.get("manager","mark_maximum")):
             # This instance has been marked too many times. There is likely something really
             # wrong with it, so we'll clean it up.
-            remove_instance=True
+            remove_instance = True
         else:
             # Just save the mark counter
-            logging.info("Instance %s for servicve %s has been marked (count=%s)" %(instance_id, service_name, mark_counter))
+            logging.info("Instance %s for service %s has been marked (count=%s)" %
+                         (instance_id, service_name, mark_counter))
             self.zk_conn.write(paths.marked_instance(service_name, instance_id), str(mark_counter))
         
         return remove_instance
@@ -150,4 +153,3 @@ class ScaleManager(object):
         while True:
             time.sleep(float(self.config.get("manager","health_check")))
             self.health_check()
-
