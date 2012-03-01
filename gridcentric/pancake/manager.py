@@ -13,9 +13,8 @@ import gridcentric.pancake.loadbalancer.connection as lb_connection
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 import gridcentric.pancake.zookeeper.paths as paths
 
-
 class ScaleManager(object):
-    
+
     def __init__(self):
         self.uuid = uuid.uuid4()
         self.services = {}
@@ -26,32 +25,34 @@ class ScaleManager(object):
     def serve(self, zk_servers):
         # Create a connection to zk_configuration and read
         # in the pancake service config
-        
         self.zk_conn = ZookeeperConnection(zk_servers)
         manager_config = self.zk_conn.read(paths.config())
         self.config = ManagerConfig(manager_config)
-        
+ 
         self.load_balancer = lb_connection.get_connection(self.config.get("loadbalancer","config_path"))
-        
+
         self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
-        self.service_change(
-                    self.zk_conn.watch_children(paths.services(), self.service_change)) 
-    
+        self.service_change(self.zk_conn.watch_children(paths.services(), self.service_change))
+ 
     def service_change(self, services):
-        
-        logging.info("Services have changed: new=%s, existing=%s" %(services, self.services.keys()))
+        logging.info("Services have changed: new=%s, existing=%s" %
+                     (services, self.services.keys()))
         for service_name in services:
             if service_name not in self.services:
                 self.create_service(service_name)
-        
+
         services_to_remove = []
         for service_name in self.services:
             if service_name not in services:
                 self.remove_service(service_name)
                 services_to_remove += [service_name]
-        
+
         for service in services_to_remove:
             del self.services[service]
+
+    def service_update(self):
+        for service in self.services:
+            self.update_loadbalancer(service)
 
     def create_service(self, service_name):
         logging.info("Assigning service %s to manager %s" % (service_name, self.uuid))
@@ -72,7 +73,7 @@ class ScaleManager(object):
 
         service.update()
         self.zk_conn.watch_contents(service_path, service.update_config)
-    
+
     def remove_service(self, service_name):
         """
         This removes / unmanages the service.
@@ -101,7 +102,6 @@ class ScaleManager(object):
         self.zk_conn.delete(paths.confirmed_ip(service_name, ip_address))
 
     def register_ip(self, ips):
-        
         delete_watches = []
         for service in self.services.values():
             service_ips = service.addresses()
@@ -124,7 +124,6 @@ class ScaleManager(object):
         self.load_balancer.update(service.service_url(), addresses)
 
     def mark_instance(self, service_name, instance_id):
-        
         remove_instance = False
         mark_counter = int(self.zk_conn.read(paths.marked_instance(service_name, instance_id), '0'))
 
@@ -150,6 +149,9 @@ class ScaleManager(object):
             service.update(reconfigure=False)
 
     def run(self):
+        # Do a service update on startup.
+        self.service_update()
+
         while True:
             time.sleep(float(self.config.get("manager","health_check")))
             self.health_check()

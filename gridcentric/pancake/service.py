@@ -28,15 +28,16 @@ class Service(object):
         # We need to ensure that the instance is blessed. This is simply done by
         # sending the bless command.
         try:
-            logging.info("Blessing instance id=%s for service %s" % (self.config.get("nova","instance_id"), self.name))
+            logging.info("Blessing instance id=%s for service %s" %
+                         (self.config.get("nova","instance_id"), self.name))
             self.novaclient.bless_instance(self.config.get("nova","instance_id"))
         except Exception, e:
             # There is a chance that this instance was already blessed. This is not
             # an issue, so we just need to ignore. There is also a chance that we could
             # not connected to nova, or there is some error. In any event, we can't do much
             # so let's log a warning.
-            logging.warn("Failed to bless a service instance (service=%s, instances_id=%s). Error=%s" 
-                         % (self.name, self.config.get("nova","instance_id"), e) )
+            logging.warn("Failed to bless a service instance (service=%s, instances_id=%s). "
+                         "Error=%s" % (self.name, self.config.get("nova","instance_id"), e) )
 
     def unmanage(self):
         # Delete all the launched instances, and unbless the instance. Essentially, return it
@@ -116,7 +117,6 @@ class Service(object):
         # Launch the instance.
         self.novaclient.launch_instance(self.config.get("nova","instance_id"))
         
-    
     def _configure(self):
         try:
             self.novaclient = NovaClient(self.config.get("nova","authurl"), \
