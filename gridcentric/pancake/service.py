@@ -15,11 +15,13 @@ class Service(object):
         self.config = service_config
         self.scale_manager = scale_manager
         self.novaclient = None
+        self.instance_cache = None
         self.confirmed_addresses = {}
+        self.url = self.config.url()
 
     def key(self):
-        return hashlib.md5(self.config.url()).hexdigest()
-    
+        return hashlib.md5(self.url).hexdigest()
+
     def manage(self):
         # Load the configuration and configure the service.
         logging.info("Managing service %s" % (self.name))
@@ -31,6 +33,7 @@ class Service(object):
             logging.info("Blessing instance id=%s for service %s" %
                          (self.config.instance_id(), self.name))
             self.novaclient.bless_instance(self.config.instance_id())
+
         except Exception, e:
             # There is a chance that this instance was already blessed. This is not
             # an issue, so we just need to ignore. There is also a chance that we could
@@ -48,7 +51,7 @@ class Service(object):
         # Delete all the launched instances.
         for instance in self.instances():
             self.drop_instances(self.instances(), "service is becoming unmanaged")
-        
+
         logging.info("Unblessing instance id=%s for service %s" %
                 (self.config.instance_id(), self.name))
         self.novaclient.unbless_instance(self.config.instance_id()) 
@@ -104,7 +107,11 @@ class Service(object):
             "bringing maximum instance down to %s" % max_instances)
 
     def update_config(self, config_str):
+        old_url = self.config.url()
         self.config.reload(config_str)
+        if old_url != self.config.url():
+            self._update_loadbalancer([])
+        self.url = self.config.url()
         self.update()
 
     def drop_instances(self, instances, reason):
@@ -132,11 +139,13 @@ class Service(object):
     def _delete_instance(self, instance):
         # Delete the instance from nova            
         self.novaclient.delete_instance(instance['id'])
-        
+        self.instance_cache = None
+
     def _launch_instance(self):
         # Launch the instance.
         self.novaclient.launch_instance(self.config.instance_id())
-        
+        self.instance_cache = None
+
     def _configure(self):
         try:
             authparams = self.config.auth_info()
@@ -150,13 +159,21 @@ class Service(object):
             logging.error("Error creating nova client: %s" % str(e))
 
     def service_url(self):
-        return self.config.url()
-    
+        return self.url
+
     def static_addresses(self):
         return self.config.static_ips()
 
     def instances(self):
-        return self.novaclient.list_launched_instances(self.config.instance_id())
+        if self.instance_cache:
+            return self.instance_cache
+        else:
+            try:
+                self.instance_cache = \
+                    self.novaclient.list_launched_instances(self.config.instance_id())
+            except HttpException:
+                return []
+        return self.instance_cache
 
     def addresses(self):
         return self.extract_addresses_from(self.instances())
@@ -170,13 +187,11 @@ class Service(object):
        return addresses
    
     def _update_loadbalancer(self, addresses = None):
+        print "UPDATING WITH URL %s" % self.url
         self.scale_manager.update_loadbalancer(self, addresses)
 
     def health_check(self):
-        try:
-            instances = self.instances()
-        except HttpException:
-            return
+        instances = self.instances()
 
         # Check if any expected machines have failed to come up and confirm their IP address.
         confirmed_ips = self.scale_manager.confirmed_ips(self.name)

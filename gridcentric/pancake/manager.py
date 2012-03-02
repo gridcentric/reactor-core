@@ -61,7 +61,7 @@ class ScaleManager(object):
             self.key_to_services.get(service.key(),[]) + [service_name]
 
         if self.zk_conn.read(paths.service_managed(service_name)) == None:
-            logging.info("New service %s found to be managed." %(service_name))
+            logging.info("New service %s found to be managed." % (service_name))
             # This service is currently unmanaged.
             service.manage()
             self.zk_conn.write(paths.service_managed(service_name),"True")
@@ -75,7 +75,7 @@ class ScaleManager(object):
         """
         This removes / unmanages the service.
         """
-        logging.info("Removing service %s from manager %s" %(service_name, self.uuid))
+        logging.info("Removing service %s from manager %s" % (service_name, self.uuid))
         service = self.services.get(service_name, None)
         if service:
             logging.info("Unmanaging service %s" %(service_name))
