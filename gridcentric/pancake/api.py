@@ -15,7 +15,7 @@ class PancakeApiClient(httplib2.Http):
     A simple client that interacts with the REST interface of the pancakeApi. This is to be
     used in third-party applications that want python bindings to interact with the system.
     """
-    
+
     def __init__(self, api_url, api_key=None):
         super(PancakeApiClient, self).__init__()
         
@@ -41,7 +41,7 @@ class PancakeApiClient(httplib2.Http):
     
     def unmanage_service(self, service_name):
         """
-        Unmanage the service
+        Unmanage the service.
         """
         self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 'DELETE')
         
@@ -55,10 +55,10 @@ class PancakeApiClient(httplib2.Http):
     
     def get_service_config(self, service_name):
         """
-        Return the service's configuration
+        Return the service's configuration.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 
-                                                 'GET')
+        resp, body = self._authenticated_request('/gridcentric/pancake/services/%s' %
+                                                 service_name, 'GET')
         return body.get('config',"")
 
     def list_service_ips(self, service_name):
@@ -66,22 +66,16 @@ class PancakeApiClient(httplib2.Http):
         Returns a list of the ip addresses (both dynamically confirmed and manually configured) for
         this service.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/service/%s/ips' % (service_name), 
-                                                 'GET')
+        resp, body = self._authenticated_request('/gridcentric/pancake/service/%s/ips' %
+                                                 service_name, 'GET')
         return body.get('ip_addresses',[])
 
     def update_api_key(self, api_key):
         """
         Changes the API key in the system.
         """
-        self._authenticated_request('/gridcentric/pancake/auth_key', 'POST', body={'auth_key':api_key})
-
-    def update_agent_stats(self, agent_name, stats):
-        """
-        Updates the agent stats.
-        Stats should be a dictionary of the form { identifier : value }
-        """
-        self._authenticated_request('/gridcentric/pancake/agent/%s' %(agent_name), 'POST', body=stats)
+        self._authenticated_request('/gridcentric/pancake/auth_key',
+                                    'POST', body={'auth_key':api_key})
 
     def _authenticated_request(self, url, method, **kwargs):
         if self.api_key != None:
@@ -127,16 +121,13 @@ class PancakeApi:
         self.config.add_route('service-ip-list', '/gridcentric/pancake/service/{service_name}/ips')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list')
 
-        self.config.add_route('agent-stat', '/gridcentric/pancake/agent/{agent_name}')
-        self.config.add_view(self.update_agent_stats, route_name='agent-stat')
-
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
-     
+
     def authorized(request_handler):
         """
-        A Decorator that does a simpel check to see if the request is authorized before
-        executing the actual handler. 
+        A Decorator that does a simple check to see if the request is
+        authorized before executing the actual handler. 
         """
         def fn(self, context, request):
              if self._authorize(context, request):
@@ -144,11 +135,9 @@ class PancakeApi:
              else:
                  # Return an unauthorized response.
                 return Response(status=401)
-         
         return fn
     
     def _authorize(self, context, request):
-        
         auth_hash = self.client.auth_hash()
         if auth_hash != None:
             auth_key = request.headers.get('X-Auth-Key', None)
@@ -158,8 +147,8 @@ class PancakeApi:
             else:
                 return False
         else:
-            # If there is not auth hash then authentication has not been turned on
-            # so all requests are allowed by default.
+            # If there is not auth hash then authentication has not been turned
+            # on so all requests are allowed by default.
             return True
 
     def _get_auth_token(self, auth_key):
@@ -186,11 +175,10 @@ class PancakeApi:
         POST - Either manages or updates the service with a new config in the request body
         DELETE - Unmanages the service.
         """
-        
         service_name = request.matchdict['service_name']
         response = Response()
         if request.method == "GET":
-            logging.info("Retrieving service %s configuration" %(service_name))
+            logging.info("Retrieving service %s configuration" % service_name)
             service_config = self.client.get_service_config(service_name)
             response = Response(body=json.dumps({'config':service_config}))
         elif request.method == "DELETE":
@@ -198,11 +186,10 @@ class PancakeApi:
             self.client.unmanage_service(service_name)
         elif request.method == "POST":
             service_config = json.loads(request.body)
-            logging.info("Managing or updating service %s" %(service_name))
+            logging.info("Managing or updating service %s" % service_name)
             self.client.update_service(service_name, service_config.get('config',""))
-            
         return response
-    
+
     @authorized
     def list_service_ips(self, context, request):
         service_name = request.matchdict['service_name']
@@ -210,8 +197,7 @@ class PancakeApi:
             return Response(body=json.dumps(
                         {'ip_addresses': self.client.get_service_ip_addresses(service_name)}))
         return Response()
-            
-    
+
     @authorized
     def list_services(self, context, request):
         """
@@ -219,18 +205,9 @@ class PancakeApi:
         """
         services = self.client.list_managed_services()
         return Response(body=json.dumps({'services':services}))
-    
+
     def new_ip_address(self, context, request):
         ip_address = request.matchdict['ipaddress']
         logging.info("New IP address %s has been recieved." % (ip_address))
         self.client.record_new_ipaddress(ip_address)
-        return Response()
-    
-    def update_agent_stats(self, context, request):
-        agent_name = request.matchdict['agent_name']
-        logging.info("New stats from agent %s" % (agent_name))
-        if request.method == 'POST':
-            agent_stats = json.loads(request.body)
-            for identifier, stats in agent_stats.iteritems():
-                self.client.update_agent_stats(agent_name, identifier, str(stats))
         return Response()
