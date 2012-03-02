@@ -179,10 +179,6 @@ class ScaleManager(object):
                     metrics_by_key[service.key()] = []
                 metrics_by_key[service.key()].append(metrics[ip])
 
-        print "Metrics by LB:", metrics
-        print "Metrics by service key:",metrics_by_key
-        print "Ip mappings:",self.ip_mappings
-
         # Does a health check on all the services that are being managed.
         for service in self.services.values():
             # Run a health check on this service.
