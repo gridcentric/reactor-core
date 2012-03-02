@@ -21,7 +21,7 @@ class ScaleManager(object):
         self.key_to_services = {}
         self.watching_ips ={}
         self.load_balancer = None
-    
+
     def serve(self, zk_servers):
         # Create a connection to zk_configuration and read
         # in the pancake service config
@@ -49,10 +49,6 @@ class ScaleManager(object):
 
         for service in services_to_remove:
             del self.services[service]
-
-    def service_update(self):
-        for service in self.services.values():
-            self.update_loadbalancer(service)
 
     def create_service(self, service_name):
         logging.info("Assigning service %s to manager %s" % (service_name, self.uuid))
@@ -91,7 +87,7 @@ class ScaleManager(object):
 
     def confirmed_ips(self, service_name):
         """
-        Returns a list of all the confirmed ips for the the service.
+        Returns a list of all the confirmed ips for the service.
         """
         ips = self.zk_conn.list_children(paths.confirmed_ips(service_name))
         if ips == None:
@@ -107,7 +103,8 @@ class ScaleManager(object):
             service_ips = service.addresses()
             for ip in ips:
                 if ip in service_ips:
-                    logging.info("service %s found for IP %s" %(service.name, ip))
+                    logging.info("Service %s found for IP %s" %
+                                  (service.name, ip))
                     # We found the service that this IP address belongs. Confirm this IP address
                     # and remove it from the new-ip address. Finally update the loadbalancer.
                     self.zk_conn.write(paths.confirmed_ip(service.name, ip), "")
@@ -120,8 +117,20 @@ class ScaleManager(object):
             for service_name in self.key_to_services.get(service.key(), []):
                 addresses += self.confirmed_ips(service_name)
                 addresses += self.services[service_name].static_addresses()
-        logging.info("Updating loadbalancer for url %s with addresses %s" % (service.service_url(), addresses))
-        self.load_balancer.update(service.service_url(), addresses)
+        logging.info("Updating loadbalancer for url %s with addresses %s" %
+                     (service.service_url(), addresses))
+        self.load_balancer.change(service.service_url(), addresses)
+        self.load_balancer.save()
+
+    def reload_loadbalancer(self):
+        self.load_balancer.clear()
+        for service in self.services.values():
+            addresses = []
+            for service_name in self.key_to_services.get(service.key(), []):
+            	addresses += self.confirmed_ips(service_name)
+                addresses += self.services[service_name].static_addresses()
+            self.load_balancer.change(service.service_url(), addresses)
+        self.load_balancer.save()
 
     def mark_instance(self, service_name, instance_id):
         remove_instance = False
@@ -149,8 +158,8 @@ class ScaleManager(object):
             service.update(reconfigure=False)
 
     def run(self):
-        # Do a service update on startup.
-        self.service_update()
+        # Kick the loadbalancer on startup.
+        self.reload_loadbalancer()
 
         while True:
             time.sleep(float(self.config.get("manager","health_check")))

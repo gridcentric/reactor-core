@@ -5,7 +5,9 @@ def get_connection(config_path):
     return NginxLoadBalancerConnection(config_path)
 
 class LoadBalancerConnection(object):
-    pass
-
-    def update(self, url, addresses):
+    def clear(self):
+        pass
+    def change(self, url, addresses):
+        pass
+    def save(self):
         pass

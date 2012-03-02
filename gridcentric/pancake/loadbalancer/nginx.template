@@ -1,16 +1,15 @@
-upstream ${netloc} {
+upstream ${id} {
     % for address in addresses:
     server ${address};
     % endfor
 }
  
 server {
-
     access_log /var/log/nginx/access.log pancake;
 
-    listen 80;
+    listen ${port};
     server_name ${netloc};
-    location / {
-      proxy_pass ${url};
+    location ${path} {
+      proxy_pass ${scheme}://${id};
     }
 }

@@ -37,10 +37,13 @@ gridcentric-nova
 
 nginx
     The load balancer used by pancake
+
     Add the following access log format to the nginx.conf (/etc/nginx/nginx.conf) in the http section:
         log_format pancake '$remote_addr - $remote_user [$time_local]  '
                     '<http://$host> "$request" $status $body_bytes_sent '
                     '"$http_referer" "$http_user_agent"';
+
+    Be sure to disable the default site in '/etc/nginx/sites-enabled/.
 
 zookeeper (3.4.x) (http://zookeeper.apache.org/)
     This the main datastore / control mechanism
