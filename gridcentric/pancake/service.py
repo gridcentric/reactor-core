@@ -196,7 +196,6 @@ class Service(object):
        return addresses
    
     def _update_loadbalancer(self, addresses = None):
-        print "UPDATING WITH URL %s" % self.url
         self.scale_manager.update_loadbalancer(self, addresses)
 
     def health_check(self):
