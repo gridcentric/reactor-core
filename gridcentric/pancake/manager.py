@@ -117,7 +117,7 @@ class ScaleManager(object):
         for ip in ips:
             # Check if we know the mapping.
             if ip in self.ip_mappings:
-                _register_ip(self, service[ip], ip)
+                _register_ip(self, self.ip_mappings[ip], ip)
 
             # Look up the mapping dynamically.
             else:
