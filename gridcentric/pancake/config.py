@@ -88,7 +88,7 @@ project=admin
         return int(self._get("scaling", "min_instances") or 1)
 
     def max_instances(self):
-        return int(self._get("scaling", "min_instances") or 1)
+        return int(self._get("scaling", "max_instances") or 1)
 
     def quiet_period(self):
         return float(self._get("scaling", "quiet_period"))
