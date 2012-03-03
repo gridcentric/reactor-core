@@ -140,20 +140,20 @@ class Service(object):
     def _delete_instance(self, instance):
         # Delete the instance from nova            
         try:
+            self.instance_cache = None
             self.novaclient.delete_instance(instance['id'])
         except HTTPException, e:
             traceback.print_exc()
             logging.error("Error deleting instance: %s" % str(e))
-        self.instance_cache = None
 
     def _launch_instance(self):
         # Launch the instance.
         try:
+            self.instance_cache = None
             self.novaclient.launch_instance(self.config.instance_id())
         except HTTPException, e:
             traceback.print_exc()
             logging.error("Error launching instance: %s" % str(e))
-        self.instance_cache = None
 
     def _configure(self):
         try:
