@@ -5,6 +5,7 @@ import logging
 import os
 import traceback
 
+from httplib import HTTPException
 from gridcentric.nova.client.client import NovaClient
 from gridcentric.pancake.config import ServiceConfig
 
@@ -140,7 +141,7 @@ class Service(object):
         # Delete the instance from nova            
         try:
             self.novaclient.delete_instance(instance['id'])
-        except HttpException, e:
+        except HTTPException, e:
             traceback.print_exc()
             logging.error("Error deleting instance: %s" % str(e))
         self.instance_cache = None
@@ -149,7 +150,7 @@ class Service(object):
         # Launch the instance.
         try:
             self.novaclient.launch_instance(self.config.instance_id())
-        except HttpException, e:
+        except HTTPException, e:
             traceback.print_exc()
             logging.error("Error launching instance: %s" % str(e))
         self.instance_cache = None
@@ -179,7 +180,7 @@ class Service(object):
             try:
                 self.instance_cache = \
                     self.novaclient.list_launched_instances(self.config.instance_id())
-            except HttpException:
+            except HTTPException:
                 return []
         return self.instance_cache
 
