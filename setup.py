@@ -18,11 +18,11 @@ setup(
     url="http://www.gridcentric.com",
     packages=["gridcentric",
               "gridcentric.pancake",
-              "gridcentric.pancake.agent",
               "gridcentric.pancake.loadbalancer",
               "gridcentric.pancake.zookeeper"],
     data_files=[
         ("gridcentric/pancake/loadbalancer",
-            ["gridcentric/pancake/loadbalancer/nginx.template"]),],
+            ["gridcentric/pancake/loadbalancer/nginx.template",
+             "gridcentric/pancake/loadbalancer/pancake.conf"])],
     scripts=["bin/pancake"]
 )

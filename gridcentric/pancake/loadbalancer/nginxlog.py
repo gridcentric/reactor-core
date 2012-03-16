@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 """
-An agent that runs on the same host as the load balancer (nginx) and will send data
-from information gathered from the log files.
+An agent that runs on the same host as the load balancer (nginx) and will send
+data from information gathered from the log files.
 """
+
 import datetime
 import hashlib
 import httplib2
@@ -32,29 +33,13 @@ class HttpRequestThread(threading.Thread):
         http = httplib2.Http()
         resp, body = http.request(self.url, self.method, **kwargs)
 
-
-class NginxAgentUpdate(threading.Thread):
-    
-    def __init__(self, client, record):
-        threading.Thread.__init__(self)
-        self.client = client
-        self.record = record
-        
-    def run(self):
-        print "Updating agent record: %s" %(self.record)
-        if self.record != {}:
-            # There is no reason to send empty data
-            self.client.update_agent_stats('NginxAgent', self.record)
-
 class LogReader(object):
-     
     def __init__(self, log_filename, filter=None):
         self.log_filename = log_filename
         self.filter = None
         if filter != None:
             self.filter = re.compile(filter)
-        
-    
+
     def connect(self):
         self.logfile = open(self.log_filename,'r')
     
@@ -81,7 +66,6 @@ class NginxRequestAgent(object):
         self.poll_period = poll_period
         self.execute = True
         self.api_url = api_url
-        
     
     def reset_record(self):
         self.record = {}
@@ -109,7 +93,6 @@ class NginxRequestAgent(object):
                 request_rates = self.calculate_request_rate(delta)
                 # Refresh our record
                 self.reset_record()
-                NginxAgentUpdate(client, request_rates).start()
                 last_push = current_poll
     
     def calculate_request_rate(self, time_delta):
@@ -117,9 +100,3 @@ class NginxRequestAgent(object):
         for url, count in self.record.iteritems():
             request_rates[hashlib.md5(url).hexdigest()] = (count + 0.0) / time_delta.seconds
         return request_rates
-
-if __name__ == '__main__':
-    agent = NginxRequestAgent("http://localhost:8080","/var/log/nginx/access.log",10)
-    agent.start()
-
-    
