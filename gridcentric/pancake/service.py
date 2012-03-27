@@ -16,7 +16,6 @@ class Service(object):
         self.config = service_config
         self.scale_manager = scale_manager
         self.novaclient = None
-        self.instance_cache = None
         self.confirmed_addresses = {}
         self.url = self.config.url()
 
@@ -140,7 +139,6 @@ class Service(object):
     def _delete_instance(self, instance):
         # Delete the instance from nova            
         try:
-            self.instance_cache = None
             self.novaclient.delete_instance(instance['id'])
         except HTTPException, e:
             traceback.print_exc()
@@ -149,7 +147,6 @@ class Service(object):
     def _launch_instance(self):
         # Launch the instance.
         try:
-            self.instance_cache = None
             self.novaclient.launch_instance(self.config.instance_id())
         except HTTPException, e:
             traceback.print_exc()
@@ -174,16 +171,8 @@ class Service(object):
         return self.config.static_ips()
 
     def instances(self):
-        if self.instance_cache:
-            return self.instance_cache
-        else:
-            try:
-                self.instance_cache = \
-                    self.novaclient.list_launched_instances(self.config.instance_id())
-            except HTTPException:
-                return []
-        return self.instance_cache
-
+        return self.novaclient.list_launched_instances(self.config.instance_id())
+    
     def addresses(self):
         return self.extract_addresses_from(self.instances())
 

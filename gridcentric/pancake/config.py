@@ -37,11 +37,23 @@ mark_maximum=4
 
 [loadbalancer]
 config_path=/etc/nginx/conf.d
+site_path=/etc/nginx/sites-enabled
 """))
         self._load(config_str)
 
     def config_path(self):
+        """
+        The config path is where general loadbalancer configurations should go. This maybe the
+        same as the config path.
+        """
         return self._get("loadbalancer", "config_path")
+    
+    def site_path(self):
+        """
+        The site path is where the particular service configurations should go. This maybe the
+        same as the config path.
+        """
+        return self._get("loadbalancer", "site_path")
 
     def mark_maximum(self):
         return int(self._get("manager", "mark_maximum"))
@@ -152,7 +164,8 @@ project=admin
         ip_addresses = []
         for static_instance in static_instances:
             try:
-                ip_addresses += [socket.gethostbyname(static_instance)]
+                if static_instance != '':
+                    ip_addresses += [socket.gethostbyname(static_instance)]
             except:
                 logging.warn("Failed to determine the ip address for the static instance %s." %
                              static_instance)
