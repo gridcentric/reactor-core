@@ -121,8 +121,9 @@ class NginxLogWatcher(threading.Thread):
 
 class NginxLoadBalancerConnection(LoadBalancerConnection):
     
-    def __init__(self, config_path):
+    def __init__(self, config_path, site_path):
         self.config_path = config_path
+        self.site_path = site_path
         template_file = os.path.join(os.path.dirname(__file__),'nginx.template')
         self.template = Template(filename=template_file)
         self.log_reader = NginxLogWatcher("/var/log/nginx/access.log")
@@ -172,7 +173,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
                                     addresses=addresses)
 
         # Write out the config file.
-        config_file = file(os.path.join(self.config_path,conf_filename), 'wb')
+        config_file = file(os.path.join(self.site_path,conf_filename), 'wb')
         config_file.write(conf)
         config_file.flush()
         config_file.close()
