@@ -206,9 +206,5 @@ class Service(object):
                     # This instance has been deemed to be dead and should be cleaned up.
                     dead_instances += [instance]
 
-        # Launch instances to replace our dead ones.
-        for instance in dead_instances:
-            self._launch_instance("To replace instances marked for destruction.")
-
         # We assume they're dead, so we can prune them.
         self.drop_instances(dead_instances, "instance has been marked for destruction")

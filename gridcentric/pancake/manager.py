@@ -161,6 +161,7 @@ class ScaleManager(object):
             # This instance has been marked too many times. There is likely something really
             # wrong with it, so we'll clean it up.
             remove_instance = True
+            self.zk_conn.delete(paths.marked_instance(service_name, instance_id))
         else:
             # Just save the mark counter
             logging.info("Instance %s for service %s has been marked (count=%s)" %
