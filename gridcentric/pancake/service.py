@@ -73,23 +73,19 @@ class Service(object):
         # Evaluate the metrics on these instances.
         metric_eval = self.config.metrics()
         metric_total = metric_eval(metrics)
+        logging.debug("Metrics for service %s: total=%s (%s)" % (self.name, metric_total, metrics))
 
         # Launch instances until we reach the min setting value.
         while num_instances < self.config.min_instances():
-            logging.info(("Launching new instance for server %s " +
-                         "(reason: bringing minimum instances up to %s)") %
-                         (self.name, self.config.min_instances()))
-            self._launch_instance()
+            self._launch_instance("bringing minimum instances up to %s" % self.config.min_instances())
             metric_total -= 1
             num_instances += 1
 
         # Bring up instances to satisfy our metrics.
         while metric_total > 0 and \
               num_instances < self.config.max_instances():
-            logging.info(("Launching new instance for server %s " +
-                         "(reason: metrics need %s new instances)") %
-                         (self.name, metric_total))
-            self._launch_instance()
+            
+            self._launch_instance("metrics need %s new instances" % metric_total)
             metric_total -= 1
             num_instances += 1
 
@@ -127,7 +123,7 @@ class Service(object):
         # It might be good to wait a little bit for the servers to clear out any requests they
         # are currently serving.
         for instance in instances:
-            logging.info("Shutting down instance %s for server %s (%s)" %
+            logging.info("Shutting down instance %s for server %s (reason: %s)" %
                     (instance['id'], self.name, reason))
             self._delete_instance(instance)
 
@@ -144,9 +140,12 @@ class Service(object):
             traceback.print_exc()
             logging.error("Error deleting instance: %s" % str(e))
 
-    def _launch_instance(self):
+    def _launch_instance(self, reason):
         # Launch the instance.
         try:
+            logging.info(("Launching new instance for server %s " +
+                         "(reason: %s)") %
+                         (self.name, reason))
             self.novaclient.launch_instance(self.config.instance_id())
         except HTTPException, e:
             traceback.print_exc()
@@ -209,7 +208,7 @@ class Service(object):
 
         # Launch instances to replace our dead ones.
         for instance in dead_instances:
-            self._launch_instance()
+            self._launch_instance("To replace instances marked for destruction.")
 
         # We assume they're dead, so we can prune them.
         self.drop_instances(dead_instances, "instance has been marked for destruction")
