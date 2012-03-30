@@ -9,6 +9,8 @@ from httplib import HTTPException
 from gridcentric.nova.client.client import NovaClient
 from gridcentric.pancake.config import ServiceConfig
 
+import gridcentric.pancake .metrics.calculator as metric_calculator
+
 class Service(object):
     
     def __init__(self, name, service_config, scale_manager):
@@ -71,16 +73,53 @@ class Service(object):
         num_instances = len(instances)
 
         # Evaluate the metrics on these instances.
-        metric_eval = self.config.metrics()
-        metric_total = metric_eval(metrics)
-        logging.debug("Metrics for service %s: total=%s (%s)" % (self.name, metric_total, metrics))
+        ideal_num_instances = metric_calculator.caluculate_ideal_uniform(self.config.metrics(), metrics)
+        logging.debug("Metrics for service %s: ideal_servers=%s (%s)" % (self.name, ideal_num_instances, metrics))
+        
+        allowable_num_instances = range(self.config.min_instances(), self.config.max_instances() +1)
+        overlap = set(allowable_num_instances) & set(ideal_num_instances)
+        if len(overlap) == 0:
+            # Basically the ideal number of instances falls completely outside the allowable
+            # range. This can mean 2 different things:
+            ideal_num_instances.sort()
+            if ideal_num_instances[0] > self.config.max_instances():
+                # a. More instances are required than our maximum allowance
+                overlap = set([self.config.max_instances()])
+            else:
+                # b. Less instances are required than our minimum allowance                
+                overlap = set([self.config.min_instances()])
+        
+        if num_instances in overlap:
+            # The number of instances we currently have is within the ideal range.
+            target = num_instances
+        else:
+            # we need to either scale up or scale down. Our target will be the smallest
+            # value in the ideal range.
+            overlap = list(overlap)
+            overlap.sort()
+            target = overlap[len(overlap)/2]
+        
+        logging.debug("Target number of instances for serivce %s determined to be %s (current: %s)" 
+                      % (self.name, target, num_instances))
+        
+        #metric_eval = self.config.metrics()
+        #metric_total = metric_eval(metrics)
+        #logging.debug("Metrics for service %s: total=%s (%s)" % (self.name, metric_total, metrics))
 
         # Launch instances until we reach the min setting value.
-        while num_instances < self.config.min_instances():
-            self._launch_instance("bringing minimum instances up to %s" % self.config.min_instances())
-            metric_total -= 1
+        while num_instances < target:
+            self._launch_instance("bringing instance total up to target %s" % target)
             num_instances += 1
 
+        # Delete instances until we reach the max setting value.
+        instances_to_delete = instances[target:]
+        instances = instances[:target]
+
+        self.drop_instances(instances_to_delete,
+            "bringing instance total down to target %s" % target)
+
+
+        """
         # Bring up instances to satisfy our metrics.
         while metric_total > 0 and \
               num_instances < self.config.max_instances():
@@ -94,14 +133,8 @@ class Service(object):
         while metric_total < 0 and max_instances > self.config.min_instances():
             max_instances -= 1
             metric_total += 1
-
-        # Delete instances until we reach the max setting value.
-        instances_to_delete = instances[max_instances:]
-        instances = instances[:max_instances]
-
-        self.drop_instances(instances_to_delete,
-            "bringing maximum instance down to %s" % max_instances)
-
+        """
+        
     def update_config(self, config_str):
         old_url = self.config.url()
         self.config.reload(config_str)

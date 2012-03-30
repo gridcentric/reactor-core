@@ -146,7 +146,8 @@ project=admin
 
     def metrics(self):
         metrics = self._get("scaling", "metrics").split(",")
-        return self._generate_metrics(metrics)
+        #return self._generate_metrics(metrics)
+        return metrics
 
     def auth_info(self):
         return (self._get("nova", "authurl"),
