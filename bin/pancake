@@ -9,6 +9,7 @@ from StringIO import StringIO
 from ConfigParser import SafeConfigParser
 
 from gridcentric.pancake.api import PancakeApiClient
+from gridcentric.pancake import log
 
 def usage():
     print "usage: pancake [-h] [--help] [-z |--zookeeper=<zookeeper instance>] command"
@@ -21,6 +22,8 @@ def usage():
     print "   -p, --password=        The password used to connect to the API."
     print ""
     print "   -d, --debug            Enables debugging log and full stack trace errors."
+    print ""
+    print "   -l, --log=            Log to a file instead of stdout."
     print ""
     print "Commands:"
     print "    list-services            List all the services currently being managed."
@@ -43,11 +46,14 @@ def usage():
     print ""
     print "    runapi                   Runs the API server."
     
-opts, args = getopt.getopt(sys.argv[1:], "hdz:p:", ["help","zookeeper=","password=","debug"])
+opts, args = getopt.getopt(sys.argv[1:], 
+                           "hdz:p:l:", 
+                           ["help","zookeeper=","password=","debug","log="])
 
 zk_servers = ""
 password = None
 debug = False
+logfile = None
 for o, a in opts:
     if o in ('-h', '--help'):
         usage()
@@ -58,9 +64,15 @@ for o, a in opts:
         password = a
     elif o in ('-d', '--debug'):
         debug=True
+    elif o in ('-l','--log'):
+        logfile = a
         
 if zk_servers == "":
     zk_servers = ",localhost:2181"
+
+loglevel = logging.INFO
+if debug:
+    loglevel = logging.DEBUG
 
 if len(args) < 1:
     usage()
@@ -122,22 +134,20 @@ try:
         api_client.update_api_key(new_password)
 
     elif command == "runserver":
+        
         from gridcentric.pancake.manager import ScaleManager
-        if debug:
-            logging.basicConfig(level=logging.DEBUG)
-        else:
-            logging.basicConfig(level=logging.INFO)
+        
+        log.configure(loglevel, logfile)
         manager = ScaleManager()
         manager.serve(zk_servers)
         manager.run()
 
     elif command == 'runapi':
+        
         from paste.httpserver import serve
         from gridcentric.pancake.api import PancakeApi
-        if debug:
-            logging.basicConfig(level=logging.DEBUG)
-        else:
-            logging.basicConfig(level=logging.INFO)
+        
+        log.configure(loglevel, logfile)
         api = PancakeApi(zk_servers)
         serve(api.get_wsgi_app(), host='0.0.0.0')
 

@@ -91,6 +91,7 @@ class ScaleManager(object):
         # Update the expected IP mappings.
         for address in service.addresses():
             self.ip_mappings[address] = service
+            logging.debug("Assigning ip address %s to service %s" % (address, service.name))
         for address in service.static_addresses():
             self.ip_mappings[address] = service
 

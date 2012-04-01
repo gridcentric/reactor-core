@@ -24,6 +24,7 @@ apt-get install vms-agent
 # Install the pancake agent script
 scp $EXAMPLE_BASE/clone.d/* ./
 cat ./90_pancake | sed "s:PANCAKE_HOST:$EXAMPLE_SERVER:" - > /etc/gridcentric/clone.d/90_pancake
+chmod +x /etc/gridcentric/clone.d/90_pancake
 
 
 # Get the django application
