@@ -9,7 +9,7 @@ from httplib import HTTPException
 from gridcentric.nova.client.client import NovaClient
 from gridcentric.pancake.config import ServiceConfig
 
-import gridcentric.pancake .metrics.calculator as metric_calculator
+import gridcentric.pancake.metrics.calculator as metric_calculator
 
 class Service(object):
     
