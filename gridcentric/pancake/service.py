@@ -98,10 +98,6 @@ class Service(object):
         logging.debug("Target number of instances for serivce %s determined to be %s (current: %s)" 
                       % (self.name, target, num_instances))
         
-        #metric_eval = self.config.metrics()
-        #metric_total = metric_eval(metrics)
-        #logging.debug("Metrics for service %s: total=%s (%s)" % (self.name, metric_total, metrics))
-
         # Launch instances until we reach the min setting value.
         while num_instances < target:
             self._launch_instance("bringing instance total up to target %s" % target)
@@ -113,23 +109,6 @@ class Service(object):
 
         self.drop_instances(instances_to_delete,
             "bringing instance total down to target %s" % target)
-
-
-        """
-        # Bring up instances to satisfy our metrics.
-        while metric_total > 0 and \
-              num_instances < self.config.max_instances():
-            
-            self._launch_instance("metrics need %s new instances" % metric_total)
-            metric_total -= 1
-            num_instances += 1
-
-        # Bring down the max according to the metrics.
-        max_instances = self.config.max_instances()
-        while metric_total < 0 and max_instances > self.config.min_instances():
-            max_instances -= 1
-            metric_total += 1
-        """
         
     def update_config(self, config_str):
         old_url = self.config.url()
