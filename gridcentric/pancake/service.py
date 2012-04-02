@@ -17,8 +17,6 @@ class Service(object):
         self.name = name
         self.config = service_config
         self.scale_manager = scale_manager
-        self.novaclient = None
-        self.confirmed_addresses = {}
         self.url = self.config.url()
 
     def key(self):
@@ -27,14 +25,13 @@ class Service(object):
     def manage(self):
         # Load the configuration and configure the service.
         logging.info("Managing service %s" % (self.name))
-        self._configure()
         
         # We need to ensure that the instance is blessed. This is simply done by
         # sending the bless command.
         try:
             logging.info("Blessing instance id=%s for service %s" %
                          (self.config.instance_id(), self.name))
-            self.novaclient.bless_instance(self.config.instance_id())
+            self.novaclient().bless_instance(self.config.instance_id())
 
         except Exception, e:
             # There is a chance that this instance was already blessed. This is not
@@ -48,15 +45,14 @@ class Service(object):
         # Delete all the launched instances, and unbless the instance. Essentially, return it
         # back to the unmanaged.
         logging.info("Unmanaging service %s" % (self.name))
-        self._configure()
-        
+
         # Delete all the launched instances.
         for instance in self.instances():
             self.drop_instances(self.instances(), "service is becoming unmanaged")
 
         logging.info("Unblessing instance id=%s for service %s" %
                 (self.config.instance_id(), self.name))
-        self.novaclient.unbless_instance(self.config.instance_id()) 
+        self.novaclient().unbless_instance(self.config.instance_id()) 
 
     def update(self, reconfigure=True, metrics=[]):
         try:
@@ -67,7 +63,7 @@ class Service(object):
 
     def _update(self, reconfigure, metrics):
         if reconfigure:
-            self._configure()
+            pass
 
         instances = self.instances()
         num_instances = len(instances)
@@ -168,7 +164,7 @@ class Service(object):
     def _delete_instance(self, instance):
         # Delete the instance from nova            
         try:
-            self.novaclient.delete_instance(instance['id'])
+            self.novaclient().delete_instance(instance['id'])
         except HTTPException, e:
             traceback.print_exc()
             logging.error("Error deleting instance: %s" % str(e))
@@ -179,19 +175,21 @@ class Service(object):
             logging.info(("Launching new instance for server %s " +
                          "(reason: %s)") %
                          (self.name, reason))
-            self.novaclient.launch_instance(self.config.instance_id())
+            self.novaclient().launch_instance(self.config.instance_id())
         except HTTPException, e:
             traceback.print_exc()
             logging.error("Error launching instance: %s" % str(e))
 
-    def _configure(self):
+    def novaclient(self):
         try:
-            authparams = self.config.auth_info()
-            self.novaclient = NovaClient(authparams[0],
-                                         authparams[1],
-                                         authparams[2],
-                                         authparams[3],
+
+            (auth_url, user, apikey, project) = self.config.auth_info()
+            novaclient = NovaClient(auth_url,
+                                         user,
+                                         apikey,
+                                         project,
                                          'v1.1')
+            return novaclient
         except Exception, e:
             traceback.print_exc()
             logging.error("Error creating nova client: %s" % str(e))
@@ -203,7 +201,7 @@ class Service(object):
         return self.config.static_ips()
 
     def instances(self):
-        return self.novaclient.list_launched_instances(self.config.instance_id())
+        return self.novaclient().list_launched_instances(self.config.instance_id())
     
     def addresses(self):
         return self.extract_addresses_from(self.instances())
