@@ -19,7 +19,6 @@ class ScaleManager(object):
         self.uuid = uuid.uuid4()
         self.services = {}
         self.key_to_services = {}
-        self.ip_mappings = {}
         self.watching_ips ={}
         self.load_balancer = None
 
@@ -67,7 +66,6 @@ class ScaleManager(object):
             self.zk_conn.write(paths.service_managed(service_name),"True")
 
         service.update()
-        self.update_ip_map(service)
 
         logging.info("Watching service %s." % (service_name))
         self.zk_conn.watch_contents(service_path, service.update_config)
@@ -86,13 +84,6 @@ class ScaleManager(object):
                 # name is not in the list, then it is fine because we are just removing it anyway.
                 service_names.remove(service_name)
             service.unmanage()
-
-    def update_ip_map(self, service):
-        # Update the expected IP mappings.
-        for address in service.addresses():
-            self.ip_mappings[address] = service
-        for address in service.static_addresses():
-            self.ip_mappings[address] = service
 
     def confirmed_ips(self, service_name):
         """
@@ -116,17 +107,11 @@ class ScaleManager(object):
             scale_manager.update_loadbalancer(service)
 
         for ip in ips:
-            # Check if we know the mapping.
-            if ip in self.ip_mappings:
-                _register_ip(self, self.ip_mappings[ip], ip)
-
-            # Look up the mapping dynamically.
-            else:
-                for service in self.services.values():
-                    service_ips = service.addresses()
-                    if ip in service_ips:
-                        _register_ip(self, service, ip)
-                        break
+            for service in self.services.values():
+                service_ips = service.addresses()
+                if ip in service_ips:
+                    _register_ip(self, service, ip)
+                    break
 
     def update_loadbalancer(self, service, addresses = None):
         if addresses == None:
@@ -147,7 +132,6 @@ class ScaleManager(object):
             	addresses += self.confirmed_ips(service_name)
                 addresses += self.services[service_name].static_addresses()
             self.load_balancer.change(service.service_url(), addresses)
-            self.update_ip_map(service)
         self.load_balancer.save()
 
     def mark_instance(self, service_name, instance_id):
@@ -161,6 +145,7 @@ class ScaleManager(object):
             # This instance has been marked too many times. There is likely something really
             # wrong with it, so we'll clean it up.
             remove_instance = True
+            self.zk_conn.delete(paths.marked_instance(service_name, instance_id))
         else:
             # Just save the mark counter
             logging.info("Instance %s for service %s has been marked (count=%s)" %
@@ -172,13 +157,19 @@ class ScaleManager(object):
     def health_check(self):
         # Update all the service metrics from the loadbalancer.
         metrics = self.load_balancer.metrics()
+        logging.debug("Load balancer returned metrics: %s" %(metrics))
         metrics_by_key = {}
+        service_addresses = {}
         for ip in metrics:
-            if ip in self.ip_mappings:
-                service = self.ip_mappings[ip]
+            for service in self.services.values():
+                if not service.name in service_addresses:
+                    service_addresses[service.name] = service.addresses() + service.static_addresses() 
+                service_ips = service_addresses[service.name] 
                 if not(service.key() in metrics_by_key):
                     metrics_by_key[service.key()] = []
-                metrics_by_key[service.key()].append(metrics[ip])
+                if ip in service_ips:
+                    logging.debug("Metrics for ip %s belong to service %s" %(ip, service.name))
+                    metrics_by_key[service.key()].append(metrics[ip])
 
         # Does a health check on all the services that are being managed.
         for service in self.services.values():
@@ -187,7 +178,6 @@ class ScaleManager(object):
 
             # Do the service update.
             service.update(reconfigure=False, metrics=metrics_by_key.get(service.key(), []))
-            self.update_ip_map(service)
 
     def run(self):
         # Kick the loadbalancer on startup.

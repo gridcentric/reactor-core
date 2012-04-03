@@ -9,14 +9,14 @@ from httplib import HTTPException
 from gridcentric.nova.client.client import NovaClient
 from gridcentric.pancake.config import ServiceConfig
 
+import gridcentric.pancake.metrics.calculator as metric_calculator
+
 class Service(object):
     
     def __init__(self, name, service_config, scale_manager):
         self.name = name
         self.config = service_config
         self.scale_manager = scale_manager
-        self.novaclient = None
-        self.confirmed_addresses = {}
         self.url = self.config.url()
 
     def key(self):
@@ -25,14 +25,13 @@ class Service(object):
     def manage(self):
         # Load the configuration and configure the service.
         logging.info("Managing service %s" % (self.name))
-        self._configure()
         
         # We need to ensure that the instance is blessed. This is simply done by
         # sending the bless command.
         try:
             logging.info("Blessing instance id=%s for service %s" %
                          (self.config.instance_id(), self.name))
-            self.novaclient.bless_instance(self.config.instance_id())
+            self.novaclient().bless_instance(self.config.instance_id())
 
         except Exception, e:
             # There is a chance that this instance was already blessed. This is not
@@ -46,15 +45,14 @@ class Service(object):
         # Delete all the launched instances, and unbless the instance. Essentially, return it
         # back to the unmanaged.
         logging.info("Unmanaging service %s" % (self.name))
-        self._configure()
-        
+
         # Delete all the launched instances.
         for instance in self.instances():
             self.drop_instances(self.instances(), "service is becoming unmanaged")
 
         logging.info("Unblessing instance id=%s for service %s" %
                 (self.config.instance_id(), self.name))
-        self.novaclient.unbless_instance(self.config.instance_id()) 
+        self.novaclient().unbless_instance(self.config.instance_id()) 
 
     def update(self, reconfigure=True, metrics=[]):
         try:
@@ -65,47 +63,53 @@ class Service(object):
 
     def _update(self, reconfigure, metrics):
         if reconfigure:
-            self._configure()
+            pass
 
         instances = self.instances()
         num_instances = len(instances)
 
         # Evaluate the metrics on these instances.
-        metric_eval = self.config.metrics()
-        metric_total = metric_eval(metrics)
-
+        ideal_num_instances = metric_calculator.caluculate_ideal_uniform(self.config.metrics(), metrics)
+        logging.debug("Metrics for service %s: ideal_servers=%s (%s)" % (self.name, ideal_num_instances, metrics))
+        
+        allowable_num_instances = range(self.config.min_instances(), self.config.max_instances() +1)
+        overlap = set(allowable_num_instances) & set(ideal_num_instances)
+        if len(overlap) == 0:
+            # Basically the ideal number of instances falls completely outside the allowable
+            # range. This can mean 2 different things:
+            ideal_num_instances.sort()
+            if ideal_num_instances[0] > self.config.max_instances():
+                # a. More instances are required than our maximum allowance
+                overlap = set([self.config.max_instances()])
+            else:
+                # b. Less instances are required than our minimum allowance                
+                overlap = set([self.config.min_instances()])
+        
+        if num_instances in overlap:
+            # The number of instances we currently have is within the ideal range.
+            target = num_instances
+        else:
+            # we need to either scale up or scale down. Our target will be the smallest
+            # value in the ideal range.
+            overlap = list(overlap)
+            overlap.sort()
+            target = overlap[len(overlap)/2]
+        
+        logging.debug("Target number of instances for serivce %s determined to be %s (current: %s)" 
+                      % (self.name, target, num_instances))
+        
         # Launch instances until we reach the min setting value.
-        while num_instances < self.config.min_instances():
-            logging.info(("Launching new instance for server %s " +
-                         "(reason: bringing minimum instances up to %s)") %
-                         (self.name, self.config.min_instances()))
-            self._launch_instance()
-            metric_total -= 1
+        while num_instances < target:
+            self._launch_instance("bringing instance total up to target %s" % target)
             num_instances += 1
-
-        # Bring up instances to satisfy our metrics.
-        while metric_total > 0 and \
-              num_instances < self.config.max_instances():
-            logging.info(("Launching new instance for server %s " +
-                         "(reason: metrics need %s new instances)") %
-                         (self.name, metric_total))
-            self._launch_instance()
-            metric_total -= 1
-            num_instances += 1
-
-        # Bring down the max according to the metrics.
-        max_instances = self.config.max_instances()
-        while metric_total < 0 and max_instances > self.config.min_instances():
-            max_instances -= 1
-            metric_total += 1
 
         # Delete instances until we reach the max setting value.
-        instances_to_delete = instances[max_instances:]
-        instances = instances[:max_instances]
+        instances_to_delete = instances[target:]
+        instances = instances[:target]
 
         self.drop_instances(instances_to_delete,
-            "bringing maximum instance down to %s" % max_instances)
-
+            "bringing instance total down to target %s" % target)
+        
     def update_config(self, config_str):
         old_url = self.config.url()
         self.config.reload(config_str)
@@ -127,7 +131,7 @@ class Service(object):
         # It might be good to wait a little bit for the servers to clear out any requests they
         # are currently serving.
         for instance in instances:
-            logging.info("Shutting down instance %s for server %s (%s)" %
+            logging.info("Shutting down instance %s for server %s (reason: %s)" %
                     (instance['id'], self.name, reason))
             self._delete_instance(instance)
 
@@ -139,27 +143,32 @@ class Service(object):
     def _delete_instance(self, instance):
         # Delete the instance from nova            
         try:
-            self.novaclient.delete_instance(instance['id'])
+            self.novaclient().delete_instance(instance['id'])
         except HTTPException, e:
             traceback.print_exc()
             logging.error("Error deleting instance: %s" % str(e))
 
-    def _launch_instance(self):
+    def _launch_instance(self, reason):
         # Launch the instance.
         try:
-            self.novaclient.launch_instance(self.config.instance_id())
+            logging.info(("Launching new instance for server %s " +
+                         "(reason: %s)") %
+                         (self.name, reason))
+            self.novaclient().launch_instance(self.config.instance_id())
         except HTTPException, e:
             traceback.print_exc()
             logging.error("Error launching instance: %s" % str(e))
 
-    def _configure(self):
+    def novaclient(self):
         try:
-            authparams = self.config.auth_info()
-            self.novaclient = NovaClient(authparams[0],
-                                         authparams[1],
-                                         authparams[2],
-                                         authparams[3],
+
+            (auth_url, user, apikey, project) = self.config.auth_info()
+            novaclient = NovaClient(auth_url,
+                                         user,
+                                         apikey,
+                                         project,
                                          'v1.1')
+            return novaclient
         except Exception, e:
             traceback.print_exc()
             logging.error("Error creating nova client: %s" % str(e))
@@ -171,7 +180,7 @@ class Service(object):
         return self.config.static_ips()
 
     def instances(self):
-        return self.novaclient.list_launched_instances(self.config.instance_id())
+        return self.novaclient().list_launched_instances(self.config.instance_id())
     
     def addresses(self):
         return self.extract_addresses_from(self.instances())
@@ -206,10 +215,6 @@ class Service(object):
                 if self.scale_manager.mark_instance(self.name, instance['id']):
                     # This instance has been deemed to be dead and should be cleaned up.
                     dead_instances += [instance]
-
-        # Launch instances to replace our dead ones.
-        for instance in dead_instances:
-            self._launch_instance()
 
         # We assume they're dead, so we can prune them.
         self.drop_instances(dead_instances, "instance has been marked for destruction")

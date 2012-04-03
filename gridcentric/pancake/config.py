@@ -105,48 +105,8 @@ project=admin
     def quiet_period(self):
         return float(self._get("scaling", "quiet_period"))
 
-    def _generate_metrics(self, metrics):
-        metric_fcns = {}
-        for spec in metrics:
-            m = re.match("(.+)([<=>]+)(.+)", spec)
-            if not(m):
-                continue
-            try:
-                key = m.group(1)
-                comp = m.group(2)
-                val = float(m.group(3))
-            except ValueError:
-                continue
-            if comp == "<":
-                metric_fcns[key] = lambda x: -(x < val)
-            elif comp == ">":
-                metric_fcns[key] = lambda x: (x > val)
-            elif comp == "<=":
-                metric_fcns[key] = lambda x: -(x <= val)
-            elif comp == ">=":
-                metric_fcns[key] = lambda x: (x >= val)
-
-        def evaluate_all(invals):
-            total = 0
-            # For each active instance.
-            for inst in invals:
-                # For each metric available.
-                for key in inst:
-                    # If it's defined in our metric spec...
-                    if key in metric_fcns:
-                        val = metric_fcns[key](inst[key])
-                        if val:
-                            logging.debug("metric active: %s@%f -> %d" %
-                                          (key, float(inst[key]), val))
-                        total += val
-            return total
-
-        # Return the generated function.
-        return evaluate_all
-
     def metrics(self):
-        metrics = self._get("scaling", "metrics").split(",")
-        return self._generate_metrics(metrics)
+        return self._get("scaling", "metrics").split(",")
 
     def auth_info(self):
         return (self._get("nova", "authurl"),
