@@ -10,6 +10,7 @@ env : zookeeper-3.4.3
 
 # Install the latest package
 zookeeper-3.4.3 : zookeeper-3.4.3.tar.gz
+	sudo apt-get install -y autoconf libtool libcppunit-1.12-1 libcppunit-dev ant python-dev
 	tar xzf zookeeper-3.4.3.tar.gz
 	cd zookeeper-3.4.3/src/c; autoreconf -if && ./configure && sudo make install
 	cd zookeeper-3.4.3/src/contrib/zkpython; sudo ant install
