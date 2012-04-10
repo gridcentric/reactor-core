@@ -18,6 +18,7 @@ class Service(object):
         self.config = service_config
         self.scale_manager = scale_manager
         self.url = self.config.url()
+        self.deleted_instance_ids = []
 
     def key(self):
         return hashlib.md5(self.url).hexdigest()
@@ -123,6 +124,9 @@ class Service(object):
         Drop the instances from the system. Note: a reason should be given for why
         the instances are being dropped.
         """
+        
+        self._mark_instances_deleted(instances)
+        
         # Update the load balancer before bringing down the instances.
         self._drop_addresses(instances)
         if len(instances) > 0:
@@ -134,6 +138,18 @@ class Service(object):
             logging.info("Shutting down instance %s for server %s (reason: %s)" %
                     (instance['id'], self.name, reason))
             self._delete_instance(instance)
+
+    def _mark_instances_deleted(self, instances):
+        for instance in instances:
+            self.deleted_instance_ids.append(instance['id'])
+    
+    def _unmark_instance_deleted(self, instance):
+        try:
+            self.deleted_instance_ids.remove(instance['id'])
+        except:
+            # It is alright if this throws an exception because in the end
+            # we just want that id to not be in the deleted_instance_ids list.
+            pass
 
     def _drop_addresses(self, instances):
         # Drops all the addresses associated with these instances.
@@ -147,6 +163,7 @@ class Service(object):
         except HTTPException, e:
             traceback.print_exc()
             logging.error("Error deleting instance: %s" % str(e))
+            self._unmark_instance_deleted(instance)
 
     def _launch_instance(self, reason):
         # Launch the instance.
@@ -180,7 +197,17 @@ class Service(object):
         return self.config.static_ips()
 
     def instances(self):
-        return self.novaclient().list_launched_instances(self.config.instance_id())
+        instances = self.novaclient().list_launched_instances(self.config.instance_id())
+        non_deleted_instances = []
+        instance_ids_still_deleting = []
+        for instance in instances:
+            if instance['id'] not in self.deleted_instance_ids:
+                non_deleted_instances.append(instance)
+            else:
+                instance_ids_still_deleting.append(instance['id'])
+        
+        self.deleted_instance_ids = instance_ids_still_deleting
+        return non_deleted_instances 
     
     def addresses(self):
         return self.extract_addresses_from(self.instances())
