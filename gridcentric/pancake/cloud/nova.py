@@ -48,7 +48,7 @@ class NovaConnector(cloud_connection.CloudConnection):
                 instance_ids_still_deleting.append(instance['id'])
         
         self.deleted_instance_ids = instance_ids_still_deleting
-        return non_deleted_instances 
+        return sorted(non_deleted_instances, key=lambda x: x.get('created',"")) 
     
     def start_instance(self, service_identifier, instance_info):
         """

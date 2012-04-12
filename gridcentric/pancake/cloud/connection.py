@@ -22,9 +22,10 @@ class CloudConnection(object):
     def list_instances(self, service_identifier):
         """
         Lists the instances related to a service. The identifier is used to 
-        identify the related instances in the respective clouds.
+        identify the related instances in the respective clouds. Note that
+        this list should be returned in order of oldest instance to youngest.
         """
-        pass
+        return []
     
     def start_instance(self, service_identifier, instance_info):
         """

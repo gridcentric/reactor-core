@@ -32,8 +32,8 @@ class ManagerConfig(Config):
     def __init__(self, config_str):
         super(ManagerConfig, self).__init__(StringIO("""
 [manager]
-health_check=30
-mark_maximum=4
+health_check=5
+mark_maximum=20
 
 [loadbalancer]
 config_path=/etc/nginx/conf.d
