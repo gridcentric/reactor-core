@@ -3,7 +3,7 @@
 VERSION := $(shell date "+%Y%m%d.%H%M%S")
 
 all : clean
-	@python setup.py install --prefix=$$PWD/dist/usr --root=/
+	@VERSION=$(VERSION) python setup.py install --prefix=$$PWD/dist/usr --root=/
 	@cd $$PWD/dist/usr/lib/python* && [ -d site-packages ] && \
 	    mv site-packages dist-packages || true
 	@mkdir -p $$PWD/dist/etc/init
