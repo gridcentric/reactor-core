@@ -51,21 +51,26 @@ class Service(object):
 
         # Evaluate the metrics on these instances.
         ideal_num_instances = metric_calculator.caluculate_ideal_uniform(self.config.metrics(), metrics)
-        logging.debug("Metrics for service %s: ideal_servers=%s (%s)" % (self.name, ideal_num_instances, metrics))
-        
+        logging.debug("Metrics for service %s: ideal_servers=%s (%s)" % \
+                (self.name, ideal_num_instances, metrics))
+
         allowable_num_instances = range(self.config.min_instances(), self.config.max_instances() +1)
         overlap = set(allowable_num_instances) & set(ideal_num_instances)
         if len(overlap) == 0:
             # Basically the ideal number of instances falls completely outside the allowable
-            # range. This can mean 2 different things:
+            # range. This can mean 3 different things:
             ideal_num_instances.sort()
-            if ideal_num_instances[0] > self.config.max_instances():
-                # a. More instances are required than our maximum allowance
+            if len(ideal_num_instances) == 0:
+                # a. No information about ideal instances is available
+                # => We keep the number of instances at it's current level.
+                overlap = set([num_instances])
+            elif ideal_num_instances[0] > self.config.max_instances():
+                # b. More instances are required than our maximum allowance
                 overlap = set([self.config.max_instances()])
             else:
-                # b. Less instances are required than our minimum allowance                
+                # c. Less instances are required than our minimum allowance
                 overlap = set([self.config.min_instances()])
-        
+
         if num_instances in overlap:
             # The number of instances we currently have is within the ideal range.
             target = num_instances
@@ -75,10 +80,10 @@ class Service(object):
             overlap = list(overlap)
             overlap.sort()
             target = overlap[len(overlap)/2]
-        
+
         logging.debug("Target number of instances for service %s determined to be %s (current: %s)" 
                       % (self.name, target, num_instances))
-        
+
         # Launch instances until we reach the min setting value.
         while num_instances < target:
             self._launch_instance("bringing instance total up to target %s" % target)
