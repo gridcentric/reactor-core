@@ -9,7 +9,14 @@ from gridcentric.pancake.manager import ScaleManager
 import gridcentric.pancake.zookeeper.config as config
 
 def list_local_ips():
-    return [ip for ip in socket.gethostbyname_ex(socket.gethostname())[2]]
+    from netifaces import interfaces, ifaddresses, AF_INET
+    ip_list = []
+    for interface in interfaces():
+        addresses = ifaddresses(interface)
+        if AF_INET in addresses:
+            for link in addresses[AF_INET]:
+                ip_list.append(link['addr'])
+    return ip_list
 
 def is_local(host):
     remote = socket.gethostbyname(host)

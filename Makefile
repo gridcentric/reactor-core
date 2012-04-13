@@ -38,6 +38,7 @@ env :
 	sudo apt-get -y install python-mako
 	sudo apt-get -y install python-zookeeper
 	sudo apt-get -y install python-novaclient
+	sudo apt-get -y install python-netifaces
 	sudo apt-get -y install python-pyramid || sudo easy-install pyramid 
 .PHONY : env
 
