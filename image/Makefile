@@ -32,4 +32,5 @@ build-%:
 	    --addpkg=nginx \
 	    --addpkg=python-mako \
 	    --addpkg=python-novaclient \
-	    --addpkg=python-pyramid
+	    --addpkg=python-pyramid \
+	    --addpkg=python-netifaces

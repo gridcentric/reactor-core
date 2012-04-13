@@ -48,6 +48,9 @@ mako (http://www.makotemplates.org/)
 pyramid (http://docs.pylonsproject.org/projects/pyramid/en/1.2-branch/index.html)
     A simple web framework used by the API.
 
+python-netifaces
+    A python module for querying network interfaces.
+
 ==Project Contents==
 
 bin
