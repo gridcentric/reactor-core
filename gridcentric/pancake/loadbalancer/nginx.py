@@ -148,7 +148,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
     def change(self, url, addresses):
         # We use a simple hash of the URL as the file name for the configuration file.
         uniq_id = hashlib.md5(url).hexdigest()
-        conf_filename = "_%s.conf" % uniq_id
+        conf_filename = "%s.conf" % uniq_id
 
         # Parse the url because we need to know the netloc
         (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(url)
