@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-VERSION ?= $(shell date "+%Y%m%d.%H%M%S")
+VERSION := $(shell date "+%Y%m%d.%H%M%S")
 
 all : clean
 	@python setup.py install --prefix=$$PWD/dist/usr --root=/
