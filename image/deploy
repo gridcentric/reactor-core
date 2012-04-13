@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# Save our original spot.
+ORIG_PWD=$PWD
+
+# The chroot is given is $1.
+cd $1
+
+# Run through all contrib and local packages.
+for src in contrib local; do
+    # Install all given packages.
+    if ls $ORIG_PWD/$src/*.deb >/dev/null 2>&1; then
+        for file in $ORIG_PWD/$src/*.deb; do
+            echo "Installing $src package `basename $file` ..."
+            dpkg --root=$1 -i $file
+        done 
+    fi
+
+    # Unroll all given tarballs.
+    if ls $ORIG_PWD/$src/*.tgz >/dev/null 2>&1; then
+        for file in $ORIG_PWD/$src/*.tgz; do
+            echo "Unrolling $src tarball `basename $file` ..."
+            tar zxvf $file
+        done
+    fi
+done
+
+# Run all given scripts.
+if ls $ORIG_PWD/scripts/* >/dev/null 2>&1; then
+    for file in $ORIG_PWD/scripts/*; do
+        echo "Running script `basename $file` ..."
+        $file
+    done
+fi
