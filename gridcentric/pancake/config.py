@@ -32,8 +32,8 @@ class ManagerConfig(Config):
     def __init__(self, config_str):
         super(ManagerConfig, self).__init__(StringIO("""
 [manager]
-health_check=30
-mark_maximum=4
+health_check=5
+mark_maximum=20
 
 [loadbalancer]
 config_path=/etc/nginx/conf.d
@@ -68,6 +68,10 @@ class ServiceConfig(Config):
 [service]
 url=http://example.com
 static_instances=
+auth_hash=
+auth_salt=
+auth_algo=sha1
+
 
 [scaling]
 min_instances=1
@@ -107,6 +111,11 @@ project=admin
 
     def metrics(self):
         return self._get("scaling", "metrics").split(",")
+
+    def get_service_auth(self):
+        return (self._get("service","auth_hash"),
+                self._get("service","auth_salt"),
+                self._get("service","auth_algo"))
 
     def auth_info(self):
         return (self._get("nova", "authurl"),

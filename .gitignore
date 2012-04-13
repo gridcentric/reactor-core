@@ -8,4 +8,3 @@ smoke-tests/*.log
 *.egg-info/
 image/contrib/python-zookeeper-3.4.3.tgz
 contrib/zookeeper-3.4.3
-pancake

@@ -5,8 +5,7 @@ import logging
 import os
 import traceback
 
-from httplib import HTTPException
-from gridcentric.nova.client.client import NovaClient
+import gridcentric.pancake.cloud.connection as cloud_connection
 from gridcentric.pancake.config import ServiceConfig
 
 import gridcentric.pancake.metrics.calculator as metric_calculator
@@ -18,29 +17,17 @@ class Service(object):
         self.config = service_config
         self.scale_manager = scale_manager
         self.url = self.config.url()
-
+        self.cloud_conn = cloud_connection.get_connection('nova')
+        self.cloud_conn.connect(self.config.auth_info()) 
+        
     def key(self):
         return hashlib.md5(self.url).hexdigest()
 
     def manage(self):
         # Load the configuration and configure the service.
         logging.info("Managing service %s" % (self.name))
+        pass
         
-        # We need to ensure that the instance is blessed. This is simply done by
-        # sending the bless command.
-        try:
-            logging.info("Blessing instance id=%s for service %s" %
-                         (self.config.instance_id(), self.name))
-            self.novaclient().bless_instance(self.config.instance_id())
-
-        except Exception, e:
-            # There is a chance that this instance was already blessed. This is not
-            # an issue, so we just need to ignore. There is also a chance that we could
-            # not connected to nova, or there is some error. In any event, we can't do much
-            # so let's log a warning.
-            logging.warn("Failed to bless a service instance (service=%s, instances_id=%s). "
-                         "Error=%s" % (self.name, self.config.instance_id(), e) )
-
     def unmanage(self):
         # Delete all the launched instances, and unbless the instance. Essentially, return it
         # back to the unmanaged.
@@ -48,11 +35,7 @@ class Service(object):
 
         # Delete all the launched instances.
         for instance in self.instances():
-            self.drop_instances(self.instances(), "service is becoming unmanaged")
-
-        logging.info("Unblessing instance id=%s for service %s" %
-                (self.config.instance_id(), self.name))
-        self.novaclient().unbless_instance(self.config.instance_id()) 
+            self.drop_instances(self.instances(), "service is becoming unmanaged") 
 
     def update(self, reconfigure=True, metrics=[]):
         try:
@@ -62,8 +45,6 @@ class Service(object):
             logging.error("Error updating service %s: %s" % (self.name, str(e)))
 
     def _update(self, reconfigure, metrics):
-        if reconfigure:
-            pass
 
         instances = self.instances()
         num_instances = len(instances)
@@ -95,7 +76,7 @@ class Service(object):
             overlap.sort()
             target = overlap[len(overlap)/2]
         
-        logging.debug("Target number of instances for serivce %s determined to be %s (current: %s)" 
+        logging.debug("Target number of instances for service %s determined to be %s (current: %s)" 
                       % (self.name, target, num_instances))
         
         # Launch instances until we reach the min setting value.
@@ -123,6 +104,7 @@ class Service(object):
         Drop the instances from the system. Note: a reason should be given for why
         the instances are being dropped.
         """
+        
         # Update the load balancer before bringing down the instances.
         self._drop_addresses(instances)
         if len(instances) > 0:
@@ -142,36 +124,14 @@ class Service(object):
 
     def _delete_instance(self, instance):
         # Delete the instance from nova            
-        try:
-            self.novaclient().delete_instance(instance['id'])
-        except HTTPException, e:
-            traceback.print_exc()
-            logging.error("Error deleting instance: %s" % str(e))
+        self.cloud_conn.delete_instance(instance['id'])
 
     def _launch_instance(self, reason):
         # Launch the instance.
-        try:
-            logging.info(("Launching new instance for server %s " +
-                         "(reason: %s)") %
-                         (self.name, reason))
-            self.novaclient().launch_instance(self.config.instance_id())
-        except HTTPException, e:
-            traceback.print_exc()
-            logging.error("Error launching instance: %s" % str(e))
-
-    def novaclient(self):
-        try:
-
-            (auth_url, user, apikey, project) = self.config.auth_info()
-            novaclient = NovaClient(auth_url,
-                                         user,
-                                         apikey,
-                                         project,
-                                         'v1.1')
-            return novaclient
-        except Exception, e:
-            traceback.print_exc()
-            logging.error("Error creating nova client: %s" % str(e))
+        logging.info(("Launching new instance for server %s " +
+                     "(reason: %s)") %
+                     (self.name, reason))
+        self.cloud_conn.start_instance(self.name, self.config.instance_id())
 
     def service_url(self):
         return self.url
@@ -180,7 +140,7 @@ class Service(object):
         return self.config.static_ips()
 
     def instances(self):
-        return self.novaclient().list_launched_instances(self.config.instance_id())
+        return self.cloud_conn.list_instances(self.config.instance_id())
     
     def addresses(self):
         return self.extract_addresses_from(self.instances())

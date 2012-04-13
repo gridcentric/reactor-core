@@ -19,10 +19,12 @@ setup(
     packages=["gridcentric",
               "gridcentric.pancake",
               "gridcentric.pancake.loadbalancer",
+              "gridcentric.pancake.zookeeper",
               "gridcentric.pancake.metrics",
-              "gridcentric.pancake.zookeeper"],
+              "gridcentric.pancake.cloud"],
     package_data={'':[
             "gridcentric/pancake/loadbalancer/nginx.template",
-            "gridcentric/pancake/loadbalancer/pancake.conf"]}, include_package_data=True,
+            "gridcentric/pancake/loadbalancer/pancake.conf"]},
+    include_package_data=True,
     scripts=["bin/pancake"]
 )
