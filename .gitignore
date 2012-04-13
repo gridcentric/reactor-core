@@ -1,9 +1,11 @@
 syntax: glob
 *.pyc
 build/
-dist/
-zookeeper-*/
-zookeeper-*tar.gz
+dist
+pancake-*.*.tgz
 testenv/
 smoke-tests/*.log
 *.egg-info/
+image/contrib/python-zookeeper-3.4.3.tgz
+contrib/zookeeper-3.4.3
+pancake

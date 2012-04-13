@@ -8,6 +8,11 @@ clean:
 	@rm -f local/*
 .PHONY: clean
 
+# NOTE: The python zookeeper bindings are installed separately
+# via a generated contrib package. This is due to several problems
+# in the older packaged version, hence we build from source and
+# install the tarball mechanism.
+
 build-%:
 	@mkdir -p dist
 	PATH=$$PWD:$$PATH ubuntu-vm-builder $* oneiric \
@@ -24,7 +29,6 @@ build-%:
 	    --addpkg=ssh \
 	    --addpkg=zookeeper \
 	    --addpkg=zookeeperd \
-	    --addpkg=python-zookeeper \
 	    --addpkg=nginx \
 	    --addpkg=python-mako \
 	    --addpkg=python-novaclient \
