@@ -96,6 +96,7 @@ class ScaleManager(object):
 
     def drop_ip(self, service_name, ip_address):
         self.zk_conn.delete(paths.confirmed_ip(service_name, ip_address))
+        self.zk_conn.delete(paths.ip_address(ip_address))
 
     def register_ip(self, ips):
         def _register_ip(scale_manager, service, ip):
@@ -103,6 +104,7 @@ class ScaleManager(object):
             # We found the service that this IP address belongs. Confirm this IP address
             # and remove it from the new-ip address. Finally update the loadbalancer.
             scale_manager.zk_conn.write(paths.confirmed_ip(service.name, ip), "")
+            scale_manager.zk_conn.write(paths.ip_address(ip), service.name)
             scale_manager.zk_conn.delete(paths.new_ip(ip))
             scale_manager.update_loadbalancer(service)
 
