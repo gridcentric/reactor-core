@@ -8,6 +8,7 @@ import logging
 from pyramid.config import Configurator
 from pyramid.response import Response
 
+from gridcentric.pancake.config import ServiceConfig
 from gridcentric.pancake.client import PancakeClient
 
 class PancakeApiClient(httplib2.Http):
@@ -135,38 +136,90 @@ class PancakeApi:
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
 
+    def authorized_admin_only(request_handler):
+        """
+        A Decorator that does a simple check to ensure that the reqyest
+        is authorized by the admin only before executing the actual handler.
+        """
+        def fn(self, context, request):
+             auth_key = request.headers.get('X-Auth-Key', None)
+             if self._authorize_admin_access(context, request, auth_key):
+                return request_handler(self, context, request)
+             else:
+                 # Return an unauthorized response.
+                return Response(status=401)
+        return fn
+
     def authorized(request_handler):
         """
         A Decorator that does a simple check to see if the request is
         authorized before executing the actual handler. 
         """
         def fn(self, context, request):
-             if self._authorize(context, request):
+             auth_key = request.headers.get('X-Auth-Key', None)
+             if self._authorize_admin_access(context, request, auth_key) or \
+                self._authorize_service_access(context, request, auth_key):
+                 
                  return request_handler(self, context, request)
              else:
                  # Return an unauthorized response.
                 return Response(status=401)
         return fn
 
-    def _authorize(self, context, request):
+    def _authorize_admin_access(self, context, request, auth_key):
         self.ensure_connected()
         auth_hash = self.client.auth_hash()
         if auth_hash != None:
-            auth_key = request.headers.get('X-Auth-Key', None)
             if auth_key != None:
-                auth_token = self._get_auth_token(auth_key)
+                auth_token = self._create_admin_auth_token(auth_key)
                 return auth_hash == auth_token
             else:
                 return False
         else:
-            # If there is not auth hash then authentication has not been turned
+            # If there is no auth hash then authentication has not been turned
             # on so all requests are allowed by default.
             return True
 
-    def _get_auth_token(self, auth_key):
+    def _authorize_service_access(self, context, request, auth_key):
+        self.ensure_connected()
+        service_name = request.matchdict.get('service_name', None)
+        if service_name != None:
+            service_config = ServiceConfig(self.client.get_service_config(service_name))
+            auth_hash, auth_salt, auth_algo = service_config.get_service_auth()
+            
+            if auth_hash != None and auth_hash != "":
+                if auth_key != None:
+                    auth_token = self._create_service_auth_token(auth_key, auth_salt, auth_algo)
+                    return auth_hash == auth_token
+                else:
+                    return False
+            else:
+                # If there is not auth hash then authentication has not been turned
+                # on so all requests are allowed by default.
+                return True
+
+    def _create_admin_auth_token(self, auth_key):
         salt = 'gridcentricpancake'
         return hashlib.sha1("%s%s" %(salt, auth_key)).hexdigest()
+    
+    def _create_service_auth_token(self, auth_key, auth_salt, algo):
+        if auth_salt == None:
+            auth_salt = ""
+        
+        salted = "%s%s" %(auth_salt, auth_key)
+        
+        if algo == "none":
+            return salted
+        else:
+            try:
+                hash = hashlib.new(algo, salted)
+                return hash.hexdigest()
+            except:
+                logging.warn("Failed to authenticate against service %s "
+                             "because algorithm type is not supported.")
+                return ""
 
+        
     @authorized
     def set_auth_key(self, context, request):
         """
@@ -176,7 +229,7 @@ class PancakeApi:
         if request.method == 'POST':
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
-            self.client.set_auth_hash(self._get_auth_token(auth_key))
+            self.client.set_auth_hash(self._create_admin_auth_token(auth_key))
 
         return Response()
 
