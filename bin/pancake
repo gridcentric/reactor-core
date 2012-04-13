@@ -79,6 +79,8 @@ if len(zk_servers) == 0:
     try:
         zk_servers = config.read_config()
     except:
+        pass
+    if len(zk_servers) == 0:
         zk_servers = ["localhost"]
 
 loglevel = logging.INFO
