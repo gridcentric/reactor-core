@@ -26,9 +26,9 @@ fi
 # Construct the API server string.
 for server in $api_servers; do
     if [ "$api_server_spec" == "" ]; then
-        api_server_spec="'$server'"
+        api_server_spec="\"$server\""
     else
-        api_server_spec="$api_server_spec,'$server'"
+        api_server_spec="$api_server_spec,\"$server\""
     fi
 done
 
@@ -36,7 +36,7 @@ done
 for server in $api_servers $scale_servers; do
     echo "Setting up $server..."
     curl -X POST \
-        -d "{ 'api_servers' : [$api_server_spec] }" \
+        -d "{ \"api_servers\" : [$api_server_spec] }" \
         $api_auth_spec \
         http://$server:8080/gridcentric/pancake/api_servers
     sleep 1
