@@ -8,8 +8,8 @@ server {
     access_log /var/log/nginx/access.log pancake;
 
     listen ${port};
-    server_name ${id};
+    server_name ${netloc};
     location ${path} {
-      proxy_pass ${scheme}://${netloc};
+      proxy_pass ${scheme}://${id};
     }
 }

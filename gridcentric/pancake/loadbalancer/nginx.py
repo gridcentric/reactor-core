@@ -164,6 +164,9 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         else:
             port = w_port[1]
 
+        # Ensure that there is a path.
+        path = path or "/"
+
         conf = self.template.render(id=uniq_id,
                                     url=url,
                                     netloc=netloc,
