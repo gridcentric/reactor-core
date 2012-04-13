@@ -14,6 +14,7 @@ from gridcentric.pancake.api import PancakeApiClient
 from gridcentric.pancake import log
 import gridcentric.pancake.zookeeper.config as config
 
+api_server = "localhost"
 zk_servers = []
 password = None
 debug = False
@@ -23,13 +24,15 @@ def usage():
     print "usage: pancake [-h] [--help] [-z |--zookeeper=<zookeeper instance>] command"
     print ""
     print "Optional arguments:"
-    print "   -h,--help              Display this help message"
+    print "   -h, --help             Display this help message"
     print ""
-    print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option multiple"
-    print "                          times to specific multiple instances."
-    print "                          The default (as currently configured) is %s." % str(zk_servers)
+    print "   -a, --api_server=      The API server to connect to (default is localhost)."
     print ""
     print "   -p, --password=        The password used to connect to the API."
+    print ""
+    print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option multiple"
+    print "                          times to specific multiple instances. Only necessary for 'run*'."
+    print "                          The default (as currently configured) is %s." % str(zk_servers)
     print ""
     print "   -d, --debug            Enables debugging log and full stack trace errors."
     print ""
@@ -59,17 +62,19 @@ def usage():
     print "    run                      Runs the API server and scale manager (if needed)."
 
 opts, args = getopt.getopt(sys.argv[1:], 
-                           "hdz:p:l:", 
-                           ["help","zookeeper=","password=","debug","log="])
+                            "ha:p:z:dl:", 
+                           ["help","api_server=","password=","zookeeper=","debug","log="])
 
 for o, a in opts:
     if o in ('-h', '--help'):
         usage()
         sys.exit(0)
-    elif o in ('-z', '--zookeeper'):
-        zk_servers.append(a)
+    elif o in ('-a', '--api_server'):
+        api_server = a
     elif o in ('-p', '--password'):
         password = a
+    elif o in ('-z', '--zookeeper'):
+        zk_servers.append(a)
     elif o in ('-d', '--debug'):
         debug=True
     elif o in ('-l','--log'):
@@ -94,7 +99,7 @@ if len(args) < 1:
 command = args[0]
 
 def get_api_client():
-    return PancakeApiClient('http://localhost:8080', password)
+    return PancakeApiClient('http://%s:8080' % api_server, password)
 
 try:
     if command == "list-services":
