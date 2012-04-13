@@ -19,6 +19,7 @@ setup(
     packages=["gridcentric",
               "gridcentric.pancake",
               "gridcentric.pancake.loadbalancer",
+              "gridcentric.pancake.metrics",
               "gridcentric.pancake.zookeeper"],
     package_data={'':[
             "gridcentric/pancake/loadbalancer/nginx.template",
