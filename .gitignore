@@ -9,4 +9,3 @@ smoke-tests/*.log
 image/contrib/python-zookeeper-3.4.3.tgz
 image/dist-*
 contrib/zookeeper-3.4.3
-pancake

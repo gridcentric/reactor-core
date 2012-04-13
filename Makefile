@@ -26,9 +26,9 @@ image/contrib/python-zookeeper-3.4.3.tgz : contrib/zookeeper-3.4.3
 	@mkdir -p dist-zookeeper
 	@cd contrib/zookeeper-3.4.3/src/c; make install DESTDIR=$$PWD/../../../../dist-zookeeper/
 	@cd contrib/zookeeper-3.4.3/src/contrib/zkpython; ant tar-bin
-	@cd dist-zookeeper; tar zxvf ../contrib/zookeeper-3.4.3/build/contrib/zkpython/dist/*.tar.gz
+	@cd dist-zookeeper; tar zxf ../contrib/zookeeper-3.4.3/build/contrib/zkpython/dist/*.tar.gz
 	@cd dist-zookeeper; mv usr/local/* usr; rm -rf usr/local
-	@cd dist-zookeeper; tar zcvf ../$@ .
+	@cd dist-zookeeper; fakeroot tar zcvf ../$@ .
 	@rm -rf dist-zookeeper
  
 # Build the development environment by installing all of the dependent packages.
@@ -44,4 +44,4 @@ env :
 # Build a virtual machine image for the given hypervisor.
 image-% : all image/contrib/python-zookeeper-3.4.3.tgz
 	@cp pancake-$(VERSION).tgz image/local
-	@sudo make -C image build-$*
+	@sudo make -C image build-$* TMPDIR=$(TMPDIR)
