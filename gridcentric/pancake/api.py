@@ -103,7 +103,8 @@ class PancakeApiClient(httplib2.Http):
 class PancakeApi:
 
     def __init__(self, zk_servers):
-        self.reconnect(zk_servers)
+        self.zk_servers = zk_servers
+        self.client = None
         self.config = Configurator()
 
         self.config.add_route('auth-key', '/gridcentric/pancake/auth_key')
@@ -127,6 +128,10 @@ class PancakeApi:
     def reconnect(self, zk_servers):
         self.client = PancakeClient(zk_servers)
 
+    def ensure_connected(self):
+        if not(self.client):
+            self.reconnect(self.zk_servers)
+
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
 
@@ -144,6 +149,7 @@ class PancakeApi:
         return fn
 
     def _authorize(self, context, request):
+        self.ensure_connected()
         auth_hash = self.client.auth_hash()
         if auth_hash != None:
             auth_key = request.headers.get('X-Auth-Key', None)
@@ -166,6 +172,7 @@ class PancakeApi:
         """
         Updates the auth key in the system.
         """
+        self.ensure_connected()
         if request.method == 'POST':
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
@@ -193,6 +200,7 @@ class PancakeApi:
         POST - Either manages or updates the service with a new config in the request body
         DELETE - Unmanages the service.
         """
+        self.ensure_connected()
         service_name = request.matchdict['service_name']
         response = Response()
         if request.method == "GET":
@@ -210,6 +218,7 @@ class PancakeApi:
 
     @authorized
     def list_service_ips(self, context, request):
+        self.ensure_connected()
         service_name = request.matchdict['service_name']
         if request.method == 'GET':
             return Response(body=json.dumps(
@@ -221,10 +230,12 @@ class PancakeApi:
         """
         Returns a list of services currently being managed.
         """
+        self.ensure_connected()
         services = self.client.list_managed_services()
         return Response(body=json.dumps({'services':services}))
 
     def new_ip_address(self, context, request):
+        self.ensure_connected()
         ip_address = request.matchdict['ipaddress']
         logging.info("New IP address %s has been recieved." % (ip_address))
         self.client.record_new_ipaddress(ip_address)
