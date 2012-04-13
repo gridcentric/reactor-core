@@ -39,21 +39,22 @@ nginx
     The default load balancer used by pancake.
 
 zookeeper (3.4.x) (http://zookeeper.apache.org/)
-    This the main datastore / control mechanism
-
-python-zookeeper
-    Python bindings for Zookeeper.
+    This the main datastore / control mechanism.
+    You must also install the python bindings. 
 
 mako (http://www.makotemplates.org/)
-    A simple python templating engine used to update load balancer configurations
+    A simple python templating engine used to update load balancer configurations.
 
 pyramid (http://docs.pylonsproject.org/projects/pyramid/en/1.2-branch/index.html)
-    A simple web framework used by the API
+    A simple web framework used by the API.
 
 ==Project Contents==
 
 bin
-    Contains scripts that are used to start and configure the pancake service / API.
+    Contains scripts that are used to start and configure the Pancake service / API.
+
+client
+    Contains some independent scripts that clients may use to access Pancake.
 
 gridcentric
     The top-level python package.
