@@ -14,7 +14,7 @@ clean:
 # install the tarball mechanism.
 
 build-%:
-	@mkdir -p dist
+	@rm -rf dist-$*
 	PATH=$$PWD:$$PATH ubuntu-vm-builder $* oneiric \
 	    --tmpfs=- \
 	    --destdir=$$PWD/dist \
