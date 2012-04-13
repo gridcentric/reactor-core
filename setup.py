@@ -20,9 +20,8 @@ setup(
               "gridcentric.pancake",
               "gridcentric.pancake.loadbalancer",
               "gridcentric.pancake.zookeeper"],
-    data_files=[
-        ("gridcentric/pancake/loadbalancer",
-            ["gridcentric/pancake/loadbalancer/nginx.template",
-             "gridcentric/pancake/loadbalancer/pancake.conf"])],
+    package_data={'':[
+            "gridcentric/pancake/loadbalancer/nginx.template",
+            "gridcentric/pancake/loadbalancer/pancake.conf"]}, include_package_data=True,
     scripts=["bin/pancake"]
 )

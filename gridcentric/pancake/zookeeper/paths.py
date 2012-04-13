@@ -51,11 +51,11 @@ def marked_instances(name):
 def marked_instance(name, instance_id):
     return "%s/%s" %(marked_instances(name), instance_id)
 
-# New IPs currently not associated with any service are logged here
+# New IPs currently not associated with any service are logged here.
 NEW_IPS = "%s/new-ips" % (ROOT)
 def new_ips():
     return NEW_IPS
 
-# A particular new ip
+# A particular new ip.
 def new_ip(ip_address):
     return "%s/%s" %(NEW_IPS, ip_address)

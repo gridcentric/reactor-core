@@ -38,13 +38,13 @@ class PancakeApiClient(httplib2.Http):
         self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 
                                     'POST',
                                     body={'config':config})
-    
+
     def unmanage_service(self, service_name):
         """
         Unmanage the service.
         """
         self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 'DELETE')
-        
+
     def update_service(self, service_name, config):
         """
         Update the managed service with given configuration values. Note that the config
@@ -101,25 +101,31 @@ class PancakeApiClient(httplib2.Http):
         return resp, body
 
 class PancakeApi:
-    
+
     def __init__(self, zk_servers):
-        self.client = PancakeClient(zk_servers)
+        self.reconnect(zk_servers)
         self.config = Configurator()
-        
+
         self.config.add_route('auth-key', '/gridcentric/pancake/auth_key')
         self.config.add_view(self.set_auth_key, route_name='auth-key')
-        
+
+        self.config.add_route('api-servers', '/gridcentric/pancake/api_servers')
+        self.config.add_view(self.set_api_servers, route_name='api-servers')
+
         self.config.add_route('new-ip', '/gridcentric/pancake/new-ip/{ipaddress}')
         self.config.add_view(self.new_ip_address, route_name='new-ip')
 
         self.config.add_route('service-action', '/gridcentric/pancake/services/{service_name}')
         self.config.add_view(self.handle_service_action, route_name='service-action')
-        
+
         self.config.add_route('service-list', '/gridcentric/pancake/services')
         self.config.add_view(self.list_services, route_name='service-list')
 
         self.config.add_route('service-ip-list', '/gridcentric/pancake/service/{service_name}/ips')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list')
+
+    def reconnect(self, zk_servers):
+        self.client = PancakeClient(zk_servers)
 
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
@@ -136,7 +142,7 @@ class PancakeApi:
                  # Return an unauthorized response.
                 return Response(status=401)
         return fn
-    
+
     def _authorize(self, context, request):
         auth_hash = self.client.auth_hash()
         if auth_hash != None:
@@ -154,7 +160,7 @@ class PancakeApi:
     def _get_auth_token(self, auth_key):
         salt = 'gridcentricpancake'
         return hashlib.sha1("%s%s" %(salt, auth_key)).hexdigest()
-        
+
     @authorized
     def set_auth_key(self, context, request):
         """
@@ -164,9 +170,21 @@ class PancakeApi:
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
             self.client.set_auth_hash(self._get_auth_token(auth_key))
-            
+
         return Response()
-    
+
+    @authorized
+    def set_api_servers(self, context, request):
+        """
+        Updates the list of API servers in the system.
+        """
+        if request.method == 'POST':
+            api_servers = json.loads(request.body)['api_servers']
+            logging.info("Updating API Servers.")
+            self.reconnect(api_servers)
+
+        return Response()
+
     @authorized
     def handle_service_action(self, context, request):
         """
