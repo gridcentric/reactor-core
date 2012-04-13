@@ -17,7 +17,7 @@ build-%:
 	@rm -rf dist-$*
 	PATH=$$PWD:$$PATH ubuntu-vm-builder $* oneiric \
 	    --tmpfs=- \
-	    --destdir=$$PWD/dist \
+	    --destdir=$$PWD/dist-$* \
 	    --rootsize=4096 \
 	    --swapsize=1024 \
 	    --hostname=pancake \
