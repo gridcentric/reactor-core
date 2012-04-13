@@ -1,5 +1,7 @@
 #!/usr/bin/make -f
 
+TMPDIR ?= /tmp
+
 default:
 	@echo "Use the target build-X for some hypervisor X (e.g. xen, kvm)."
 .PHONY: default
@@ -17,6 +19,7 @@ build-%:
 	@rm -rf dist-$*
 	PATH=$$PWD:$$PATH ubuntu-vm-builder $* oneiric \
 	    --tmpfs=- \
+	    --tmp=$(TMPDIR) \
 	    --destdir=$$PWD/dist-$* \
 	    --rootsize=4096 \
 	    --swapsize=1024 \
