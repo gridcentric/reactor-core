@@ -82,6 +82,8 @@ class PancakeApiClient(httplib2.Http):
         if self.api_key != None:
             kwargs.setdefault('headers', {})['X-Auth-Key'] = self.api_key
         resp, body = self.request(self.api_url + url, method, **kwargs)
+        if resp.status != 200:
+            raise Exception(body)
         return resp, body
 
     def request(self, *args, **kwargs):
