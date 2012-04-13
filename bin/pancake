@@ -85,7 +85,7 @@ if len(args) < 1:
     sys.exit(1)
 
 command = args[0]
-api_client = PancakeApiClient('http://localhost:8080', password)
+api_client = PancakeApiClient(api_server, password)
 try:
     if command == "list-services":
         services = api_client.list_managed_services()
