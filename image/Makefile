@@ -1,5 +1,31 @@
 #!/usr/bin/make -f
 
+FLAVOR     := oneiric
+ROOTSIZE   := 4096
+SWAPSIZE   := 1024
+HOSTNAME   := pancake
+DOMAINNAME := gridcentric.com
+USERNAME   := pancake
+PASSWORD   := p4nc4k3gr1d
+
+# NOTE: The python zookeeper bindings are installed separately
+# via a generated contrib package. This is due to several problems
+# in the older packaged version, hence we build from source and
+# install the tarball mechanism. See the root Makefile for where
+# this is done.
+
+PACKAGES :=
+PACKAGES += ssh
+PACKAGES += zookeeper
+PACKAGES += zookeeperd
+PACKAGES += nginx
+PACKAGES += python-mako
+PACKAGES += python-novaclient
+PACKAGES += python-pyramid
+PACKAGES += python-netifaces
+
+PACKAGE_CMDLINE := $(PACKAGES:%=--addpkg=%)
+
 default:
 	@echo "Use the target build-X for some hypervisor X (e.g. xen, kvm)."
 .PHONY: default
@@ -8,29 +34,24 @@ clean:
 	@rm -f local/*
 .PHONY: clean
 
-# NOTE: The python zookeeper bindings are installed separately
-# via a generated contrib package. This is due to several problems
-# in the older packaged version, hence we build from source and
-# install the tarball mechanism.
-
-build-%:
-	@rm -rf dist-$*
-	PATH=$$PWD:$$PATH ubuntu-vm-builder $* oneiric \
-	    --tmpfs=- \
+chroot-%:
+	@# NOTE: The hypervisor doesn't matter here. 
+	PATH=$$PWD:$$PATH ubuntu-vm-builder kvm $* \
 	    --destdir=$$PWD/dist-$* \
-	    --rootsize=4096 \
-	    --swapsize=1024 \
-	    --hostname=pancake \
+	    --only-chroot \
+	    --chroot-dir=$@
+
+build-%: chroot-$(FLAVOR)
+	@rm -rf dist-$*
+	PATH=$$PWD:$$PATH ubuntu-vm-builder $* $(FLAVOR) \
+	    --destdir=$$PWD/dist-$* \
+	    --existing-chroot=chroot-$(FLAVOR) \
+	    --rootsize=$(ROOTSIZE) \
+	    --swapsize=$(SWAPSIZE) \
+	    --hostname=$(HOSTNAME) \
 	    --execscript=deploy \
-	    --domain=gridcentric.com \
-	    --user=pancake \
-	    --name=Pancake \
-	    --pass=p4nc4k3gr1d \
-	    --addpkg=ssh \
-	    --addpkg=zookeeper \
-	    --addpkg=zookeeperd \
-	    --addpkg=nginx \
-	    --addpkg=python-mako \
-	    --addpkg=python-novaclient \
-	    --addpkg=python-pyramid \
-	    --addpkg=python-netifaces
+	    --domain=$(DOMAINNAME) \
+	    --user=$(USERNAME) \
+	    --name=$(USERNAME) \
+	    --pass=$(PASSWORD) \
+	    $(PACKAGE_CMDLINE)
