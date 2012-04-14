@@ -18,7 +18,10 @@ def usage():
     print "   -h,--help              Display this help message"
     print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option multiple"
     print "                          times to specific a pool of zookeeper instances. Default to"
-    print "                          localhost:2181" 
+    print "                          localhost:2181"
+    print ""
+    print "   -a, --api=             The url of the API server. Defaults to http://localhost:8080"
+    print ""
     print "   -p, --password=        The password used to connect to the API."
     print ""
     print "   -d, --debug            Enables debugging log and full stack trace errors."
@@ -54,6 +57,7 @@ zk_servers = ""
 password = None
 debug = False
 logfile = None
+api_server = "http://localhost:8080"
 for o, a in opts:
     if o in ('-h', '--help'):
         usage()
@@ -66,6 +70,8 @@ for o, a in opts:
         debug=True
     elif o in ('-l','--log'):
         logfile = a
+    elif o in ('-a', '--api'):
+        api_server = a
         
 if zk_servers == "":
     zk_servers = ",localhost:2181"
@@ -79,7 +85,7 @@ if len(args) < 1:
     sys.exit(1)
 
 command = args[0]
-api_client = PancakeApiClient('http://localhost:8080', password)
+api_client = PancakeApiClient(api_server, password)
 try:
     if command == "list-services":
         services = api_client.list_managed_services()
