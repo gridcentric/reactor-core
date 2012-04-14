@@ -59,3 +59,10 @@ def new_ips():
 # A particular new ip.
 def new_ip(ip_address):
     return "%s/%s" %(NEW_IPS, ip_address)
+
+IP_ADDRESSES="%s/ip_addreses" % (ROOT)
+def ip_addresses():
+    return IP_ADDRESSES
+
+def ip_address(ip):
+    return "%s/%s" % (ip_addresses(), ip)

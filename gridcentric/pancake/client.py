@@ -43,6 +43,12 @@ class PancakeClient(object):
     def record_new_ipaddress(self, ip_address):
         self.zk_conn.write(paths.new_ip(ip_address), "")
     
+    def get_ip_address_service(self, ip_address):
+        """
+        Returns the service name associated with this ip address.
+        """
+        return self.zk_conn.read(paths.ip_address(ip_address))
+    
     def auth_hash(self):
         return self.zk_conn.read(paths.auth_hash())
     

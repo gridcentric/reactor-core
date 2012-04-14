@@ -14,7 +14,7 @@ from gridcentric.pancake.api import PancakeApiClient
 from gridcentric.pancake import log
 import gridcentric.pancake.zookeeper.config as config
 
-api_server = "localhost"
+api_server = "http://localhost:8080"
 zk_servers = []
 password = None
 debug = False
@@ -26,7 +26,7 @@ def usage():
     print "Optional arguments:"
     print "   -h, --help             Display this help message"
     print ""
-    print "   -a, --api_server=      The API server to connect to (default is localhost)."
+    print "   -a, --api=            The API url to connect to (default is http://localhost:8080)."
     print ""
     print "   -p, --password=        The password used to connect to the API."
     print ""
@@ -69,7 +69,7 @@ for o, a in opts:
     if o in ('-h', '--help'):
         usage()
         sys.exit(0)
-    elif o in ('-a', '--api_server'):
+    elif o in ('-a', '--api'):
         api_server = a
     elif o in ('-p', '--password'):
         password = a
@@ -99,7 +99,7 @@ if len(args) < 1:
 command = args[0]
 
 def get_api_client():
-    return PancakeApiClient('http://%s:8080' % api_server, password)
+    return PancakeApiClient(api_server, password)
 
 try:
     if command == "list-services":

@@ -126,7 +126,9 @@ class PancakeApi:
         self.config.add_view(self.list_services, route_name='service-list')
 
         self.config.add_route('service-ip-list', '/gridcentric/pancake/service/{service_name}/ips')
+        self.config.add_route('service-ip-list-implicit', '/gridcentric/pancake/service/ips')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list')
+        self.config.add_view(self.list_service_ips, route_name='service-ip-list-implicit')
 
     def reconnect(self, zk_servers):
         self.client = PancakeClient(zk_servers)
@@ -144,6 +146,7 @@ class PancakeApi:
         is authorized by the admin only before executing the actual handler.
         """
         def fn(self, context, request):
+             
              auth_key = request.headers.get('X-Auth-Key', None)
              if self._authorize_admin_access(context, request, auth_key):
                 return request_handler(self, context, request)
@@ -160,7 +163,8 @@ class PancakeApi:
         def fn(self, context, request):
              auth_key = request.headers.get('X-Auth-Key', None)
              if self._authorize_admin_access(context, request, auth_key) or \
-                self._authorize_service_access(context, request, auth_key):
+                self._authorize_service_access(context, request, auth_key) or \
+                self._authorize_ip_access(context, request):
                  
                  return request_handler(self, context, request)
              else:
@@ -199,6 +203,26 @@ class PancakeApi:
                 # If there is not auth hash then authentication has not been turned
                 # on so all requests are allowed by default.
                 return True
+
+    def _authorize_ip_access(self, context, request):
+        # TODO(dscannell): The remote ip address is taken from the request.environ['REMOTE_ADDR']. 
+        # This value may need to be added by some WSGI middleware depending on what webserver
+        # is fronting this app.
+        
+        matched_route = request.matched_route
+        if matched_route != None:
+            if matched_route.name.endswith("-implicit"):
+                # We can only do ip authorizing on implicit routes. Essentially
+                # we will update the request to confine it to the service with
+                # this address.
+                request_ip = request.environ.get('REMOTE_ADDR', "")
+                service_name = self.client.get_ip_address_service(request_ip)
+                if service_name != None:
+                    # Authorize this request and set the service_name
+                    request.matchdict['service_name'] = service_name
+                    return True
+        return False
+
 
     def _create_admin_auth_token(self, auth_key):
         salt = 'gridcentricpancake'
