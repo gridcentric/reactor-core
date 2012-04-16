@@ -11,15 +11,15 @@ from gridcentric.pancake.config import ServiceConfig
 import gridcentric.pancake.metrics.calculator as metric_calculator
 
 class Service(object):
-    
+
     def __init__(self, name, service_config, scale_manager):
         self.name = name
         self.config = service_config
         self.scale_manager = scale_manager
         self.url = self.config.url()
         self.cloud_conn = cloud_connection.get_connection('nova')
-        self.cloud_conn.connect(self.config.auth_info()) 
-        
+        self.cloud_conn.connect(self.config.auth_info())
+
     def key(self):
         return hashlib.md5(self.url).hexdigest()
 
@@ -27,7 +27,7 @@ class Service(object):
         # Load the configuration and configure the service.
         logging.info("Managing service %s" % (self.name))
         pass
-        
+
     def unmanage(self):
         # Delete all the launched instances, and unbless the instance. Essentially, return it
         # back to the unmanaged.
@@ -35,9 +35,9 @@ class Service(object):
 
         # Delete all the launched instances.
         for instance in self.instances():
-            self.drop_instances(self.instances(), "service is becoming unmanaged") 
+            self.drop_instances(self.instances(), "service is becoming unmanaged")
 
-    def update(self, reconfigure=True, metrics=[]):
+    def update(self, reconfigure = True, metrics = []):
         try:
             self._update(reconfigure, metrics)
         except Exception, e:
@@ -49,30 +49,31 @@ class Service(object):
         Determine the range of instances that we need to scale to. A tuple of the
         form (min_instances, max_instances) is returned.
         """
-        
+
         # Evaluate the metrics on these instances and get the ideal bounds on the number
         # of servers that should exist.
         ideal_min, ideal_max = metric_calculator.caluculate_ideal_uniform(self.config.metrics(), metrics)
         logging.debug("Metrics for service %s: ideal_servers=%s (%s)" % (self.name, (ideal_min, ideal_max), metrics))
-        
+
         if ideal_max < ideal_min:
             # Either the metrics are undefined or have conflicting answers. We simply
             # return this conflicting result.
-            if metrics != {}:
+            if metrics != []:
                 # Only log the warning if there were values for the metrics provided. In other words
                 # only if the metrics could have made a difference.
-                logging.warn("Either no metrics have been defined for service %s or they have resulted"
-                             " in a conflicting result. (service metrics: %s)" %(self.config.metrics()))
-            return (ideal_min, ideal_max) 
-        
+                logging.warn("Either no metrics have been defined for service %s or they have "
+                             "resulted in a conflicting result. (service metrics: %s)"
+                             % (self.name, self.config.metrics()))
+            return (ideal_min, ideal_max)
+
         # Grab the allowable bounds of the number of servers that should exist.
         config_min = self.config.min_instances()
-        config_max =self.config.max_instances()
-        
+        config_max = self.config.max_instances()
+
         # Determine the intersecting bounds between the ideal and the configured.
         target_min = max(ideal_min, config_min)
         target_max = min(ideal_max, config_max)
-        
+
         if target_max < target_min:
             # The ideal number of instances falls completely outside the allowable
             # range. This can mean 2 different things:
@@ -84,7 +85,7 @@ class Service(object):
                 # b. Less instances are required than our minimum allowance                
                 target_min = config_min
                 target_max = config_min
-                
+
         return (target_min, target_max)
 
     def _update(self, reconfigure, metrics):
@@ -93,7 +94,7 @@ class Service(object):
         num_instances = len(instances)
 
         (target_min, target_max) = self._determine_target_instances_range(metrics)
-        
+
         if (num_instances >= target_min and num_instances <= target_max) \
             or (target_min > target_max):
             # Either the number of instances we currently have is within the ideal range
@@ -104,10 +105,10 @@ class Service(object):
             # we need to either scale up or scale down. Our target will be the midpoint in the
             # target range.
             target = target_min + target_max / 2
-        
-        logging.debug("Target number of instances for service %s determined to be %s (current: %s)" 
+
+        logging.debug("Target number of instances for service %s determined to be %s (current: %s)"
                       % (self.name, target, num_instances))
-        
+
         # Launch instances until we reach the min setting value.
         while num_instances < target:
             self._launch_instance("bringing instance total up to target %s" % target)
@@ -119,7 +120,7 @@ class Service(object):
 
         self.drop_instances(instances_to_delete,
             "bringing instance total down to target %s" % target)
-        
+
     def update_config(self, config_str):
         old_url = self.config.url()
         self.config.reload(config_str)
@@ -133,7 +134,7 @@ class Service(object):
         Drop the instances from the system. Note: a reason should be given for why
         the instances are being dropped.
         """
-        
+
         # Update the load balancer before bringing down the instances.
         self._drop_addresses(instances)
         if len(instances) > 0:
@@ -170,7 +171,7 @@ class Service(object):
 
     def instances(self):
         return self.cloud_conn.list_instances(self.config.instance_id())
-    
+
     def addresses(self):
         return self.extract_addresses_from(self.instances())
 
@@ -181,7 +182,7 @@ class Service(object):
                for network_addrs in network_addresses:
                    addresses.append(network_addrs['addr'])
        return addresses
-   
+
     def _update_loadbalancer(self, addresses = None):
         self.scale_manager.update_loadbalancer(self, addresses)
 
@@ -198,7 +199,7 @@ class Service(object):
             # This instance has not checked in. We need to mark it, and it if has enough marks
             # it will be destroyed.
             logging.info("expected ips=%s, confirmed ips=%s" % (expected_ips, confirmed_ips))
-            if len( set(expected_ips) & set(confirmed_ips) ) == 0:
+            if len(set(expected_ips) & set(confirmed_ips)) == 0:
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
                 if self.scale_manager.mark_instance(self.name, instance['id']):
