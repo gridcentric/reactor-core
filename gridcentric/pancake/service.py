@@ -44,37 +44,66 @@ class Service(object):
             traceback.print_exc()
             logging.error("Error updating service %s: %s" % (self.name, str(e)))
 
+    def _determine_target_instances_range(self, metrics):
+        """
+        Determine the range of instances that we need to scale to. A tuple of the
+        form (min_instances, max_instances) is returned.
+        """
+        
+        # Evaluate the metrics on these instances and get the ideal bounds on the number
+        # of servers that should exist.
+        ideal_min, ideal_max = metric_calculator.caluculate_ideal_uniform(self.config.metrics(), metrics)
+        logging.debug("Metrics for service %s: ideal_servers=%s (%s)" % (self.name, (ideal_min, ideal_max), metrics))
+        
+        if ideal_max < ideal_min:
+            # Either the metrics are undefined or have conflicting answers. We simply
+            # return this conflicting result.
+            if metrics != {}:
+                # Only log the warning if there were values for the metrics provided. In other words
+                # only if the metrics could have made a difference.
+                logging.warn("Either no metrics have been defined for service %s or they have resulted"
+                             " in a conflicting result. (service metrics: %s)" %(self.config.metrics()))
+            return (ideal_min, ideal_max) 
+        
+        # Grab the allowable bounds of the number of servers that should exist.
+        config_min = self.config.min_instances()
+        config_max =self.config.max_instances()
+        
+        # Determine the intersecting bounds between the ideal and the configured.
+        target_min = max(ideal_min, config_min)
+        target_max = min(ideal_max, config_max)
+        
+        if target_max < target_min:
+            # The ideal number of instances falls completely outside the allowable
+            # range. This can mean 2 different things:
+            if ideal_min > config_max:
+                # a. More instances are required than our maximum allowance
+                target_min = config_max
+                target_max = config_max
+            else:
+                # b. Less instances are required than our minimum allowance                
+                target_min = config_min
+                target_max = config_min
+                
+        return (target_min, target_max)
+
     def _update(self, reconfigure, metrics):
 
         instances = self.instances()
         num_instances = len(instances)
 
-        # Evaluate the metrics on these instances.
-        ideal_num_instances = metric_calculator.caluculate_ideal_uniform(self.config.metrics(), metrics)
-        logging.debug("Metrics for service %s: ideal_servers=%s (%s)" % (self.name, ideal_num_instances, metrics))
+        (target_min, target_max) = self._determine_target_instances_range(metrics)
         
-        allowable_num_instances = range(self.config.min_instances(), self.config.max_instances() +1)
-        overlap = set(allowable_num_instances) & set(ideal_num_instances)
-        if len(overlap) == 0:
-            # Basically the ideal number of instances falls completely outside the allowable
-            # range. This can mean 2 different things:
-            ideal_num_instances.sort()
-            if ideal_num_instances[0] > self.config.max_instances():
-                # a. More instances are required than our maximum allowance
-                overlap = set([self.config.max_instances()])
-            else:
-                # b. Less instances are required than our minimum allowance                
-                overlap = set([self.config.min_instances()])
-        
-        if num_instances in overlap:
-            # The number of instances we currently have is within the ideal range.
+        if (num_instances >= target_min and num_instances <= target_max) \
+            or (target_min > target_max):
+            # Either the number of instances we currently have is within the ideal range
+            # or we have no information to base changing the number of instances. In either
+            # case we just keep the instances the same.
             target = num_instances
         else:
-            # we need to either scale up or scale down. Our target will be the smallest
-            # value in the ideal range.
-            overlap = list(overlap)
-            overlap.sort()
-            target = overlap[len(overlap)/2]
+            # we need to either scale up or scale down. Our target will be the midpoint in the
+            # target range.
+            target = target_min + target_max / 2
         
         logging.debug("Target number of instances for service %s determined to be %s (current: %s)" 
                       % (self.name, target, num_instances))
