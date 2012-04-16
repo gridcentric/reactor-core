@@ -11,9 +11,14 @@ def calculate_totals(metrics):
     Calculates the totals for each metric across all the individual instances.
     """
     totals = {}
+    total_weights = {}
     for metric in metrics:
-        for key, value in metric.iteritems():
-            totals[key] = totals.get(key, 0) + value
+        for key, info in metric.iteritems():
+            (weight, value) = info
+            totals[key] = totals.get(key, 0) + weight * value
+            total_weights[key] = total_weights.get(key, 0) + weight
+    for key in totals:
+        totals[key] = (float(totals[key]) / total_weights[key])
     return totals
 
 def calculate_num_servers_uniform(total, bound):
@@ -40,21 +45,22 @@ def calculate_server_range(total, lower, upper):
 def caluculate_ideal_uniform(service_spec, metrics):
     """
     Returns the ideal number of instances these service spec should have.
-    
+
     service_spec: A list of criteria that define that define the ideal range for a metric.
                 e.g. ['20<=rate<=50','100<=response<800']
                 (The hits per second should be between 20 - 50 for each instance
                  and the response rate should be between 100ms - 800ms.)
-    
+
     metrics: A list of gather metrics that will be evaluated against the service_spec
     """
-    
+
     metric_totals = calculate_totals(metrics)
     logging.debug("Metric totals: %s" %(metric_totals))
     ideal_instances = None
     for criteria in service_spec:
         c = ServiceCriteria(criteria)
-        logging.debug("Service criteria found: (%s, %s, %s)" % (c.metric_key(), c.lower_bound(), c.upper_bound()))
+        logging.debug("Service criteria found: (%s, %s, %s)" % \
+            (c.metric_key(), c.lower_bound(), c.upper_bound()))
         total = metric_totals.get(c.metric_key(), 0)
         metric_ideal = calculate_server_range(total, c.lower_bound(), c.upper_bound())
         logging.debug("Ideal instances for metric %s: %s" %(c.metric_key(), metric_ideal))
@@ -66,9 +72,9 @@ def caluculate_ideal_uniform(service_spec, metrics):
             # and this one.
             ideal_instances = ideal_instances & set(metric_ideal)
         logging.debug("Running ideal instances %s" %(ideal_instances))
-    
+
     return list(ideal_instances)
-    
+
     
 class ServiceCriteria(object):
     

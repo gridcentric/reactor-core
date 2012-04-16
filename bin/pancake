@@ -5,28 +5,38 @@ import logging
 import signal
 import sys
 import traceback
+import threading
+
 from StringIO import StringIO
 from ConfigParser import SafeConfigParser
 
 from gridcentric.pancake.api import PancakeApiClient
 from gridcentric.pancake import log
+import gridcentric.pancake.zookeeper.config as config
+
+api_server = "http://localhost:8080"
+zk_servers = []
+password = None
+debug = False
+logfile = None
 
 def usage():
     print "usage: pancake [-h] [--help] [-z |--zookeeper=<zookeeper instance>] command"
     print ""
     print "Optional arguments:"
-    print "   -h,--help              Display this help message"
-    print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option multiple"
-    print "                          times to specific a pool of zookeeper instances. Default to"
-    print "                          localhost:2181"
+    print "   -h, --help             Display this help message"
     print ""
-    print "   -a, --api=             The url of the API server. Defaults to http://localhost:8080"
+    print "   -a, --api=            The API url to connect to (default is http://localhost:8080)."
     print ""
     print "   -p, --password=        The password used to connect to the API."
     print ""
+    print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option multiple"
+    print "                          times to specific multiple instances. Only necessary for 'run*'."
+    print "                          The default is the last configuration, or localhost."
+    print ""
     print "   -d, --debug            Enables debugging log and full stack trace errors."
     print ""
-    print "   -l, --log=            Log to a file instead of stdout."
+    print "   -l, --log=             Log to a file instead of stdout."
     print ""
     print "Commands:"
     print "    list-services            List all the services currently being managed."
@@ -48,33 +58,36 @@ def usage():
     print "    runserver                Run the scale manager server."
     print ""
     print "    runapi                   Runs the API server."
-    
-opts, args = getopt.getopt(sys.argv[1:], 
-                           "hdz:p:l:", 
-                           ["help","zookeeper=","password=","debug","log="])
+    print ""
+    print "    run                      Runs the API server, and either Zookeeper or the scale"
+    print "                             manager, depending on configured Zookeeper servers."
 
-zk_servers = ""
-password = None
-debug = False
-logfile = None
-api_server = "http://localhost:8080"
+opts, args = getopt.getopt(sys.argv[1:], 
+                            "ha:p:z:dl:", 
+                           ["help","api_server=","password=","zookeeper=","debug","log="])
+
 for o, a in opts:
     if o in ('-h', '--help'):
         usage()
         sys.exit(0)
-    elif o in ('-z', '--zookeeper'):
-        zk_servers += "," + a
+    elif o in ('-a', '--api'):
+        api_server = a
     elif o in ('-p', '--password'):
         password = a
+    elif o in ('-z', '--zookeeper'):
+        zk_servers.append(a)
     elif o in ('-d', '--debug'):
         debug=True
     elif o in ('-l','--log'):
         logfile = a
-    elif o in ('-a', '--api'):
-        api_server = a
-        
-if zk_servers == "":
-    zk_servers = ",localhost:2181"
+
+if len(zk_servers) == 0:
+    try:
+        zk_servers = config.read_config()
+    except:
+        pass
+    if len(zk_servers) == 0:
+        zk_servers = ["localhost"]
 
 loglevel = logging.INFO
 if debug:
@@ -85,9 +98,13 @@ if len(args) < 1:
     sys.exit(1)
 
 command = args[0]
-api_client = PancakeApiClient(api_server, password)
+
+def get_api_client():
+    return PancakeApiClient(api_server, password)
+
 try:
     if command == "list-services":
+        api_client = get_api_client()
         services = api_client.list_managed_services()
         if services:
             for service in services: 
@@ -99,10 +116,12 @@ try:
         for line in sys.stdin.readlines():
             service_conf += line
 
+        api_client = get_api_client()
         api_client.manage_service(service_name, service_conf)
 
     elif command == "unmanage":
         service_name = args[1]
+        api_client = get_api_client()
         api_client.unmanage_service(service_name)
 
     elif command == "update":
@@ -114,6 +133,7 @@ try:
         # Read in the existing configuration and update it with
         # with the new configuration. This allows people to do a
         # partial update.
+        api_client = get_api_client()
         service_conf = api_client.get_service_config(service_name)
         config = SafeConfigParser()
         config.readfp(StringIO(service_conf))
@@ -126,35 +146,46 @@ try:
 
     elif command == "show":
         service_name = args[1]
+        api_client = get_api_client()
         config = api_client.get_service_config(service_name)
         print config.strip()
 
     elif command == "list-ips":
         service_name = args[1]
+        api_client = get_api_client()
         ip_addresses = api_client.list_service_ips(service_name)
         for ip in ip_addresses:
             print ip
 
     elif command == "passwd":
         new_password = args[1]
+        api_client = get_api_client()
         api_client.update_api_key(new_password)
 
     elif command == "runserver":
-        
+
         from gridcentric.pancake.manager import ScaleManager
-        
+
         log.configure(loglevel, logfile)
-        manager = ScaleManager()
-        manager.serve(zk_servers)
+        manager = ScaleManager(zk_servers)
         manager.run()
 
-    elif command == 'runapi':
-        
+    elif command == "runapi":
+
         from paste.httpserver import serve
         from gridcentric.pancake.api import PancakeApi
-        
+
         log.configure(loglevel, logfile)
         api = PancakeApi(zk_servers)
+        serve(api.get_wsgi_app(), host='0.0.0.0')
+
+    elif command == "run":
+
+        from paste.httpserver import serve
+        from gridcentric.pancake.auto import PancakeAutoApi
+
+        log.configure(loglevel, logfile)
+        api = PancakeAutoApi(zk_servers)
         serve(api.get_wsgi_app(), host='0.0.0.0')
 
     else:

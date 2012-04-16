@@ -1,41 +1,38 @@
 #!/bin/bash
 
-if [ $# != 3 ]
+if [ $# != 2 ]
 then
-    echo "usage: setup.sh server_user example_server pancake_project_path"
+    echo "usage: setup.sh <pancake-project-path (for scp)> <pancake-server>"
     echo ""
-    echo "e.g. setup.sh dscannell dscannell-desktop /home/dscannell/projects/gridcentric/pancake"
+    echo "e.g. setup.sh dscannell@dscannell-desktop:/home/dscannell/projects/gridcentric/pancake dscannell-desktop"
     exit 1
 fi
 
-EXAMPLE_USER=$1
-EXAMPLE_SERVER=$2
-EXAMPLE_PATH=$3
+PANCAKE_PATH=$1
+PANCAKE_SERVER=$2
 
-EXAMPLE_BASE=$EXAMPLE_USER@$EXAMPLE_SERVER:$EXAMPLE_PATH
-
-# Acquire the necessary packages
+# Acquire the necessary packages.
 apt-get install -y nano zip apache2 libapache2-mod-wsgi python-django curl
 
-# Install vms-agent
+# Install vms-agent.
 apt-get install vms-agent
 /etc/init.d/vmsagent start
 
-# Install the pancake agent script
-scp $EXAMPLE_BASE/clone.d/* ./
-cat ./90_pancake | sed "s:PANCAKE_HOST:$EXAMPLE_SERVER:" - > /etc/gridcentric/clone.d/90_pancake
+# Install the pancake agent script.
+scp $PANCAKE_PATH/clone.d/90_pancake /etc/gridcentric/clone.d
+sed -i -e "s:PANCAKE_HOST:$PANCAKE_SERVER:" /etc/gridcentric/clone.d/90_pancake
 chmod +x /etc/gridcentric/clone.d/90_pancake
 
-
-# Get the django application
+# Get the django application.
 mkdir -p /web
-scp $EXAMPLE_BASE/example/ip_test.zip /web/ip_test.zip
+scp $PANCAKE_PATH/example/ip_test.zip /web/ip_test.zip
 unzip /web/ip_test.zip -d /web
 ln -s /web/punchvid/templates /templates
 
-
-# Configure apache
-cat /etc/apache2/sites-available/default | sed 's:</VirtualHost>:WSGIScriptAlias / /web/punchvid/django.wsgi\n</VirtualHost>:' - > /etc/apache2/sites-available/punchvid
+# Configure apache.
+cat /etc/apache2/sites-available/default | \
+    sed -e 's:</VirtualHost>:WSGIScriptAlias / /web/punchvid/django.wsgi\n</VirtualHost>:' > \
+    /etc/apache2/sites-available/punchvid
 a2ensite punchvid
 a2dissite default
 service apache2 reload

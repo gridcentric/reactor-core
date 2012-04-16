@@ -12,4 +12,5 @@ class LoadBalancerConnection(object):
     def save(self):
         pass
     def metrics(self, url):
-        return {}
+        # Returns { key : (weight, value) }
+        return (0.0, {})
