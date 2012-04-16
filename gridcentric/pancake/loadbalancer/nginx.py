@@ -87,9 +87,9 @@ class NginxLogWatcher(threading.Thread):
             hits = record[host][0]
             metrics = \
                 {
-                "rate" : hits / delta,
-                "response" : record[host][2] / hits,
-                "bytes" : record[host][1] / delta,
+                "rate" : (hits, hits / delta),
+                "response" : (hits, record[host][2] / hits),
+                "bytes" : (hits, record[host][1] / delta),
                 }
             record[host] = metrics
 
