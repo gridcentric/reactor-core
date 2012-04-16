@@ -23,7 +23,7 @@ class ZookeeperConnection(object):
     def silence(self):
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_ERROR)
 
-    def write(self, path, contents):
+    def write(self, path, contents, ephemeral=False):
         """ 
         Writes the contents to the path in zookeeper. It will create the path in
         zookeeper if it does not already exist.
@@ -38,11 +38,12 @@ class ZookeeperConnection(object):
             partial_path = partial_path + "/" + path_part
             if zookeeper.exists(self.handle, partial_path) == None:
                 zookeeper.create(self.handle, partial_path, '', [self.acl], 0)
-        
+
         if zookeeper.exists(self.handle, path):
             zookeeper.set(self.handle, path, contents)
         else:
-            zookeeper.create(self.handle, path, contents, [self.acl], 0)
+            flags = (ephemeral and zookeeper.EPHEMERAL or 0)
+            zookeeper.create(self.handle, path, contents, [self.acl], flags)
 
     def read(self, path, default=None):
         """
@@ -53,6 +54,7 @@ class ZookeeperConnection(object):
             value, timeinfo = zookeeper.get(self.handle, path)
         
         return value
+
     def list_children(self, path):
         """
         Returns a list of all the children nodes in the path. None is returned if the path does
@@ -70,7 +72,7 @@ class ZookeeperConnection(object):
             path_children = zookeeper.get_children(self.handle, path)
             for child in path_children:
                 self.delete(path + "/" + child)
-                
+
             zookeeper.delete(self.handle, path)
 
     def watch_contents(self, path, fn):

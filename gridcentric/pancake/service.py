@@ -26,7 +26,6 @@ class Service(object):
     def manage(self):
         # Load the configuration and configure the service.
         logging.info("Managing service %s" % (self.name))
-        pass
 
     def unmanage(self):
         # Delete all the launched instances, and unbless the instance. Essentially, return it
@@ -37,7 +36,7 @@ class Service(object):
         for instance in self.instances():
             self.drop_instances(self.instances(), "service is becoming unmanaged")
 
-    def update(self, reconfigure = True, metrics = []):
+    def update(self, reconfigure=True, metrics=[]):
         try:
             self._update(reconfigure, metrics)
         except Exception, e:

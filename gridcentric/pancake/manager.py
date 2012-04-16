@@ -5,6 +5,8 @@ import logging
 import threading
 import time
 import uuid
+import hashlib
+import bisect
 from StringIO import StringIO
 
 from gridcentric.pancake.config import ManagerConfig, ServiceConfig
@@ -18,9 +20,16 @@ class ScaleManager(object):
 
     def __init__(self, zk_servers):
         self.running = False
-        self.uuid = uuid.uuid4()
+        self.uuid = str(uuid.uuid4())
+
         self.services = {}
         self.key_to_services = {}
+        self.key_to_owned = {}
+
+        self.managers = {}
+        self.manager_keys = []
+        self.key_to_manager = {}
+
         self.watching_ips ={}
         self.load_balancer = None
         self.zk_servers = zk_servers
@@ -35,11 +44,43 @@ class ScaleManager(object):
         self.load_balancer = lb_connection.get_connection(self.config.config_path(),
                                                           self.config.site_path())
         self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
+        self.manager_register()
+        self.manager_change(self.zk_conn.watch_children(paths.managers(), self.manager_change))
         self.service_change(self.zk_conn.watch_children(paths.services(), self.service_change))
- 
+
+    def manager_select(self, service):
+        # Remember whether this was previous managed.
+        managed = self.service_owned(service)
+
+        # Find the cloest key.
+        keys = self.key_to_manager.keys()
+        index = bisect.bisect(keys, service.key())
+        key = keys[index % len(self.key_to_manager)]
+        manager_key = self.key_to_manager[key]
+
+        # Check if this is us.
+        self.key_to_owned[service.key()] = (manager_key == self.uuid)
+
+        logging.info("Service %s owned by %s (%s)." % \
+            (service.name, manager_key, \
+            self.service_owned(service) and "That's me!" or "Not me!"))
+
+        # Check if it is one of our own.
+        # Start the service if necessary (now owned).
+        if not(managed) and self.service_owned(service):
+            self.start_service(service)
+
+    def manager_remove(self, service):
+        if self.key_to_owned.has_key(service.key()):
+            del self.key_to_owned[service.key()]
+
+    def service_owned(self, service):
+        return self.key_to_owned.get(service.key(), False)
+
     def service_change(self, services):
         logging.info("Services have changed: new=%s, existing=%s" %
                      (services, self.services.keys()))
+
         for service_name in services:
             if service_name not in self.services:
                 self.create_service(service_name)
@@ -53,10 +94,47 @@ class ScaleManager(object):
         for service in services_to_remove:
             del self.services[service]
 
-    def create_service(self, service_name):
-        logging.info("Assigning service %s to manager %s." % (service_name, self.uuid))
+    def manager_register(self):
+        while len(self.manager_keys) < self.config.keys():
+            # Generate a random hash key to associate with this manager.
+            self.manager_keys.append(hashlib.md5(str(uuid.uuid4())).hexdigest())
 
-        service_path  = paths.service(service_name)
+        # Write out our associated hash keys as an ephemeral node.
+        key_string = ",".join(self.manager_keys)
+        self.zk_conn.write(paths.manager(self.uuid), key_string, ephemeral=True)
+        logging.info("Manager has key %s." % self.uuid)
+
+    def manager_change(self, managers):
+        for manager in managers:
+            if manager not in self.managers:
+                # Read the key and update all mappings.
+                keys = self.zk_conn.read(paths.manager(manager)).split(",")
+                logging.info("Found manager %s with %d keys." % (manager, len(keys)))
+                self.managers[manager] = keys
+                for key in keys:
+                    self.key_to_manager[key] = manager
+
+        managers_to_remove = []
+        for manager in self.managers:
+            if manager not in managers:
+                # Remove all mappings.
+                keys = self.managers[manager]
+                logging.info("Removing manager %s with %d keys." % (manager, len(keys)))
+                for key in keys:
+                    del self.key_to_manager[key]
+                managers_to_remove.append(manager)
+        for manager in managers_to_remove:
+            del self.managers[manager]
+
+        # Recompute all service owners.
+        for service in self.services.values():
+            self.manager_select(service)
+
+    def create_service(self, service_name):
+        logging.info("New service %s found to be managed." % service_name)
+
+        # Create the object.
+        service_path = paths.service(service_name)
         service_config = ServiceConfig(self.zk_conn.read(service_path))
         service = Service(service_name, service_config, self)
         self.services[service_name] = service
@@ -64,16 +142,17 @@ class ScaleManager(object):
         self.key_to_services[service_key] = \
             self.key_to_services.get(service.key(),[]) + [service_name]
 
-        if self.zk_conn.read(paths.service_managed(service_name)) == None:
-            logging.info("New service %s found to be managed." % (service_name))
-            # This service is currently unmanaged.
-            service.manage()
-            self.zk_conn.write(paths.service_managed(service_name),"True")
-
-        service.update()
-
+        # Watch the config for this service.
         logging.info("Watching service %s." % (service_name))
         self.zk_conn.watch_contents(service_path, service.update_config)
+
+        # Select the manager for this service.
+        self.manager_select(service)
+
+    def start_service(self, service):
+        # This service is now being managed by us.
+        service.manage()
+        service.update()
 
     def remove_service(self, service_name):
         """
@@ -88,7 +167,11 @@ class ScaleManager(object):
                 # Remove the service name from the list of services with the same key. If the service
                 # name is not in the list, then it is fine because we are just removing it anyway.
                 service_names.remove(service_name)
-            service.unmanage()
+
+            if self.service_owned(service):
+                service.unmanage()
+
+            self.manager_remove(service)
 
     def confirmed_ips(self, service_name):
         """
@@ -178,8 +261,16 @@ class ScaleManager(object):
                     logging.debug("Metrics for ip %s belong to service %s" %(ip, service.name))
                     metrics_by_key[service.key()].append(metrics[ip])
 
+        # TODO: Register all loadbalancer metrics in Zookeeper, so that the
+        # manager for this service has the opportunity to read data from all
+        # loadbalancers, not just their own.
+
         # Does a health check on all the services that are being managed.
         for service in self.services.values():
+            # Do not kick the service if it is not currently owned by us.
+            if not(self.service_owned(service)):
+                continue
+
             # Run a health check on this service.
             service.health_check()
 

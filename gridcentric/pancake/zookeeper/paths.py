@@ -27,9 +27,14 @@ def services():
 def service(name):
     return "%s/%s" %(SERVICES, name)
 
-# A leaf node to determine if the service is already being managed.
-def service_managed(name):
-    return "%s/%s/managed" %(SERVICES, name)
+# The subtree for managers.
+MANAGERS = "%s/managers" % (ROOT)
+def managers():
+    return MANAGERS
+
+# The node for a particular manager.
+def manager(name):
+    return "%s/%s" %(MANAGERS, name)
 
 # The ips that have been confirmed by the system for a particular service. An ip is
 # confirmed once it sends a message to a pancake.
