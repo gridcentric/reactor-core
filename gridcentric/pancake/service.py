@@ -26,8 +26,7 @@ class Service(object):
     def manage(self):
         # Load the configuration and configure the service.
         logging.info("Managing service %s" % (self.name))
-        pass
-        
+
     def unmanage(self):
         # Delete all the launched instances, and unbless the instance. Essentially, return it
         # back to the unmanaged.
@@ -109,7 +108,7 @@ class Service(object):
         Drop the instances from the system. Note: a reason should be given for why
         the instances are being dropped.
         """
-        
+
         # Update the load balancer before bringing down the instances.
         self._drop_addresses(instances)
         if len(instances) > 0:

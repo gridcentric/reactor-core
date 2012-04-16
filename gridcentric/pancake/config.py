@@ -34,6 +34,7 @@ class ManagerConfig(Config):
 [manager]
 health_check=5
 mark_maximum=20
+keys=64
 
 [loadbalancer]
 config_path=/etc/nginx/conf.d
@@ -57,6 +58,9 @@ site_path=/etc/nginx/sites-enabled
 
     def mark_maximum(self):
         return int(self._get("manager", "mark_maximum"))
+
+    def keys(self):
+        return int(self._get("manager", "keys"))
 
     def health_check(self):
         return float(self._get("manager", "health_check"))
