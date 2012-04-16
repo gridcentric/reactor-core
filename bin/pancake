@@ -32,7 +32,7 @@ def usage():
     print ""
     print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option multiple"
     print "                          times to specific multiple instances. Only necessary for 'run*'."
-    print "                          The default (as currently configured) is %s." % str(zk_servers)
+    print "                          The default is the last configuration, or localhost."
     print ""
     print "   -d, --debug            Enables debugging log and full stack trace errors."
     print ""
@@ -59,7 +59,8 @@ def usage():
     print ""
     print "    runapi                   Runs the API server."
     print ""
-    print "    run                      Runs the API server and scale manager (if needed)."
+    print "    run                      Runs the API server, and either Zookeeper or the scale"
+    print "                             manager, depending on configured Zookeeper servers."
 
 opts, args = getopt.getopt(sys.argv[1:], 
                             "ha:p:z:dl:", 

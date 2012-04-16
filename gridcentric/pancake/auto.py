@@ -6,7 +6,7 @@ import logging
 
 from gridcentric.pancake.api import PancakeApi
 from gridcentric.pancake.manager import ScaleManager
-import gridcentric.pancake.zookeeper.config as config
+import gridcentric.pancake.zookeeper.config as zk_config
 
 def list_local_ips():
     from netifaces import interfaces, ifaddresses, AF_INET
@@ -56,8 +56,8 @@ class PancakeAutoApi(PancakeApi):
             logging.info("Stopping Zookeeper, starting manager.")
 
             # Start a manager (no Zookeeper).
-            config.ensure_stopped()
-            config.check_config(zk_servers)
+            zk_config.ensure_stopped()
+            zk_config.check_config(zk_servers)
             self.start_manager(zk_servers)
 
         else:
@@ -65,8 +65,8 @@ class PancakeAutoApi(PancakeApi):
 
             # Start an API server (w/ Zookeeper).
             self.stop_manager()
-            config.check_config(zk_servers)
-            config.ensure_started()
+            zk_config.check_config(zk_servers)
+            zk_config.ensure_started()
 
         # Call the base API to reconnect.
         PancakeApi.reconnect(self, zk_servers)

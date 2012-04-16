@@ -14,6 +14,7 @@ class ZookeeperConnection(object):
 
     def __init__(self, servers, acl=ZOO_OPEN_ACL_UNSAFE):
         self.silence()
+        # We default to port 2181 if no port is provided as part of the host specification.
         server_list = ",".join(map(lambda x: (x.find(":") > 0 and x) or "%s:2181" % x, servers))
         self.handle = zookeeper.init(server_list)
         self.acl = acl
@@ -94,14 +95,10 @@ class ZookeeperConnection(object):
                 result = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
             elif event == ZOO_EVENT_NODE_DATA_CHANGED:
                 result, _ = zookeeper.get(self.handle, path, self.zookeeper_watch)
-            
+
             if result != None:
                 for fn in fns:
                     fn(result)
 
 # Save the exception for use in other modules.
 ZookeeperException = zookeeper.ZooKeeperException
-
-if __name__ == "__main__":
-    client = ZookeeperConnection(["localhost"])
-    print client.list_children("/")
