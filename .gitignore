@@ -10,3 +10,4 @@ image/contrib/python-zookeeper-3.4.3.tgz
 image/dist-*
 image/chroot-*
 contrib/zookeeper-3.4.3
+zookeeper-*/
