@@ -29,6 +29,20 @@ class PancakeAutoApi(PancakeApi):
     def __init__(self, zk_servers):
         self.manager_running = False
         PancakeApi.__init__(self, zk_servers)
+        self.config.add_route('api-servers', '/gridcentric/pancake/api_servers')
+        self.config.add_view(self.set_api_servers, route_name='api-servers')
+
+    @PancakeApi.authorized
+    def set_api_servers(self, context, request):
+        """
+        Updates the list of API servers in the system.
+        """
+        if request.method == 'POST':
+            api_servers = json.loads(request.body)['api_servers']
+            logging.info("Updating API Servers.")
+            self.reconnect(api_servers)
+
+        return Response()
 
     def start_manager(self, zk_servers):
         if not(self.manager_running):

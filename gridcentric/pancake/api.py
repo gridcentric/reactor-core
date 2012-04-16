@@ -113,9 +113,6 @@ class PancakeApi:
         self.config.add_route('auth-key', '/gridcentric/pancake/auth_key')
         self.config.add_view(self.set_auth_key, route_name='auth-key')
 
-        self.config.add_route('api-servers', '/gridcentric/pancake/api_servers')
-        self.config.add_view(self.set_api_servers, route_name='api-servers')
-
         self.config.add_route('new-ip', '/gridcentric/pancake/new-ip/{ipaddress}')
         self.config.add_view(self.new_ip_address, route_name='new-ip')
 
@@ -256,18 +253,6 @@ class PancakeApi:
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
             self.client.set_auth_hash(self._create_admin_auth_token(auth_key))
-
-        return Response()
-
-    @authorized
-    def set_api_servers(self, context, request):
-        """
-        Updates the list of API servers in the system.
-        """
-        if request.method == 'POST':
-            api_servers = json.loads(request.body)['api_servers']
-            logging.info("Updating API Servers.")
-            self.reconnect(api_servers)
 
         return Response()
 
