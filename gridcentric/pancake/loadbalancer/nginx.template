@@ -1,4 +1,4 @@
-upstream ${netloc} {
+upstream ${id} {
     % for address in addresses:
     server ${address};
     % endfor
@@ -10,6 +10,6 @@ server {
     listen ${port};
     server_name ${netloc};
     location ${path} {
-      proxy_pass ${scheme}://${netloc};
+      proxy_pass ${scheme}://${id};
     }
 }

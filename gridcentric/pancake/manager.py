@@ -11,24 +11,29 @@ from gridcentric.pancake.config import ManagerConfig, ServiceConfig
 from gridcentric.pancake.service import Service
 import gridcentric.pancake.loadbalancer.connection as lb_connection
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
+from gridcentric.pancake.zookeeper.connection import ZookeeperException
 import gridcentric.pancake.zookeeper.paths as paths
 
 class ScaleManager(object):
 
-    def __init__(self):
+    def __init__(self, zk_servers):
+        self.running = False
         self.uuid = uuid.uuid4()
         self.services = {}
         self.key_to_services = {}
         self.watching_ips ={}
         self.load_balancer = None
+        self.zk_servers = zk_servers
+        self.config = ManagerConfig("")
 
-    def serve(self, zk_servers):
+    def serve(self):
         # Create a connection to zk_configuration and read
-        # in the pancake service config
-        self.zk_conn = ZookeeperConnection(zk_servers)
+        # in the pancake service config.
+        self.zk_conn = ZookeeperConnection(self.zk_servers)
         manager_config = self.zk_conn.read(paths.config())
         self.config = ManagerConfig(manager_config)
-        self.load_balancer = lb_connection.get_connection(self.config.config_path(), self.config.site_path())
+        self.load_balancer = lb_connection.get_connection(self.config.config_path(),
+                                                          self.config.site_path())
         self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
         self.service_change(self.zk_conn.watch_children(paths.services(), self.service_change))
  
@@ -165,7 +170,7 @@ class ScaleManager(object):
         for ip in metrics:
             for service in self.services.values():
                 if not service.name in service_addresses:
-                    service_addresses[service.name] = service.addresses() + service.static_addresses() 
+                    service_addresses[service.name] = service.addresses() + service.static_addresses()
                 service_ips = service_addresses[service.name] 
                 if not(service.key() in metrics_by_key):
                     metrics_by_key[service.key()] = []
@@ -182,9 +187,28 @@ class ScaleManager(object):
             service.update(reconfigure=False, metrics=metrics_by_key.get(service.key(), []))
 
     def run(self):
-        # Kick the loadbalancer on startup.
-        self.reload_loadbalancer()
+        # Note that we are running.
+        self.running = True
 
-        while True:
-            time.sleep(self.config.health_check())
-            self.health_check()
+        while self.running:
+            try:
+                # Reconnect to the Zookeeper servers.
+                self.serve()
+
+                # Kick the loadbalancer on startup.
+                self.reload_loadbalancer()
+
+                # Perform continuous health checks.
+                while self.running:
+                    self.health_check()
+                    if self.running:
+                        time.sleep(self.config.health_check())
+
+            except ZookeeperException:
+                # Sleep on ZooKeeper exception and retry.
+                logging.debug("Received ZooKeeper exception, retrying.")
+                if self.running:
+                    time.sleep(self.config.health_check())
+
+    def clean_stop(self):
+        self.running = False

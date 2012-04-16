@@ -12,7 +12,7 @@ except ImportError:
 setup(
     name="pancake",
     description="Gridcentric load balancer and scale manager (pancake).",
-    version="0.1",
+    version=os.getenv("VERSION"),
     author="Gridcentric Inc.",
     author_email="support@gridcentric.com",
     url="http://www.gridcentric.com",
@@ -22,9 +22,8 @@ setup(
               "gridcentric.pancake.zookeeper",
               "gridcentric.pancake.metrics",
               "gridcentric.pancake.cloud"],
-    data_files=[
-        ("gridcentric/pancake/loadbalancer",
-            ["gridcentric/pancake/loadbalancer/nginx.template",
-             "gridcentric/pancake/loadbalancer/pancake.conf"])],
+    package_data={'gridcentric.pancake.loadbalancer':\
+            ["nginx.template", "pancake.conf"]},
+    include_package_data=True,
     scripts=["bin/pancake"]
 )

@@ -76,7 +76,6 @@ auth_algo=sha1
 [scaling]
 min_instances=1
 max_instances=1
-quiet_period=10
 metrics=
 
 [nova]
@@ -105,9 +104,6 @@ project=admin
 
     def max_instances(self):
         return int(self._get("scaling", "max_instances") or 1)
-
-    def quiet_period(self):
-        return float(self._get("scaling", "quiet_period"))
 
     def metrics(self):
         return self._get("scaling", "metrics").split(",")

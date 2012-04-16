@@ -11,9 +11,14 @@ def calculate_totals(metrics):
     Calculates the totals for each metric across all the individual instances.
     """
     totals = {}
+    total_weights = {}
     for metric in metrics:
-        for key, value in metric.iteritems():
-            totals[key] = totals.get(key, 0) + value
+        for key, info in metric.iteritems():
+            (weight, value) = info
+            totals[key] = totals.get(key, 0) + weight * value
+            total_weights[key] = total_weights.get(key, 0) + weight
+    for key in totals:
+        totals[key] = (float(totals[key]) / total_weights[key])
     return totals
 
 def calculate_num_servers_uniform(total, bound):

@@ -87,9 +87,9 @@ class NginxLogWatcher(threading.Thread):
             hits = record[host][0]
             metrics = \
                 {
-                "rate" : hits / delta,
-                "response" : record[host][2] / hits,
-                "bytes" : record[host][1] / delta,
+                "rate" : (hits, hits / delta),
+                "response" : (hits, record[host][2] / hits),
+                "bytes" : (hits, record[host][1] / delta),
                 }
             record[host] = metrics
 
@@ -148,7 +148,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
     def change(self, url, addresses):
         # We use a simple hash of the URL as the file name for the configuration file.
         uniq_id = hashlib.md5(url).hexdigest()
-        conf_filename = "_%s.conf" % uniq_id
+        conf_filename = "%s.conf" % uniq_id
 
         # Parse the url because we need to know the netloc
         (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(url)
@@ -163,6 +163,9 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
                 port = "80"
         else:
             port = w_port[1]
+
+        # Ensure that there is a path.
+        path = path or "/"
 
         conf = self.template.render(id=uniq_id,
                                     url=url,

@@ -39,13 +39,13 @@ class PancakeApiClient(httplib2.Http):
         self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 
                                     'POST',
                                     body={'config':config})
-    
+
     def unmanage_service(self, service_name):
         """
         Unmanage the service.
         """
         self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 'DELETE')
-        
+
     def update_service(self, service_name, config):
         """
         Update the managed service with given configuration values. Note that the config
@@ -82,6 +82,8 @@ class PancakeApiClient(httplib2.Http):
         if self.api_key != None:
             kwargs.setdefault('headers', {})['X-Auth-Key'] = self.api_key
         resp, body = self.request(self.api_url + url, method, **kwargs)
+        if resp.status != 200:
+            raise Exception(body)
         return resp, body
 
     def request(self, *args, **kwargs):
@@ -102,20 +104,21 @@ class PancakeApiClient(httplib2.Http):
         return resp, body
 
 class PancakeApi:
-    
+
     def __init__(self, zk_servers):
-        self.client = PancakeClient(zk_servers)
+        self.zk_servers = zk_servers
+        self.client = None
         self.config = Configurator()
-        
+
         self.config.add_route('auth-key', '/gridcentric/pancake/auth_key')
         self.config.add_view(self.set_auth_key, route_name='auth-key')
-        
+
         self.config.add_route('new-ip', '/gridcentric/pancake/new-ip/{ipaddress}')
         self.config.add_view(self.new_ip_address, route_name='new-ip')
 
         self.config.add_route('service-action', '/gridcentric/pancake/services/{service_name}')
         self.config.add_view(self.handle_service_action, route_name='service-action')
-        
+
         self.config.add_route('service-list', '/gridcentric/pancake/services')
         self.config.add_view(self.list_services, route_name='service-list')
 
@@ -123,6 +126,13 @@ class PancakeApi:
         self.config.add_route('service-ip-list-implicit', '/gridcentric/pancake/service/ips')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list-implicit')
+
+    def reconnect(self, zk_servers):
+        self.client = PancakeClient(zk_servers)
+
+    def ensure_connected(self):
+        if not(self.client):
+            self.reconnect(self.zk_servers)
 
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
@@ -158,8 +168,9 @@ class PancakeApi:
                  # Return an unauthorized response.
                 return Response(status=401)
         return fn
-    
+
     def _authorize_admin_access(self, context, request, auth_key):
+        self.ensure_connected()
         auth_hash = self.client.auth_hash()
         if auth_hash != None:
             if auth_key != None:
@@ -173,6 +184,7 @@ class PancakeApi:
             return True
 
     def _authorize_service_access(self, context, request, auth_key):
+        self.ensure_connected()
         service_name = request.matchdict.get('service_name', None)
         if service_name != None:
             service_config = ServiceConfig(self.client.get_service_config(service_name))
@@ -236,13 +248,14 @@ class PancakeApi:
         """
         Updates the auth key in the system.
         """
+        self.ensure_connected()
         if request.method == 'POST':
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
             self.client.set_auth_hash(self._create_admin_auth_token(auth_key))
-            
+
         return Response()
-    
+
     @authorized
     def handle_service_action(self, context, request):
         """
@@ -251,6 +264,7 @@ class PancakeApi:
         POST - Either manages or updates the service with a new config in the request body
         DELETE - Unmanages the service.
         """
+        self.ensure_connected()
         service_name = request.matchdict['service_name']
         response = Response()
         if request.method == "GET":
@@ -268,6 +282,7 @@ class PancakeApi:
 
     @authorized
     def list_service_ips(self, context, request):
+        self.ensure_connected()
         service_name = request.matchdict['service_name']
         if request.method == 'GET':
             return Response(body=json.dumps(
@@ -279,10 +294,12 @@ class PancakeApi:
         """
         Returns a list of services currently being managed.
         """
+        self.ensure_connected()
         services = self.client.list_managed_services()
         return Response(body=json.dumps({'services':services}))
 
     def new_ip_address(self, context, request):
+        self.ensure_connected()
         ip_address = request.matchdict['ipaddress']
         logging.info("New IP address %s has been recieved." % (ip_address))
         self.client.record_new_ipaddress(ip_address)
