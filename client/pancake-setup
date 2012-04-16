@@ -2,7 +2,7 @@
 
 function usage() {
     echo "usage: $0 <api-servers> [scale-servers]"
-    echo "Both <api-servers> and <scale-servers> should be comma-separated lists of hsots."
+    echo "Both <api-servers> and <scale-servers> should be comma-separated lists of hosts."
     echo "To specify an authentication key, set the environment variable PANCAKE_AUTH_KEY."
     echo "For example: PANCAKE_AUTH_KEY=example $0 <api-servers> <scale-servers>"
 }
