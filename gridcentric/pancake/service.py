@@ -93,7 +93,7 @@ class Service(object):
 
         self.drop_instances(instances_to_delete,
             "bringing instance total down to target %s" % target)
-        
+
     def update_config(self, config_str):
         old_url = self.config.url()
         self.config.reload(config_str)

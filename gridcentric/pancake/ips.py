@@ -27,6 +27,7 @@ def is_public(host):
         return True
 
 def is_private(host):
+    ip = socket.gethostbyname(host)
     if ip.startswith("10.") or \
        ip.startswith("172.") or \
        ip.startswith("192.168."):

@@ -57,9 +57,9 @@ def usage():
     print ""
     print "    list-managers            List all the available managers."
     print ""
-    print "    update-manager <ip>      Update the current configuration for the manager."
+    print "    update-manager [ip]      Update the current configuration for the manager."
     print ""
-    print "    show-manager <ip>        Show the current configuration for the manager."
+    print "    show-manager [ip]        Show the current configuration for the manager."
     print ""
     print "    passwd <password>        Updates the API's password."
     print ""
@@ -167,18 +167,27 @@ try:
                 print manager
 
     elif command == "update-manager":
-        manager = args[1]
+        if len(args) > 1:
+            manager = args[1]
+        else:
+            manager = None
         new_conf = ""
         for line in sys.stdin.readlines():
             new_conf += line
 
         # Write out the full contents of the updated configuration.
+        api_client = get_api_client()
+        config = SafeConfigParser()
+        config.readfp(StringIO(new_conf))
         config_value = StringIO()
         config.write(config_value)
         api_client.update_manager(manager, config_value.getvalue())
 
     elif command == "show-manager":
-        manager = args[1]
+        if len(args) > 1:
+            manager = args[1]
+        else:
+            manager = None
         api_client = get_api_client()
         config = api_client.get_manager_config(manager)
         print config.strip()

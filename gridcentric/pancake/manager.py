@@ -41,7 +41,7 @@ class ScaleManager(object):
         self.zk_conn = ZookeeperConnection(self.zk_servers)
 
         # Register ourselves.
-        self.manager_register()
+        self.manager_register(initial=True)
 
         # Create the loadbalancer connection.
         self.load_balancer = lb_connection.get_connection(self.config.loadbalancer_name(),
@@ -61,8 +61,12 @@ class ScaleManager(object):
         # Find the cloest key.
         keys = self.key_to_manager.keys()
         index = bisect.bisect(keys, service.key())
-        key = keys[index % len(self.key_to_manager)]
-        manager_key = self.key_to_manager[key]
+        if len(keys) == 0:
+            logging.error("No scale manager available!")
+            manager_key = None
+        else:
+            key = keys[index % len(self.key_to_manager)]
+            manager_key = self.key_to_manager[key]
 
         # Check if this is us.
         self.key_to_owned[service.key()] = (manager_key == self.uuid)
@@ -100,20 +104,37 @@ class ScaleManager(object):
         for service in services_to_remove:
             del self.services[service]
 
-    def manager_register(self):
+    def manager_config_change(self, value):
+        self.manager_register(initial=False)
+
+    def manager_register(self, initial=False):
         # Figure out our global IPs.
         global_ip = ips.find_global()
         logging.info("Manager %s has key %s." % (global_ip, self.uuid))
 
-        # Reload our config.
-        global_config = self.zk_conn.read(paths.config())
-        self.config = ManagerConfig(global_config)
+        # Reload our global config.
+        self.config = ManagerConfig("")
+        if initial:
+            global_config = self.zk_conn.watch_contents(paths.config(),
+                                                        self.manager_config_change,
+                                                        str(self.config))
+        else:
+            global_config = self.zk_conn.read(paths.config())
+        if global_config:
+            self.config.reload(global_config)
 
-        # Register our IP.
         if global_ip:
-            local_config = self.zk_conn.read(paths.manager_config(global_ip))
+            # Reload our local config.
+            if initial:
+                local_config = self.zk_conn.watch_contents(paths.manager_config(global_ip),
+                                                           self.manager_config_change,
+                                                           str(self.config))
+            else:
+                local_config = self.zk_conn.read(paths.manager_config(global_ip))
             if local_config:
                 self.config.reload(local_config)
+
+            # Register our IP.
             self.zk_conn.write(paths.manager_ip(global_ip), self.uuid, ephemeral=True)
 
         # Generate keys.
@@ -127,6 +148,11 @@ class ScaleManager(object):
         # Write out our associated hash keys as an ephemeral node.
         key_string = ",".join(self.manager_keys)
         self.zk_conn.write(paths.manager_keys(self.uuid), key_string, ephemeral=True)
+
+        if not(initial):
+            # If we're not doing initial setup, refresh services.
+            for service in self.services.values():
+                self.manager_select(service)
 
     def manager_change(self, managers):
         for manager in managers:
@@ -145,10 +171,12 @@ class ScaleManager(object):
                 keys = self.managers[manager]
                 logging.info("Removing manager %s with %d keys." % (manager, len(keys)))
                 for key in keys:
-                    del self.key_to_manager[key]
+                    if key in self.key_to_manager:
+                        del self.key_to_manager[key]
                 managers_to_remove.append(manager)
         for manager in managers_to_remove:
-            del self.managers[manager]
+            if manager in self.managers:
+                del self.managers[manager]
 
         # Recompute all service owners.
         for service in self.services.values():
@@ -168,7 +196,9 @@ class ScaleManager(object):
 
         # Watch the config for this service.
         logging.info("Watching service %s." % (service_name))
-        self.zk_conn.watch_contents(service_path, service.update_config)
+        self.zk_conn.watch_contents(service_path,
+                                    service.update_config,
+                                    str(service_config))
 
         # Select the manager for this service.
         self.manager_select(service)

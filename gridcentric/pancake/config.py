@@ -33,6 +33,11 @@ class Config(object):
         else:
             self.config.readfp(StringIO(config_str))
 
+    def __str__(self):
+        config_value = StringIO()
+        self.config.write(config_value)
+        return config_value.getvalue()
+
 class ManagerConfig(Config):
 
     def __init__(self, config_str):

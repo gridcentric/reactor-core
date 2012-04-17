@@ -75,17 +75,18 @@ class ZookeeperConnection(object):
 
             zookeeper.delete(self.handle, path)
 
-    def watch_contents(self, path, fn):
+    def watch_contents(self, path, fn, default_value=""):
         if not zookeeper.exists(self.handle, path):
-            self.write(path, "")
-        
+            self.write(path, default_value)
+
         self.watches[path] = [fn] + self.watches.get(path, [])
         value, timeinfo = zookeeper.get(self.handle, path, self.zookeeper_watch)
+        return value
 
-    def watch_children(self, path, fn):
+    def watch_children(self, path, fn, default_value=""):
         if not zookeeper.exists(self.handle, path):
-            self.write(path, "")
-        
+            self.write(path, default_value)
+
         self.watches[path] = [fn] + self.watches.get(path, [])
         return zookeeper.get_children(self.handle, path, self.zookeeper_watch)
 

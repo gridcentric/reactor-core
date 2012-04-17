@@ -73,15 +73,16 @@ class PancakeApiClient(httplib2.Http):
         """
         Update the manager with the given configuration.
         """
-        self._authenticated_request('/gridcentric/pancake/managers/%s' %(manager), 'POST',
+        self._authenticated_request('/gridcentric/pancake/managers/%s' %
+                                    (manager or 'default'), 'POST',
                                     body={'config':config})
-    
+
     def get_manager_config(self, manager):
         """
         Return the manager's configuration.
         """
         resp, body = self._authenticated_request('/gridcentric/pancake/managers/%s' %
-                                                 manager, 'GET')
+                                                 (manager or 'default'), 'GET')
         return body.get('config',"")
 
     def list_service_ips(self, service_name):
@@ -295,12 +296,18 @@ class PancakeApi:
         response = Response()
         if request.method == "GET":
             logging.info("Retrieving manager %s configuration" % manager)
-            manager_config = self.client.get_manager_config(manager) or ""
+            if not(manager) or manager == "default":
+                manager_config = self.client.get_config(manager) or ""
+            else:
+                manager_config = self.client.get_manager_config(manager) or ""
             response = Response(body=json.dumps({'config':manager_config}))
         elif request.method == "POST":
             manager_config = json.loads(request.body)
             logging.info("Updating manager %s" % manager)
-            self.client.update_manager(manager, manager_config.get('config',""))
+            if not(manager) or manager == "default":
+                self.client.update_config(manager_config.get('config',""))
+            else:
+                self.client.update_manager_config(manager, manager_config.get('config',""))
         return response
 
     @authorized
