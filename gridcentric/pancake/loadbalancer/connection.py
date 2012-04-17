@@ -1,8 +1,13 @@
 #!/usr/bin/env python
 
-def get_connection(config_path, site_path):
-    from gridcentric.pancake.loadbalancer.nginx import NginxLoadBalancerConnection
-    return NginxLoadBalancerConnection(config_path, site_path)
+def get_connection(name, config):
+    if name == "nginx":
+        config_path = config.get("config_path", "/etc/nginx/conf.d")
+        site_path = config.get("site_path", "/etc/nginx/sites-enabled")
+        from gridcentric.pancake.loadbalancer.nginx import NginxLoadBalancerConnection
+        return NginxLoadBalancerConnection(config_path, site_path)
+    else:
+        raise Exception("Unknown load balancer: %s" % name)
 
 class LoadBalancerConnection(object):
     def clear(self):

@@ -41,8 +41,8 @@ class ScaleManager(object):
         self.zk_conn = ZookeeperConnection(self.zk_servers)
         manager_config = self.zk_conn.read(paths.config())
         self.config = ManagerConfig(manager_config)
-        self.load_balancer = lb_connection.get_connection(self.config.config_path(),
-                                                          self.config.site_path())
+        self.load_balancer = lb_connection.get_connection(self.config.loadbalancer_name(),
+                                                          self.config.loadbalancer_config())
         self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
         self.manager_register()
         self.manager_change(self.zk_conn.watch_children(paths.managers(), self.manager_change))

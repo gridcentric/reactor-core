@@ -35,26 +35,24 @@ class ManagerConfig(Config):
 health_check=5
 mark_maximum=20
 keys=64
-
-[loadbalancer]
-config_path=/etc/nginx/conf.d
-site_path=/etc/nginx/sites-enabled
+loadbalancer=nginx
 """))
         self._load(config_str)
 
-    def config_path(self):
+    def loadbalancer_name(self):
         """
-        The config path is where general loadbalancer configurations should go. This maybe the
-        same as the config path.
+        The name of the loadbalancer.
         """
-        return self._get("loadbalancer", "config_path")
-    
-    def site_path(self):
+        return self._get("manager", "loadbalancer")
+
+    def loadbalancer_config(self):
         """
-        The site path is where the particular service configurations should go. This maybe the
-        same as the config path.
+        The set of keys required to configure the loadbalancer.
         """
-        return self._get("loadbalancer", "site_path")
+        result = {}
+        if self.config.has_section("loadbalancer"):
+            result.update(self.config.items("loadbalancer"))
+        return result
 
     def mark_maximum(self):
         return int(self._get("manager", "mark_maximum"))
@@ -75,7 +73,6 @@ static_instances=
 auth_hash=
 auth_salt=
 auth_algo=sha1
-
 
 [scaling]
 min_instances=1
