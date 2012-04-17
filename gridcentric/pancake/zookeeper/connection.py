@@ -52,7 +52,7 @@ class ZookeeperConnection(object):
         value = default
         if zookeeper.exists(self.handle, path):
             value, timeinfo = zookeeper.get(self.handle, path)
-        
+
         return value
 
     def list_children(self, path):

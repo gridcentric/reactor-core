@@ -6,6 +6,8 @@ def get_connection(name, config):
         site_path = config.get("site_path", "/etc/nginx/sites-enabled")
         from gridcentric.pancake.loadbalancer.nginx import NginxLoadBalancerConnection
         return NginxLoadBalancerConnection(config_path, site_path)
+    elif name == "none":
+        return LoadBalancerConnection()
     else:
         raise Exception("Unknown load balancer: %s" % name)
 
@@ -18,4 +20,4 @@ class LoadBalancerConnection(object):
         pass
     def metrics(self, url):
         # Returns { key : (weight, value) }
-        return (0.0, {})
+        return {}

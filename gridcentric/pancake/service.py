@@ -19,7 +19,7 @@ class Service(object):
         self.url = self.config.url()
         self.cloud_conn = cloud_connection.get_connection('nova')
         self.cloud_conn.connect(self.config.auth_info()) 
-        
+
     def key(self):
         return hashlib.md5(self.url).hexdigest()
 
@@ -28,8 +28,8 @@ class Service(object):
         logging.info("Managing service %s" % (self.name))
 
     def unmanage(self):
-        # Delete all the launched instances, and unbless the instance. Essentially, return it
-        # back to the unmanaged.
+        # Delete all the launched instances, and unbless the instance.
+        # Essentially, return it back to the unmanaged.
         logging.info("Unmanaging service %s" % (self.name))
 
         # Delete all the launched instances.
@@ -44,7 +44,6 @@ class Service(object):
             logging.error("Error updating service %s: %s" % (self.name, str(e)))
 
     def _update(self, reconfigure, metrics):
-
         instances = self.instances()
         num_instances = len(instances)
 
@@ -114,8 +113,8 @@ class Service(object):
         if len(instances) > 0:
             self._update_loadbalancer()
 
-        # It might be good to wait a little bit for the servers to clear out any requests they
-        # are currently serving.
+        # It might be good to wait a little bit for the servers to clear out
+        # any requests they are currently serving.
         for instance in instances:
             logging.info("Shutting down instance %s for server %s (reason: %s)" %
                     (instance['id'], self.name, reason))
@@ -145,18 +144,18 @@ class Service(object):
 
     def instances(self):
         return self.cloud_conn.list_instances(self.config.instance_id())
-    
+
     def addresses(self):
         return self.extract_addresses_from(self.instances())
 
     def extract_addresses_from(self, instances):
-       addresses = []
-       for instance in instances:
-           for network_addresses in instance.get('addresses', {}).values():
-               for network_addrs in network_addresses:
-                   addresses.append(network_addrs['addr'])
-       return addresses
-   
+        addresses = []
+        for instance in instances:
+            for network_addresses in instance.get('addresses', {}).values():
+                for network_addrs in network_addresses:
+                    addresses.append(network_addrs['addr'])
+        return addresses
+
     def _update_loadbalancer(self, addresses = None):
         self.scale_manager.update_loadbalancer(self, addresses)
 

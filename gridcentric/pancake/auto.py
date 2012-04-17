@@ -5,34 +5,20 @@ import threading
 import logging
 
 from gridcentric.pancake.api import PancakeApi
+from gridcentric.pancake.api import authorized
 from gridcentric.pancake.manager import ScaleManager
+import gridcentric.pancake.ips as ips
 import gridcentric.pancake.zookeeper.config as zk_config
-
-def list_local_ips():
-    from netifaces import interfaces, ifaddresses, AF_INET
-    ip_list = []
-    for interface in interfaces():
-        addresses = ifaddresses(interface)
-        if AF_INET in addresses:
-            for link in addresses[AF_INET]:
-                ip_list.append(link['addr'])
-    return ip_list
-
-def is_local(host):
-    remote = socket.gethostbyname(host)
-    return remote.startswith("127.") or (remote in list_local_ips())
-
-def any_local(hosts):
-    return (True in map(is_local, hosts))
 
 class PancakeAutoApi(PancakeApi):
     def __init__(self, zk_servers):
         self.manager_running = False
         PancakeApi.__init__(self, zk_servers)
+
         self.config.add_route('api-servers', '/gridcentric/pancake/api_servers')
         self.config.add_view(self.set_api_servers, route_name='api-servers')
 
-    @PancakeApi.authorized
+    @authorized
     def set_api_servers(self, context, request):
         """
         Updates the list of API servers in the system.
@@ -64,7 +50,7 @@ class PancakeAutoApi(PancakeApi):
     # In the end, it doesn't really matter, as long as you have
     # at least one 'non-API' server.
     def reconnect(self, zk_servers):
-        is_local = any_local(zk_servers)
+        is_local = ips.any_local(zk_servers)
 
         if not(is_local):
             logging.info("Stopping Zookeeper, starting manager.")

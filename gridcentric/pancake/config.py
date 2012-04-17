@@ -13,7 +13,7 @@ class Config(object):
     def __init__(self, defaultcfg = None):
         self.defaultcfg = defaultcfg
         self.config = None
-    
+
     def _get(self, section, key):
         if self.config.has_option(section, key):
             return self.config.get(section, key)
@@ -27,8 +27,14 @@ class Config(object):
         if config_str != None:
             self.config.readfp(StringIO(config_str))
 
+    def reload(self, config_str):
+        if self.config == None:
+            self._load(config_str)
+        else:
+            self.config.readfp(StringIO(config_str))
+
 class ManagerConfig(Config):
-        
+
     def __init__(self, config_str):
         super(ManagerConfig, self).__init__(StringIO("""
 [manager]
@@ -87,12 +93,6 @@ apikey=admin
 project=admin
 """))
         self._load(config_str)
-        
-    def reload(self, config_str):
-        if self.config == None:
-            self._load(config_str)
-        else:
-            self.config.readfp(StringIO(config_str))
 
     def url(self):
         return self._get("service", "url")
@@ -124,9 +124,9 @@ project=admin
         """ Returns a list of static ips associated with the configured static instances. """
         static_instances = self._get("service", "static_instances").split(",")
 
-        # (dscannell) The static instances can be specified either as IP addresses or hostname. 
-        # If its an IP address then we are done. If its a hostname then we need to do a lookup
-        # to determine its IP address.
+        # (dscannell) The static instances can be specified either as IP
+        # addresses or hostname.  If its an IP address then we are done. If its
+        # a hostname then we need to do a lookup to determine its IP address.
         ip_addresses = []
         for static_instance in static_instances:
             try:
