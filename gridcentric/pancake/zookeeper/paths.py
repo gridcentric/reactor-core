@@ -12,8 +12,8 @@ AUTH_HASH = "%s/auth" % (ROOT)
 def auth_hash():
     return AUTH_HASH
 
-# The main system configuration for all of the scale managers.
-CONFIG = "%s/config" %(ROOT)
+# The global configuration.
+CONFIG = "%s/config" % (ROOT)
 def config():
     return CONFIG
 
@@ -29,12 +29,33 @@ def service(name):
 
 # The subtree for managers.
 MANAGERS = "%s/managers" % (ROOT)
-def managers():
-    return MANAGERS
+
+# All available manager ips.
+MANAGER_IPS = "%s/ips" % (MANAGERS)
+def manager_ips():
+    return MANAGER_IPS
+
+# The IP node for a particular manager.
+def manager_ip(ip):
+    return "%s/%s" %(MANAGER_IPS, ip)
+
+# All available manager configurations.
+MANAGER_CONFIGS = "%s/configs" % (MANAGERS)
+def manager_configs():
+    return MANAGER_CONFIGS
 
 # The node for a particular manager.
-def manager(name):
-    return "%s/%s" %(MANAGERS, name)
+def manager_config(ip):
+    return "%s/%s" %(MANAGER_CONFIGS, ip)
+
+# All available manager keys.
+MANAGER_KEYS = "%s/keys" % (MANAGERS)
+def managers():
+    return MANAGER_KEYS
+
+# The keys for a particular manager.
+def manager_keys(name):
+    return "%s/%s" %(MANAGER_KEYS, name)
 
 # The ips that have been confirmed by the system for a particular service. An ip is
 # confirmed once it sends a message to a pancake.

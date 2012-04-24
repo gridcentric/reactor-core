@@ -15,36 +15,42 @@ import gridcentric.pancake.loadbalancer.connection as lb_connection
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
 import gridcentric.pancake.zookeeper.paths as paths
+import gridcentric.pancake.ips as ips
 
 class ScaleManager(object):
 
     def __init__(self, zk_servers):
         self.running = False
-        self.uuid = str(uuid.uuid4())
-
-        self.services = {}
-        self.key_to_services = {}
-        self.key_to_owned = {}
-
-        self.managers = {}
-        self.manager_keys = []
-        self.key_to_manager = {}
-
-        self.watching_ips ={}
-        self.load_balancer = None
         self.zk_servers = zk_servers
         self.config = ManagerConfig("")
 
+        self.uuid = str(uuid.uuid4()) # Manager uuid (generated).
+
+        self.services = {}        # Service map (name -> service)
+        self.key_to_services = {} # Service map (key() -> [services...])
+
+        self.managers = {}        # Forward map of manager keys.
+        self.manager_keys = []    # Our local manager keys.
+        self.key_to_manager = {}  # Reverse map for manager keys.
+        self.key_to_owned = {}    # Service to ownership.
+
+        self.load_balancer = None # Load balancer connection.
+
     def serve(self):
-        # Create a connection to zk_configuration and read
-        # in the pancake service config.
+        # Create a Zookeeper connection.
         self.zk_conn = ZookeeperConnection(self.zk_servers)
-        manager_config = self.zk_conn.read(paths.config())
-        self.config = ManagerConfig(manager_config)
-        self.load_balancer = lb_connection.get_connection(self.config.config_path(),
-                                                          self.config.site_path())
+
+        # Register ourselves.
+        self.manager_register(initial=True)
+
+        # Create the loadbalancer connection.
+        self.load_balancer = lb_connection.get_connection(self.config.loadbalancer_name(),
+                                                          self.config.loadbalancer_config())
+
+        # Watch all IPs.
         self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
-        self.manager_register()
+
+        # Watch all managers and services.
         self.manager_change(self.zk_conn.watch_children(paths.managers(), self.manager_change))
         self.service_change(self.zk_conn.watch_children(paths.services(), self.service_change))
 
@@ -55,8 +61,12 @@ class ScaleManager(object):
         # Find the cloest key.
         keys = self.key_to_manager.keys()
         index = bisect.bisect(keys, service.key())
-        key = keys[index % len(self.key_to_manager)]
-        manager_key = self.key_to_manager[key]
+        if len(keys) == 0:
+            logging.error("No scale manager available!")
+            manager_key = None
+        else:
+            key = keys[index % len(self.key_to_manager)]
+            manager_key = self.key_to_manager[key]
 
         # Check if this is us.
         self.key_to_owned[service.key()] = (manager_key == self.uuid)
@@ -94,21 +104,61 @@ class ScaleManager(object):
         for service in services_to_remove:
             del self.services[service]
 
-    def manager_register(self):
+    def manager_config_change(self, value):
+        self.manager_register(initial=False)
+
+    def manager_register(self, initial=False):
+        # Figure out our global IPs.
+        global_ip = ips.find_global()
+        logging.info("Manager %s has key %s." % (global_ip, self.uuid))
+
+        # Reload our global config.
+        self.config = ManagerConfig("")
+        if initial:
+            global_config = self.zk_conn.watch_contents(paths.config(),
+                                                        self.manager_config_change,
+                                                        str(self.config))
+        else:
+            global_config = self.zk_conn.read(paths.config())
+        if global_config:
+            self.config.reload(global_config)
+
+        if global_ip:
+            # Reload our local config.
+            if initial:
+                local_config = self.zk_conn.watch_contents(paths.manager_config(global_ip),
+                                                           self.manager_config_change,
+                                                           str(self.config))
+            else:
+                local_config = self.zk_conn.read(paths.manager_config(global_ip))
+            if local_config:
+                self.config.reload(local_config)
+
+            # Register our IP.
+            self.zk_conn.write(paths.manager_ip(global_ip), self.uuid, ephemeral=True)
+
+        # Generate keys.
         while len(self.manager_keys) < self.config.keys():
             # Generate a random hash key to associate with this manager.
             self.manager_keys.append(hashlib.md5(str(uuid.uuid4())).hexdigest())
+        while len(self.manager_keys) > self.config.keys():
+            # Drop keys while we're too high.
+            del self.manager_keys[len(self.manager_keys) - 1]
 
         # Write out our associated hash keys as an ephemeral node.
         key_string = ",".join(self.manager_keys)
-        self.zk_conn.write(paths.manager(self.uuid), key_string, ephemeral=True)
-        logging.info("Manager has key %s." % self.uuid)
+        self.zk_conn.write(paths.manager_keys(self.uuid), key_string, ephemeral=True)
+
+        if not(initial):
+            # If we're not doing initial setup, refresh services.
+            for service in self.services.values():
+                self.manager_select(service)
 
     def manager_change(self, managers):
         for manager in managers:
             if manager not in self.managers:
                 # Read the key and update all mappings.
-                keys = self.zk_conn.read(paths.manager(manager)).split(",")
+                keys = self.zk_conn.read(paths.manager_keys(manager)).split(",")
                 logging.info("Found manager %s with %d keys." % (manager, len(keys)))
                 self.managers[manager] = keys
                 for key in keys:
@@ -121,10 +171,12 @@ class ScaleManager(object):
                 keys = self.managers[manager]
                 logging.info("Removing manager %s with %d keys." % (manager, len(keys)))
                 for key in keys:
-                    del self.key_to_manager[key]
+                    if key in self.key_to_manager:
+                        del self.key_to_manager[key]
                 managers_to_remove.append(manager)
         for manager in managers_to_remove:
-            del self.managers[manager]
+            if manager in self.managers:
+                del self.managers[manager]
 
         # Recompute all service owners.
         for service in self.services.values():
@@ -144,7 +196,9 @@ class ScaleManager(object):
 
         # Watch the config for this service.
         logging.info("Watching service %s." % (service_name))
-        self.zk_conn.watch_contents(service_path, service.update_config)
+        self.zk_conn.watch_contents(service_path,
+                                    service.update_config,
+                                    str(service_config))
 
         # Select the manager for this service.
         self.manager_select(service)
@@ -160,6 +214,7 @@ class ScaleManager(object):
         """
         logging.info("Removing service %s from manager %s" % (service_name, self.uuid))
         service = self.services.get(service_name, None)
+
         if service:
             logging.info("Unmanaging service %s" %(service_name))
             service_names = self.key_to_services.get(service.key(), [])
@@ -189,8 +244,9 @@ class ScaleManager(object):
     def register_ip(self, ips):
         def _register_ip(scale_manager, service, ip):
             logging.info("Service %s found for IP %s" % (service.name, ip))
-            # We found the service that this IP address belongs. Confirm this IP address
-            # and remove it from the new-ip address. Finally update the loadbalancer.
+            # We found the service that this IP address belongs. Confirm this
+            # IP address and remove it from the new-ip address. Finally update
+            # the loadbalancer.
             scale_manager.zk_conn.write(paths.confirmed_ip(service.name, ip), "")
             scale_manager.zk_conn.write(paths.ip_address(ip), service.name)
             scale_manager.zk_conn.delete(paths.new_ip(ip))
@@ -225,15 +281,14 @@ class ScaleManager(object):
         self.load_balancer.save()
 
     def mark_instance(self, service_name, instance_id):
+        # Increment the mark counter.
         remove_instance = False
         mark_counter = int(self.zk_conn.read(paths.marked_instance(service_name, instance_id), '0'))
-
-        # Increment the mark counter
         mark_counter += 1
 
         if mark_counter >= self.config.mark_maximum():
-            # This instance has been marked too many times. There is likely something really
-            # wrong with it, so we'll clean it up.
+            # This instance has been marked too many times. There is likely
+            # something really wrong with it, so we'll clean it up.
             remove_instance = True
             self.zk_conn.delete(paths.marked_instance(service_name, instance_id))
         else:
@@ -272,10 +327,12 @@ class ScaleManager(object):
                 continue
 
             # Run a health check on this service.
-            service.health_check()
-
-            # Do the service update.
-            service.update(reconfigure=False, metrics=metrics_by_key.get(service.key(), []))
+            try:
+                service.health_check()
+                # Do the service update.
+                service.update(reconfigure=False, metrics=metrics_by_key.get(service.key(), []))
+            except:
+                logging.error("Error updating service %s." %(service.name))
 
     def run(self):
         # Note that we are running.

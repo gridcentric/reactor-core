@@ -13,7 +13,7 @@ class Config(object):
     def __init__(self, defaultcfg = None):
         self.defaultcfg = defaultcfg
         self.config = None
-    
+
     def _get(self, section, key):
         if self.config.has_option(section, key):
             return self.config.get(section, key)
@@ -27,14 +27,26 @@ class Config(object):
         if config_str != None:
             self.config.readfp(StringIO(config_str))
 
+    def reload(self, config_str):
+        if self.config == None:
+            self._load(config_str)
+        else:
+            self.config.readfp(StringIO(config_str))
+
+    def __str__(self):
+        config_value = StringIO()
+        self.config.write(config_value)
+        return config_value.getvalue()
+
 class ManagerConfig(Config):
-        
+
     def __init__(self, config_str):
         super(ManagerConfig, self).__init__(StringIO("""
 [manager]
 health_check=5
 mark_maximum=20
 keys=64
+loadbalancer=nginx
 
 [loadbalancer]
 config_path=/etc/nginx/conf.d
@@ -42,19 +54,20 @@ site_path=/etc/nginx/sites-enabled
 """))
         self._load(config_str)
 
-    def config_path(self):
+    def loadbalancer_name(self):
         """
-        The config path is where general loadbalancer configurations should go. This maybe the
-        same as the config path.
+        The name of the loadbalancer.
         """
-        return self._get("loadbalancer", "config_path")
-    
-    def site_path(self):
+        return self._get("manager", "loadbalancer")
+
+    def loadbalancer_config(self):
         """
-        The site path is where the particular service configurations should go. This maybe the
-        same as the config path.
+        The set of keys required to configure the loadbalancer.
         """
-        return self._get("loadbalancer", "site_path")
+        result = {}
+        if self.config.has_section("loadbalancer"):
+            result.update(self.config.items("loadbalancer"))
+        return result
 
     def mark_maximum(self):
         return int(self._get("manager", "mark_maximum"))
@@ -76,7 +89,6 @@ auth_hash=
 auth_salt=
 auth_algo=sha1
 
-
 [scaling]
 min_instances=1
 max_instances=1
@@ -90,12 +102,6 @@ apikey=admin
 project=admin
 """))
         self._load(config_str)
-        
-    def reload(self, config_str):
-        if self.config == None:
-            self._load(config_str)
-        else:
-            self.config.readfp(StringIO(config_str))
 
     def url(self):
         return self._get("service", "url")
@@ -127,9 +133,9 @@ project=admin
         """ Returns a list of static ips associated with the configured static instances. """
         static_instances = self._get("service", "static_instances").split(",")
 
-        # (dscannell) The static instances can be specified either as IP addresses or hostname. 
-        # If its an IP address then we are done. If its a hostname then we need to do a lookup
-        # to determine its IP address.
+        # (dscannell) The static instances can be specified either as IP
+        # addresses or hostname.  If its an IP address then we are done. If its
+        # a hostname then we need to do a lookup to determine its IP address.
         ip_addresses = []
         for static_instance in static_instances:
             try:
