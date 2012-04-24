@@ -29,55 +29,58 @@ def calculate_server_range(total, lower, upper):
     if lower == None and upper != None:
         # There was no lower bound specified so we only use the upper bound to
         # determine the ideal number of instances.
-        r = [calculate_num_servers_uniform(total, upper)]
+        value = calculate_num_servers_uniform(total, upper)
+        r = (value, value)
     elif lower != None and upper == None:
         # There was no upper bound specified so we only use the lower bound to
         # determine the ideal number of instances.
-        r = [calculate_num_servers_uniform(total, lower)]
+        value = calculate_num_servers_uniform(total, lower)
+        r = (value, value)
     elif lower != None and upper != None:
         # The ideal number of instances is a range between what satisfies the lower bound and
         # the upper bound.
-        r = range(calculate_num_servers_uniform(total, upper), 
-                  calculate_num_servers_uniform(total, lower) + 1)
+        r = (calculate_num_servers_uniform(total, upper),
+                  calculate_num_servers_uniform(total, lower))
 
     return r
 
 def caluculate_ideal_uniform(service_spec, metrics):
     """
-    Returns the ideal number of instances these service spec should have.
-
+    Returns the ideal number of instances these service spec should have as a tuple that
+    defines the range (min_servers, max_servers).
+    
     service_spec: A list of criteria that define that define the ideal range for a metric.
                 e.g. ['20<=rate<=50','100<=response<800']
                 (The hits per second should be between 20 - 50 for each instance
                  and the response rate should be between 100ms - 800ms.)
-
+    
     metrics: A list of gather metrics that will be evaluated against the service_spec
     """
 
     metric_totals = calculate_totals(metrics)
-    logging.debug("Metric totals: %s" %(metric_totals))
-    ideal_instances = None
+    logging.debug("Metric totals: %s" % (metric_totals))
+    ideal_instances = (-1, -2)
     for criteria in service_spec:
-        c = ServiceCriteria(criteria)
-        logging.debug("Service criteria found: (%s, %s, %s)" % \
-            (c.metric_key(), c.lower_bound(), c.upper_bound()))
-        total = metric_totals.get(c.metric_key(), 0)
-        metric_ideal = calculate_server_range(total, c.lower_bound(), c.upper_bound())
-        logging.debug("Ideal instances for metric %s: %s" %(c.metric_key(), metric_ideal))
-        if ideal_instances == None:
-            # First time through the loop so we just set it to the first ideal values.
-            ideal_instances = set(metric_ideal)
-        else:
-            # We find the intersection of ideal servers between the existing metrics
-            # and this one.
-            ideal_instances = ideal_instances & set(metric_ideal)
-        logging.debug("Running ideal instances %s" %(ideal_instances))
+        if criteria != '':
+            c = ServiceCriteria(criteria)
+            logging.debug("Service criteria found: (%s, %s, %s)" % (c.metric_key(), c.lower_bound(), c.upper_bound()))
+            total = metric_totals.get(c.metric_key(), 0)
+            (metric_min, metric_max) = calculate_server_range(total, c.lower_bound(), c.upper_bound())
+            logging.debug("Ideal instances for metric %s: %s" % (c.metric_key(), (metric_min, metric_max)))
+            if ideal_instances == (-1, -2):
+                # First time through the loop so we just set it to the first ideal values.
+                ideal_instances = (metric_min, metric_max)
+            else:
+                # We find the intersection of ideal servers between the existing metrics
+                # and this one.
+                ideal_instances = (max(ideal_instances(0), metric_min), min(idea_instances(1), metric_max))
+            logging.debug("Returning ideal instances [%s,%s]" % (ideal_instances))
 
-    return list(ideal_instances)
+    return ideal_instances
 
-    
+
 class ServiceCriteria(object):
-    
+
     def __init__(self, criteria_str):
         self.values = []
         self.operators = []
@@ -85,7 +88,7 @@ class ServiceCriteria(object):
         self._parse(criteria_str)
 
     def upper_bound(self):
-        
+
         if len(self.values) < 2:
             # No upper bound has been defined, so we just define it as None
             self.values += [None]
@@ -105,9 +108,9 @@ class ServiceCriteria(object):
         The criteria string is of the form:
         x [<=] metric_key [<=] y
         """
-        
+
         pattern = "((.+)(<=?))?(.+)(<=?)(.+)"
-        
+
         m = re.match(pattern, criteria_str)
         if m != None:
             for group in list(m.groups())[1:]:
@@ -126,12 +129,12 @@ class ServiceCriteria(object):
 
     def _add_value(self, value):
             self.values += [value]
-        
+
     def _add_operator(self, operator):
         self.operators += [operator]
-    
+
     def _add_metric_key(self, metric_key):
         self.key = metric_key
         if len(self.values) == 0:
             self.values += [None]
-            self.operators += [None]     
+            self.operators += [None]
