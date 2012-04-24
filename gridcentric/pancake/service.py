@@ -103,7 +103,7 @@ class Service(object):
         else:
             # we need to either scale up or scale down. Our target will be the midpoint in the
             # target range.
-            target = target_min + target_max / 2
+            target = (target_min + target_max) / 2
 
         logging.debug("Target number of instances for service %s determined to be %s (current: %s)"
                       % (self.name, target, num_instances))
