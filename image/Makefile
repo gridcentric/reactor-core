@@ -26,6 +26,15 @@ PACKAGES += python-netifaces
 
 PACKAGE_CMDLINE := $(PACKAGES:%=--addpkg=%)
 
+ARGS := --rootsize=$(ROOTSIZE) \
+	--swapsize=$(SWAPSIZE) \
+	--hostname=$(HOSTNAME) \
+	--execscript=deploy \
+	--domain=$(DOMAINNAME) \
+	--user=$(USERNAME) \
+	--name=$(USERNAME) \
+	--pass=$(PASSWORD)
+
 default:
 	@echo "Use the target build-X for some hypervisor X (e.g. xen, kvm)."
 .PHONY: default
@@ -39,19 +48,13 @@ chroot-%:
 	PATH=$$PWD:$$PATH ubuntu-vm-builder kvm $* \
 	    --destdir=$$PWD/dist-$* \
 	    --only-chroot \
-	    --chroot-dir=$@
+	    --chroot-dir=$@ \
+	    $(ARGS)
 
 build-%: chroot-$(FLAVOR)
 	@rm -rf dist-$*
 	PATH=$$PWD:$$PATH ubuntu-vm-builder $* $(FLAVOR) \
 	    --destdir=$$PWD/dist-$* \
 	    --existing-chroot=chroot-$(FLAVOR) \
-	    --rootsize=$(ROOTSIZE) \
-	    --swapsize=$(SWAPSIZE) \
-	    --hostname=$(HOSTNAME) \
-	    --execscript=deploy \
-	    --domain=$(DOMAINNAME) \
-	    --user=$(USERNAME) \
-	    --name=$(USERNAME) \
-	    --pass=$(PASSWORD) \
+	    $(ARGS) \
 	    $(PACKAGE_CMDLINE)
