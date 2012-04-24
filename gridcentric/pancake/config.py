@@ -47,6 +47,10 @@ health_check=5
 mark_maximum=20
 keys=64
 loadbalancer=nginx
+
+[loadbalancer]
+config_path=/etc/nginx/conf.d
+site_path=/etc/nginx/sites-enabled
 """))
         self._load(config_str)
 
