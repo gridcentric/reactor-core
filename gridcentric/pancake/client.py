@@ -5,7 +5,7 @@ from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 import gridcentric.pancake.zookeeper.paths as paths
 
 class PancakeClient(object):
-    
+
     def __init__(self, zk_servers):
         self.zk_conn = ZookeeperConnection(zk_servers)
 
@@ -48,7 +48,7 @@ class PancakeClient(object):
         confirmed_ips = self.zk_conn.list_children(paths.confirmed_ips(service_name))
         if confirmed_ips != None:
             ip_addresses += confirmed_ips
-            
+
         configured_ips = ServiceConfig(self.get_service_config(service_name)).static_ips()
         if configured_ips != None:
             ip_addresses += configured_ips
@@ -56,16 +56,17 @@ class PancakeClient(object):
         return ip_addresses
 
     def record_new_ipaddress(self, ip_address):
+        self.zk_conn.delete(paths.new_ip(ip_address))
         self.zk_conn.write(paths.new_ip(ip_address), "")
-    
+
     def get_ip_address_service(self, ip_address):
         """
         Returns the service name associated with this ip address.
         """
         return self.zk_conn.read(paths.ip_address(ip_address))
-    
+
     def auth_hash(self):
         return self.zk_conn.read(paths.auth_hash())
-    
+
     def set_auth_hash(self, auth_hash):
         self.zk_conn.write(paths.auth_hash(), auth_hash)

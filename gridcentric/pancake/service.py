@@ -102,7 +102,7 @@ class Service(object):
         else:
             # we need to either scale up or scale down. Our target will be the midpoint in the
             # target range.
-            target = target_min + target_max / 2
+            target = (target_min + target_max) / 2
 
         logging.debug("Target number of instances for service %s determined to be %s (current: %s)"
                       % (self.name, target, num_instances))
@@ -181,28 +181,48 @@ class Service(object):
                     addresses.append(network_addrs['addr'])
         return addresses
 
-    def _update_loadbalancer(self, addresses = None):
+    def _update_loadbalancer(self, addresses=None):
         self.scale_manager.update_loadbalancer(self, addresses)
 
     def health_check(self):
         instances = self.instances()
 
         # Check if any expected machines have failed to come up and confirm their IP address.
-        confirmed_ips = self.scale_manager.confirmed_ips(self.name)
+        confirmed_ips = set(self.scale_manager.confirmed_ips(self.name))
 
         dead_instances = []
+
+        # There are the confirmed ips that are actually associated with an instance. Other confirmed
+        # ones will need to be dropped because the instances they refer to no longer exists.
+        associated_confirmed_ips = set()
         for instance in instances:
             expected_ips = self.extract_addresses_from([instance])
             # As long as there is one expected_ip in the confirmed_ip, everything is good. Otherwise
             # This instance has not checked in. We need to mark it, and it if has enough marks
             # it will be destroyed.
             logging.info("expected ips=%s, confirmed ips=%s" % (expected_ips, confirmed_ips))
-            if len(set(expected_ips) & set(confirmed_ips)) == 0:
+            instance_confirmed_ips = confirmed_ips.intersection(expected_ips)
+            if len(instance_confirmed_ips) == 0:
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
                 if self.scale_manager.mark_instance(self.name, instance['id']):
                     # This instance has been deemed to be dead and should be cleaned up.
                     dead_instances += [instance]
+            else:
+                associated_confirmed_ips = associated_confirmed_ips.union(instance_confirmed_ips)
+
+        # TODO(dscannell) We also need to ensure that the confirmed IPs are still valid. In other
+        # words, we have a running instance with the confirmed IP.
+        orphaned_confirmed_ips = confirmed_ips.difference(associated_confirmed_ips)
+
+        if len(orphaned_confirmed_ips) > 0:
+            # There are orphaned ip addresses. We need to drop them and then update the load
+            # balancer because there is no actual instance backing them.
+            logging.info("Dropping ip addresses %s for service %s because they do not have"
+                         "backing instances." % (orphaned_confirmed_ips, self.name))
+            for orphaned_address in orphaned_confirmed_ips:
+                self.scale_manager.drop_ip(self.name, orphaned_address)
+            self._update_loadbalancer()
 
         # We assume they're dead, so we can prune them.
         self.drop_instances(dead_instances, "instance has been marked for destruction")
