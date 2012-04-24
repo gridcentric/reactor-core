@@ -12,6 +12,9 @@ class PancakeClient(object):
     def list_managed_services(self):
         return self.zk_conn.list_children(paths.services())
 
+    def list_managers(self):
+        return self.zk_conn.list_children(paths.manager_ips())
+
     def manage_service(self, service_name, config):
         self.zk_conn.write(paths.service(service_name), config)
 
@@ -23,6 +26,18 @@ class PancakeClient(object):
 
     def get_service_config(self, service_name):
         return self.zk_conn.read(paths.service(service_name))
+
+    def update_config(self, config):
+        self.zk_conn.write(paths.config(), config)
+
+    def update_manager_config(self, manager, config):
+        self.zk_conn.write(paths.manager_config(manager), config)
+
+    def get_config(self, config):
+        return self.zk_conn.read(paths.config())
+
+    def get_manager_config(self, manager):
+        return self.zk_conn.read(paths.manager_config(manager))
 
     def get_service_ip_addresses(self, service_name):
         """

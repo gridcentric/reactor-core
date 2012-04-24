@@ -28,8 +28,8 @@ class Service(object):
         logging.info("Managing service %s" % (self.name))
 
     def unmanage(self):
-        # Delete all the launched instances, and unbless the instance. Essentially, return it
-        # back to the unmanaged.
+        # Delete all the launched instances, and unbless the instance.
+        # Essentially, return it back to the unmanaged.
         logging.info("Unmanaging service %s" % (self.name))
 
         # Delete all the launched instances.
@@ -88,7 +88,6 @@ class Service(object):
         return (target_min, target_max)
 
     def _update(self, reconfigure, metrics):
-
         instances = self.instances()
         num_instances = len(instances)
 
@@ -139,8 +138,8 @@ class Service(object):
         if len(instances) > 0:
             self._update_loadbalancer()
 
-        # It might be good to wait a little bit for the servers to clear out any requests they
-        # are currently serving.
+        # It might be good to wait a little bit for the servers to clear out
+        # any requests they are currently serving.
         for instance in instances:
             logging.info("Shutting down instance %s for server %s (reason: %s)" %
                     (instance['id'], self.name, reason))
@@ -175,12 +174,12 @@ class Service(object):
         return self.extract_addresses_from(self.instances())
 
     def extract_addresses_from(self, instances):
-       addresses = []
-       for instance in instances:
-           for network_addresses in instance.get('addresses', {}).values():
-               for network_addrs in network_addresses:
-                   addresses.append(network_addrs['addr'])
-       return addresses
+        addresses = []
+        for instance in instances:
+            for network_addresses in instance.get('addresses', {}).values():
+                for network_addrs in network_addresses:
+                    addresses.append(network_addrs['addr'])
+        return addresses
 
     def _update_loadbalancer(self, addresses=None):
         self.scale_manager.update_loadbalancer(self, addresses)

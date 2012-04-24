@@ -62,6 +62,29 @@ class PancakeApiClient(httplib2.Http):
                                                  service_name, 'GET')
         return body.get('config',"")
 
+    def list_managers(self):
+        """
+        Returns a list of all the available managers.
+        """
+        resp, body = self._authenticated_request('/gridcentric/pancake/managers', 'GET')
+        return body.get('managers',[])
+
+    def update_manager(self, manager, config):
+        """
+        Update the manager with the given configuration.
+        """
+        self._authenticated_request('/gridcentric/pancake/managers/%s' %
+                                    (manager or 'default'), 'POST',
+                                    body={'config':config})
+
+    def get_manager_config(self, manager):
+        """
+        Return the manager's configuration.
+        """
+        resp, body = self._authenticated_request('/gridcentric/pancake/managers/%s' %
+                                                 (manager or 'default'), 'GET')
+        return body.get('config',"")
+
     def list_service_ips(self, service_name):
         """
         Returns a list of the ip addresses (both dynamically confirmed and manually configured) for
@@ -103,6 +126,23 @@ class PancakeApiClient(httplib2.Http):
                 pass
         return resp, body
 
+def authorized(request_handler):
+    """
+    A Decorator that does a simple check to see if the request is
+    authorized before executing the actual handler. 
+    """
+    def fn(self, context, request):
+         auth_key = request.headers.get('X-Auth-Key', None)
+         if self._authorize_admin_access(context, request, auth_key) or \
+            self._authorize_service_access(context, request, auth_key) or \
+            self._authorize_ip_access(context, request):
+               
+            return request_handler(self, context, request)
+         else:
+            # Return an unauthorized response.
+            return Response(status=401)
+    return fn
+
 class PancakeApi:
 
     def __init__(self, zk_servers):
@@ -115,6 +155,12 @@ class PancakeApi:
 
         self.config.add_route('new-ip', '/gridcentric/pancake/new-ip/{ipaddress}')
         self.config.add_view(self.new_ip_address, route_name='new-ip')
+
+        self.config.add_route('manager-action', '/gridcentric/pancake/managers/{manager}')
+        self.config.add_view(self.handle_manager_action, route_name='manager-action')
+
+        self.config.add_route('manager-list', '/gridcentric/pancake/managers')
+        self.config.add_view(self.list_managers, route_name='manager-list')
 
         self.config.add_route('service-action', '/gridcentric/pancake/services/{service_name}')
         self.config.add_view(self.handle_service_action, route_name='service-action')
@@ -147,23 +193,6 @@ class PancakeApi:
              auth_key = request.headers.get('X-Auth-Key', None)
              if self._authorize_admin_access(context, request, auth_key):
                 return request_handler(self, context, request)
-             else:
-                 # Return an unauthorized response.
-                return Response(status=401)
-        return fn
-
-    def authorized(request_handler):
-        """
-        A Decorator that does a simple check to see if the request is
-        authorized before executing the actual handler. 
-        """
-        def fn(self, context, request):
-             auth_key = request.headers.get('X-Auth-Key', None)
-             if self._authorize_admin_access(context, request, auth_key) or \
-                self._authorize_service_access(context, request, auth_key) or \
-                self._authorize_ip_access(context, request):
-                 
-                 return request_handler(self, context, request)
              else:
                  # Return an unauthorized response.
                 return Response(status=401)
@@ -220,7 +249,6 @@ class PancakeApi:
                     return True
         return False
 
-
     def _create_admin_auth_token(self, auth_key):
         salt = 'gridcentricpancake'
         return hashlib.sha1("%s%s" %(salt, auth_key)).hexdigest()
@@ -242,7 +270,6 @@ class PancakeApi:
                              "because algorithm type is not supported.")
                 return ""
 
-        
     @authorized
     def set_auth_key(self, context, request):
         """
@@ -255,6 +282,42 @@ class PancakeApi:
             self.client.set_auth_hash(self._create_admin_auth_token(auth_key))
 
         return Response()
+
+    @authorized
+    def handle_manager_action(self, context, request):
+        """
+        This Handles a general manager action:
+        GET - Returns the manager config in the Response body
+        POST - Updates the manager with a new config in the request body
+        DELETE - Removes the management config.
+        """
+        self.ensure_connected()
+        manager = request.matchdict['manager']
+        response = Response()
+        if request.method == "GET":
+            logging.info("Retrieving manager %s configuration" % manager)
+            if not(manager) or manager == "default":
+                manager_config = self.client.get_config(manager) or ""
+            else:
+                manager_config = self.client.get_manager_config(manager) or ""
+            response = Response(body=json.dumps({'config':manager_config}))
+        elif request.method == "POST":
+            manager_config = json.loads(request.body)
+            logging.info("Updating manager %s" % manager)
+            if not(manager) or manager == "default":
+                self.client.update_config(manager_config.get('config',""))
+            else:
+                self.client.update_manager_config(manager, manager_config.get('config',""))
+        return response
+
+    @authorized
+    def list_managers(self, context, request):
+        """
+        Returns a list of managers currently running.
+        """
+        self.ensure_connected()
+        managers = self.client.list_managers()
+        return Response(body=json.dumps({'managers':managers}))
 
     @authorized
     def handle_service_action(self, context, request):

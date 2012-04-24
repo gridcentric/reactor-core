@@ -21,17 +21,18 @@ debug = False
 logfile = None
 
 def usage():
-    print "usage: pancake [-h] [--help] [-z |--zookeeper=<zookeeper instance>] command"
+    print "usage: pancake [-h|--help] [-z|--zookeeper=<zookeeper instance>] command"
     print ""
     print "Optional arguments:"
     print "   -h, --help             Display this help message"
     print ""
-    print "   -a, --api=            The API url to connect to (default is http://localhost:8080)."
+    print "   -a, --api=            The API url (default is http://localhost:8080)."
     print ""
     print "   -p, --password=        The password used to connect to the API."
     print ""
-    print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option multiple"
-    print "                          times to specific multiple instances. Only necessary for 'run*'."
+    print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option"
+    print "                          multiple times to specific multiple instances. Only"
+    print "                          necessary for run*."
     print "                          The default is the last configuration, or localhost."
     print ""
     print "   -d, --debug            Enables debugging log and full stack trace errors."
@@ -41,17 +42,24 @@ def usage():
     print "Commands:"
     print "    list-services            List all the services currently being managed."
     print ""
-    print "    manage <service_name>    Manage a new serivce with the given name. The service's"
-    print "                             configuration is read from stdin."
+    print "    manage <service_name>    Manage a new serivce with the given name. The"
+    print "                             service configuration is read from stdin."
     print ""
     print "    unmanage <service_name>  Unmanged the service with the given name."
     print ""
-    print "    update <service_name>    Update the managed service's configuration by reading the"
-    print "                             values from stdin."
+    print "    update <service_name>    Update the managed service's configuration by"
+    print "                             reading the values from stdin."
     print ""
     print "    show <service_name>      Show the current configuration for the service."
     print ""
-    print "    list-ips <service_name>  Displays all of the IP addresses associated with the service."
+    print "    list-ips <service_name>  Displays all of the IP addresses associated with"
+    print "                             the service."
+    print ""
+    print "    list-managers            List all the available managers."
+    print ""
+    print "    update-manager [ip]      Update the current configuration for the manager."
+    print ""
+    print "    show-manager [ip]        Show the current configuration for the manager."
     print ""
     print "    passwd <password>        Updates the API's password."
     print ""
@@ -59,8 +67,9 @@ def usage():
     print ""
     print "    runapi                   Runs the API server."
     print ""
-    print "    run                      Runs the API server, and either Zookeeper or the scale"
-    print "                             manager, depending on configured Zookeeper servers."
+    print "    run                      Runs the API server, and either Zookeeper or the"
+    print "                             scale manager, depending on configured Zookeeper"
+    print "                             servers."
 
 opts, args = getopt.getopt(sys.argv[1:], 
                             "ha:p:z:dl:", 
@@ -148,6 +157,39 @@ try:
         service_name = args[1]
         api_client = get_api_client()
         config = api_client.get_service_config(service_name)
+        print config.strip()
+
+    elif command == "list-managers":
+        api_client = get_api_client()
+        managers = api_client.list_managers()
+        if managers:
+            for manager in managers:
+                print manager
+
+    elif command == "update-manager":
+        if len(args) > 1:
+            manager = args[1]
+        else:
+            manager = None
+        new_conf = ""
+        for line in sys.stdin.readlines():
+            new_conf += line
+
+        # Write out the full contents of the updated configuration.
+        api_client = get_api_client()
+        config = SafeConfigParser()
+        config.readfp(StringIO(new_conf))
+        config_value = StringIO()
+        config.write(config_value)
+        api_client.update_manager(manager, config_value.getvalue())
+
+    elif command == "show-manager":
+        if len(args) > 1:
+            manager = args[1]
+        else:
+            manager = None
+        api_client = get_api_client()
+        config = api_client.get_manager_config(manager)
         print config.strip()
 
     elif command == "list-ips":
