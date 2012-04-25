@@ -33,7 +33,8 @@ ARGS := --rootsize=$(ROOTSIZE) \
 	--domain=$(DOMAINNAME) \
 	--user=$(USERNAME) \
 	--name=$(USERNAME) \
-	--pass=$(PASSWORD)
+	--pass=$(PASSWORD) \
+	$(PACKAGE_CMDLINE)
 
 default:
 	@echo "Use the target build-X for some hypervisor X (e.g. xen, kvm)."
@@ -56,5 +57,4 @@ build-%: chroot-$(FLAVOR)
 	PATH=$$PWD:$$PATH ubuntu-vm-builder $* $(FLAVOR) \
 	    --destdir=$$PWD/dist-$* \
 	    --existing-chroot=chroot-$(FLAVOR) \
-	    $(ARGS) \
-	    $(PACKAGE_CMDLINE)
+	    $(ARGS)
