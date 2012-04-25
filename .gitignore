@@ -9,5 +9,6 @@ smoke-tests/*.log
 image/contrib/python-zookeeper-3.4.3.tgz
 image/dist-*
 image/chroot-*
+image/local
 contrib/zookeeper-3.4.3
 zookeeper-*/
