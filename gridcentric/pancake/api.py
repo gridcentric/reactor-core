@@ -10,6 +10,7 @@ from pyramid.response import Response
 
 from gridcentric.pancake.config import ServiceConfig
 from gridcentric.pancake.client import PancakeClient
+from gridcentric.pancake.zookeeper.connection import ZookeeperException
 
 class PancakeApiClient(httplib2.Http):
     """
@@ -150,6 +151,20 @@ def authorized(request_handler):
             return Response(status=401)
     return fn
 
+def connected(request_handler):
+    """
+    A decorator that ensures we are connected to the Zookeeper server.
+    """
+    def fn(*args, **kwargs):
+        try:
+            self = args[0]
+            self.ensure_connected()
+            return request_handler(*args, **kwargs)
+        except ZookeeperException:
+            # Disconnect (next request will reconnect).
+            self.disconnect()
+    return fn
+
 class PancakeApi:
 
     def __init__(self, zk_servers):
@@ -183,6 +198,9 @@ class PancakeApi:
     def reconnect(self, zk_servers):
         self.client = PancakeClient(zk_servers)
 
+    def disconnect(self):
+        self.client = None
+
     def ensure_connected(self):
         if not(self.client):
             self.reconnect(self.zk_servers)
@@ -205,8 +223,8 @@ class PancakeApi:
                 return Response(status=401)
         return fn
 
+    @connected
     def _authorize_admin_access(self, context, request, auth_key):
-        self.ensure_connected()
         auth_hash = self.client.auth_hash()
         if auth_hash != None:
             if auth_key != None:
@@ -219,8 +237,8 @@ class PancakeApi:
             # on so all requests are allowed by default.
             return True
 
+    @connected
     def _authorize_service_access(self, context, request, auth_key):
-        self.ensure_connected()
         service_name = request.matchdict.get('service_name', None)
         if service_name != None:
             service_config = ServiceConfig(self.client.get_service_config(service_name))
@@ -237,11 +255,12 @@ class PancakeApi:
                 # on so all requests are allowed by default.
                 return True
 
+    @connected
     def _authorize_ip_access(self, context, request):
-        # TODO(dscannell): The remote ip address is taken from the request.environ['REMOTE_ADDR']. 
-        # This value may need to be added by some WSGI middleware depending on what webserver
-        # is fronting this app.
-        
+        # TODO(dscannell): The remote ip address is taken from the
+        # request.environ['REMOTE_ADDR'].  This value may need to be added by
+        # some WSGI middleware depending on what webserver is fronting this
+        # app.
         matched_route = request.matched_route
         if matched_route != None:
             if matched_route.name.endswith("-implicit"):
@@ -264,7 +283,7 @@ class PancakeApi:
         if auth_salt == None:
             auth_salt = ""
         
-        salted = "%s%s" %(auth_salt, auth_key)
+        salted = "%s%s" % (auth_salt, auth_key)
         
         if algo == "none":
             return salted
@@ -277,12 +296,12 @@ class PancakeApi:
                              "because algorithm type is not supported.")
                 return ""
 
+    @connected
     @authorized
     def set_auth_key(self, context, request):
         """
         Updates the auth key in the system.
         """
-        self.ensure_connected()
         if request.method == 'POST':
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
@@ -290,6 +309,7 @@ class PancakeApi:
 
         return Response()
 
+    @connected
     @authorized
     def handle_manager_action(self, context, request):
         """
@@ -298,7 +318,6 @@ class PancakeApi:
         POST - Updates the manager with a new config in the request body
         DELETE - Removes the management config.
         """
-        self.ensure_connected()
         manager = request.matchdict['manager']
         response = Response()
         if request.method == "GET":
@@ -317,18 +336,19 @@ class PancakeApi:
                 self.client.update_manager_config(manager, manager_config.get('config',""))
         return response
 
+    @connected
     @authorized
     def list_managers(self, context, request):
         """
         Returns a list of managers currently running.
         """
-        self.ensure_connected()
         managers_configured = self.client.list_managers_configured()
         managers_active = self.client.list_managers_active()
         response = { 'managers_configured':managers_configured,
                      'managers_active':managers_active }
         return Response(body=json.dumps(response))
 
+    @connected
     @authorized
     def handle_service_action(self, context, request):
         """
@@ -337,7 +357,6 @@ class PancakeApi:
         POST - Either manages or updates the service with a new config in the request body
         DELETE - Unmanages the service.
         """
-        self.ensure_connected()
         service_name = request.matchdict['service_name']
         response = Response()
         if request.method == "GET":
@@ -353,26 +372,26 @@ class PancakeApi:
             self.client.update_service(service_name, service_config.get('config',""))
         return response
 
+    @connected
     @authorized
     def list_service_ips(self, context, request):
-        self.ensure_connected()
         service_name = request.matchdict['service_name']
         if request.method == 'GET':
             return Response(body=json.dumps(
                         {'ip_addresses': self.client.get_service_ip_addresses(service_name)}))
         return Response()
 
+    @connected
     @authorized
     def list_services(self, context, request):
         """
         Returns a list of services currently being managed.
         """
-        self.ensure_connected()
         services = self.client.list_managed_services()
         return Response(body=json.dumps({'services':services}))
 
+    @connected
     def new_ip_address(self, context, request):
-        self.ensure_connected()
         ip_address = request.matchdict['ipaddress']
         logging.info("New IP address %s has been recieved." % (ip_address))
         self.client.record_new_ipaddress(ip_address)
