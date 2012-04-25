@@ -56,17 +56,15 @@ class PancakeAutoApi(PancakeApi):
         is_local = ips.any_local(zk_servers)
 
         if not(is_local):
-            logging.info("Stopping Zookeeper, starting manager.")
-
-            # Start a manager (no Zookeeper).
+            # Ensure that Zookeeper is stopped.
+            logging.info("Stopping Zookeeper; starting manager.")
             zk_config.ensure_stopped()
             zk_config.check_config(zk_servers)
             self.start_manager(zk_servers)
 
         else:
-            logging.info("Stopping Manager, starting Zookeeper.")
-
-            # Start an API server (w/ Zookeeper).
+            # Ensure that Zookeeper is started.
+            logging.info("Starting Zookeeper; stopping manager.")
             self.stop_manager()
             zk_config.check_config(zk_servers)
             zk_config.ensure_started()

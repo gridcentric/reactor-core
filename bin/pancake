@@ -159,9 +159,16 @@ try:
         config = api_client.get_service_config(service_name)
         print config.strip()
 
-    elif command == "list-managers":
+    elif command == "list-managers-configured":
         api_client = get_api_client()
-        managers = api_client.list_managers()
+        managers = api_client.list_managers_configured()
+        if managers:
+            for manager in managers:
+                print manager
+
+    elif command == "list-managers-active":
+        api_client = get_api_client()
+        managers = api_client.list_managers_active()
         if managers:
             for manager in managers:
                 print manager

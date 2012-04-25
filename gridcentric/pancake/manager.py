@@ -219,8 +219,9 @@ class ScaleManager(object):
             logging.info("Unmanaging service %s" %(service_name))
             service_names = self.key_to_services.get(service.key(), [])
             if service_name in service_names:
-                # Remove the service name from the list of services with the same key. If the service
-                # name is not in the list, then it is fine because we are just removing it anyway.
+                # Remove the service name from the list of services with the
+                # same key. If the service name is not in the list, then it is
+                # fine because we are just removing it anyway.
                 service_names.remove(service_name)
 
             if self.service_owned(service):
@@ -308,7 +309,8 @@ class ScaleManager(object):
         for ip in metrics:
             for service in self.services.values():
                 if not service.name in service_addresses:
-                    service_addresses[service.name] = service.addresses() + service.static_addresses()
+                    service_addresses[service.name] = \
+                        service.addresses() + service.static_addresses()
                 service_ips = service_addresses[service.name] 
                 if not(service.key() in metrics_by_key):
                     metrics_by_key[service.key()] = []
