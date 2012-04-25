@@ -44,5 +44,6 @@ env :
 
 # Build a virtual machine image for the given hypervisor.
 image-% : all image/contrib/python-zookeeper-3.4.3.tgz
+	@mkdir -p image/local
 	@cp pancake-$(VERSION).tgz image/local
 	@sudo make -C image build-$*
