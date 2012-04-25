@@ -4,6 +4,9 @@ import re
 import subprocess
 import os
 
+import gridcentric.pancake.ips as ips
+
+ZOOKEEPER_ID_FILE = "/etc/zookeeper/conf/myid"
 ZOOKEEPER_CONFIG_FILE = "/etc/zookeeper/conf/zoo.cfg"
 ZOOKEEPER_CONFIG_DATA = \
 """# This file has been automatically generated, do not edit.
@@ -20,7 +23,13 @@ ZOOKEEPER_DATA_PORT = 2888
 ZOOKEEPER_ELECTION_PORT = 3888
 ZOOKEEPER_PID_FILE = "/var/run/zookeeper/zookeeper.pid"
 
-def generate_config(servers):
+def generate_config(myid, servers):
+    # Write out the ID file.
+    f = open(ZOOKEEPER_ID_FILE, 'w')
+    f.write(str(myid).strip() + "\n")
+    f.close()
+
+    # Write out the server file.
     f = open(ZOOKEEPER_CONFIG_FILE, 'w')
     f.write(ZOOKEEPER_CONFIG_DATA)
     for i in range(len(servers)):
@@ -60,15 +69,30 @@ def ensure_started():
     if not(is_running()):
         subprocess.call(["/etc/init.d/zookeeper", "start"])
 
-def check_config(new_servers):
+def compute_id(servers):
+    try:
+        return map(ips.is_local, servers).index(True) + 1
+    except ValueError:
+        return 0
+
+def update(new_servers):
+    global servers
+    servers.sort()
     new_servers.sort()
+
+    old_id = compute_id(servers)
+    new_id = compute_id(new_servers)
+
+def check_config(new_servers):
     old_servers = read_config()
     old_servers.sort()
-    if new_servers != old_servers:
-        generate_config(new_servers)
+    old_id = compute_id(old_servers)
+
+    new_servers.sort()
+    new_id = compute_id(new_servers)
+
+    if new_servers != old_servers or old_id != new_id:
+        generate_config(new_id, new_servers)
         if is_running():
             ensure_stopped()
             ensure_started()
-
-if __name__ == "__main__":
-    check_config(["127.0.0.1"])
