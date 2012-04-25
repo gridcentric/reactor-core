@@ -62,12 +62,19 @@ class PancakeApiClient(httplib2.Http):
                                                  service_name, 'GET')
         return body.get('config',"")
 
-    def list_managers(self):
+    def list_managers_configured(self):
         """
-        Returns a list of all the available managers.
+        Returns a list of all configured managers.
         """
         resp, body = self._authenticated_request('/gridcentric/pancake/managers', 'GET')
-        return body.get('managers',[])
+        return body.get('managers_configured',[])
+
+    def list_managers_active(self):
+        """
+        Returns a list of all active managers.
+        """
+        resp, body = self._authenticated_request('/gridcentric/pancake/managers', 'GET')
+        return body.get('managers_active',[])
 
     def update_manager(self, manager, config):
         """
@@ -316,8 +323,11 @@ class PancakeApi:
         Returns a list of managers currently running.
         """
         self.ensure_connected()
-        managers = self.client.list_managers()
-        return Response(body=json.dumps({'managers':managers}))
+        managers_configured = self.client.list_managers_configured()
+        managers_active = self.client.list_managers_active()
+        response = { 'managers_configured':managers_configured,
+                     'managers_active':managers_active }
+        return Response(body=json.dumps(response))
 
     @authorized
     def handle_service_action(self, context, request):
