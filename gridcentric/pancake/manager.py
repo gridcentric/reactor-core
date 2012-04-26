@@ -328,8 +328,8 @@ class ScaleManager(object):
             if not(self.service_owned(service)):
                 continue
 
-            # Run a health check on this service.
             try:
+                # Run a health check on this service.
                 service.health_check()
                 # Do the service update.
                 service.update(reconfigure=False, metrics=metrics_by_key.get(service.key(), []))

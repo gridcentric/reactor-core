@@ -51,8 +51,10 @@ class Service(object):
 
         # Evaluate the metrics on these instances and get the ideal bounds on the number
         # of servers that should exist.
-        ideal_min, ideal_max = metric_calculator.caluculate_ideal_uniform(self.config.metrics(), metrics)
-        logging.debug("Metrics for service %s: ideal_servers=%s (%s)" % (self.name, (ideal_min, ideal_max), metrics))
+        ideal_min, ideal_max = metric_calculator.calculate_ideal_uniform( \
+                self.config.metrics(), metrics)
+        logging.debug("Metrics for service %s: ideal_servers=%s (%s)" % \
+                (self.name, (ideal_min, ideal_max), metrics))
 
         if ideal_max < ideal_min:
             # Either the metrics are undefined or have conflicting answers. We simply

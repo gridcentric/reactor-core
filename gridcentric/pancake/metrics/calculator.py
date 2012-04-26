@@ -2,9 +2,10 @@
 This module is used to calculate the ideal number of instances a service requires given
 all the gather metrics and the scaling spec of the service.
 """
+
 import logging
 import re
-
+import math
 
 def calculate_totals(metrics):
     """
@@ -22,7 +23,7 @@ def calculate_totals(metrics):
     return totals
 
 def calculate_num_servers_uniform(total, bound):
-    return int(total / bound + (total % bound > 0))
+    return int(math.ceil(total / bound))
 
 def calculate_server_range(total, lower, upper):
     r = []
@@ -30,21 +31,21 @@ def calculate_server_range(total, lower, upper):
         # There was no lower bound specified so we only use the upper bound to
         # determine the ideal number of instances.
         value = calculate_num_servers_uniform(total, upper)
-        r = (value, value)
+        r = (value, sys.maxint)
     elif lower != None and upper == None:
         # There was no upper bound specified so we only use the lower bound to
         # determine the ideal number of instances.
         value = calculate_num_servers_uniform(total, lower)
-        r = (value, value)
+        r = (0, value)
     elif lower != None and upper != None:
-        # The ideal number of instances is a range between what satisfies the lower bound and
-        # the upper bound.
+        # The ideal number of instances is a range between what satisfies the
+        # lower bound and the upper bound.
         r = (calculate_num_servers_uniform(total, upper),
-                  calculate_num_servers_uniform(total, lower))
+             calculate_num_servers_uniform(total, lower))
 
     return r
 
-def caluculate_ideal_uniform(service_spec, metrics):
+def calculate_ideal_uniform(service_spec, metrics):
     """
     Returns the ideal number of instances these service spec should have as a tuple that
     defines the range (min_servers, max_servers).
@@ -63,21 +64,24 @@ def caluculate_ideal_uniform(service_spec, metrics):
     for criteria in service_spec:
         if criteria != '':
             c = ServiceCriteria(criteria)
-            logging.debug("Service criteria found: (%s, %s, %s)" % (c.metric_key(), c.lower_bound(), c.upper_bound()))
+            logging.debug("Service criteria found: (%s, %s, %s)" % \
+                    (c.metric_key(), c.lower_bound(), c.upper_bound()))
             total = metric_totals.get(c.metric_key(), 0)
-            (metric_min, metric_max) = calculate_server_range(total, c.lower_bound(), c.upper_bound())
-            logging.debug("Ideal instances for metric %s: %s" % (c.metric_key(), (metric_min, metric_max)))
+            (metric_min, metric_max) = \
+                    calculate_server_range(total, c.lower_bound(), c.upper_bound())
+            logging.debug("Ideal instances for metric %s: %s" % \
+                    (c.metric_key(), (metric_min, metric_max)))
             if ideal_instances == (-1, -2):
                 # First time through the loop so we just set it to the first ideal values.
                 ideal_instances = (metric_min, metric_max)
             else:
-                # We find the intersection of ideal servers between the existing metrics
-                # and this one.
-                ideal_instances = (max(ideal_instances(0), metric_min), min(idea_instances(1), metric_max))
+                # We find the intersection of ideal servers between the
+                # existing metrics and this one.
+                ideal_instances = (max(ideal_instances(0), metric_min), \
+                                   min(ideal_instances(1), metric_max))
             logging.debug("Returning ideal instances [%s,%s]" % (ideal_instances))
 
     return ideal_instances
-
 
 class ServiceCriteria(object):
 
@@ -88,7 +92,6 @@ class ServiceCriteria(object):
         self._parse(criteria_str)
 
     def upper_bound(self):
-
         if len(self.values) < 2:
             # No upper bound has been defined, so we just define it as None
             self.values += [None]
@@ -121,10 +124,10 @@ class ServiceCriteria(object):
                     else:
                         try:
                             value = float(group)
-                            # This is a value because it can be casts to a float.
+                            # This is a value because it can be cast to a float.
                             self._add_value(value)
                         except:
-                            # This is the metric key
+                            # This is the metric key.
                             self._add_metric_key(group)
 
     def _add_value(self, value):
