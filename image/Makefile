@@ -30,6 +30,7 @@ ARGS := --rootsize=$(ROOTSIZE) \
 	--swapsize=$(SWAPSIZE) \
 	--hostname=$(HOSTNAME) \
 	--execscript=deploy \
+	--firstboot=$$PWD/boot \
 	--domain=$(DOMAINNAME) \
 	--user=$(USERNAME) \
 	--name=$(USERNAME) \
