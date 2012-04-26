@@ -97,13 +97,13 @@ class Service(object):
 
         if (num_instances >= target_min and num_instances <= target_max) \
             or (target_min > target_max):
-            # Either the number of instances we currently have is within the ideal range
-            # or we have no information to base changing the number of instances. In either
-            # case we just keep the instances the same.
+            # Either the number of instances we currently have is within the
+            # ideal range or we have no information to base changing the number
+            # of instances. In either case we just keep the instances the same.
             target = num_instances
         else:
-            # we need to either scale up or scale down. Our target will be the midpoint in the
-            # target range.
+            # we need to either scale up or scale down. Our target will be the
+            # midpoint in the target range.
             target = (target_min + target_max) / 2
 
         logging.debug("Target number of instances for service %s determined to be %s (current: %s)"
@@ -122,11 +122,26 @@ class Service(object):
             "bringing instance total down to target %s" % target)
 
     def update_config(self, config_str):
+        # Check if our configuration is about to change.
         old_url = self.config.url()
-        self.config.reload(config_str)
-        if old_url != self.config.url():
+        old_static_addresses = self.config.static_ips()
+        new_config = ServiceConfig(config_str)
+        new_url = new_config.url()
+        new_static_addresses = new_config.static_ips()
+
+        # Remove all old instances from loadbalancer.
+        if old_url != new_url:
             self._update_loadbalancer([])
-        self.url = self.config.url()
+
+        # Reload the configuration.
+        self.config.reload(config_str)
+
+        # Do a normal referesh (to capture the new service).
+        if old_url != new_url or \
+           old_static_addresses != new_static_addresses:
+            self._update_loadbalancer()
+
+        # Run a full update.
         self.update()
 
     def drop_instances(self, instances, reason):
@@ -189,19 +204,22 @@ class Service(object):
     def health_check(self):
         instances = self.instances()
 
-        # Check if any expected machines have failed to come up and confirm their IP address.
+        # Check if any expected machines have failed to come up and confirm
+        # their IP address.
         confirmed_ips = set(self.scale_manager.confirmed_ips(self.name))
 
         dead_instances = []
 
-        # There are the confirmed ips that are actually associated with an instance. Other confirmed
-        # ones will need to be dropped because the instances they refer to no longer exists.
+        # There are the confirmed ips that are actually associated with an
+        # instance. Other confirmed ones will need to be dropped because the
+        # instances they refer to no longer exists.
         associated_confirmed_ips = set()
         for instance in instances:
             expected_ips = self.extract_addresses_from([instance])
-            # As long as there is one expected_ip in the confirmed_ip, everything is good. Otherwise
-            # This instance has not checked in. We need to mark it, and it if has enough marks
-            # it will be destroyed.
+            # As long as there is one expected_ip in the confirmed_ip,
+            # everything is good. Otherwise This instance has not checked in.
+            # We need to mark it, and it if has enough marks it will be
+            # destroyed.
             logging.info("expected ips=%s, confirmed ips=%s" % (expected_ips, confirmed_ips))
             instance_confirmed_ips = confirmed_ips.intersection(expected_ips)
             if len(instance_confirmed_ips) == 0:
@@ -213,13 +231,15 @@ class Service(object):
             else:
                 associated_confirmed_ips = associated_confirmed_ips.union(instance_confirmed_ips)
 
-        # TODO(dscannell) We also need to ensure that the confirmed IPs are still valid. In other
-        # words, we have a running instance with the confirmed IP.
+        # TODO(dscannell) We also need to ensure that the confirmed IPs are
+        # still valid. In other words, we have a running instance with the
+        # confirmed IP.
         orphaned_confirmed_ips = confirmed_ips.difference(associated_confirmed_ips)
 
         if len(orphaned_confirmed_ips) > 0:
-            # There are orphaned ip addresses. We need to drop them and then update the load
-            # balancer because there is no actual instance backing them.
+            # There are orphaned ip addresses. We need to drop them and then
+            # update the load balancer because there is no actual instance
+            # backing them.
             logging.info("Dropping ip addresses %s for service %s because they do not have"
                          "backing instances." % (orphaned_confirmed_ips, self.name))
             for orphaned_address in orphaned_confirmed_ips:

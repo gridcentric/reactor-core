@@ -31,7 +31,6 @@ class NovaConnector(cloud_connection.CloudConnection):
         except Exception, e:
             traceback.print_exc()
             logging.error("Error creating nova client: %s" % str(e))
-
     
     def list_instances(self, service_identifier):
         """
@@ -46,7 +45,7 @@ class NovaConnector(cloud_connection.CloudConnection):
                 non_deleted_instances.append(instance)
             else:
                 instance_ids_still_deleting.append(instance['id'])
-        
+
         self.deleted_instance_ids = instance_ids_still_deleting
         return sorted(non_deleted_instances, key=lambda x: x.get('created',"")) 
     

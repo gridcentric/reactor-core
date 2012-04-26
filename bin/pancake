@@ -6,6 +6,7 @@ import signal
 import sys
 import traceback
 import threading
+import json
 
 from StringIO import StringIO
 from ConfigParser import SafeConfigParser
@@ -67,6 +68,11 @@ def usage():
     print ""
     print "    ips <service>         Displays all of the IP addresses associated with"
     print "                          the service."
+    print ""
+    print "    get <service>         Display the current service metrics."
+    print ""
+    print "    set <service>         Set custom service metrics. The metrics are read"
+    print "                          as JSON { \"name\" : [weight, value] } from stdin."
     print ""
     print "    managers-configured   List all the configured managers."
     print ""
@@ -226,6 +232,21 @@ try:
         ip_addresses = api_client.list_service_ips(service_name)
         for ip in ip_addresses:
             print ip
+
+    elif command == "get":
+        service_name = get_arg(1)
+        api_client = get_api_client()
+        metrics = api_client.get_service_metrics(service_name)
+        print json.dumps(metrics)
+
+    elif command == "set":
+        new_metrics = ""
+        for line in sys.stdin.readlines():
+            new_metrics += line
+
+        service_name = get_arg(1)
+        api_client = get_api_client()
+        api_client.set_service_metrics(service_name, json.loads(new_metrics))
 
     elif command == "passwd":
         new_password = get_arg(1)

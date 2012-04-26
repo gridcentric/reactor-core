@@ -38,5 +38,3 @@ class CloudConnection(object):
         Remove the instance from the cloud
         """
         pass
-    
-    

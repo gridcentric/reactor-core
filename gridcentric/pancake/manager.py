@@ -7,6 +7,7 @@ import time
 import uuid
 import hashlib
 import bisect
+import json
 from StringIO import StringIO
 
 from gridcentric.pancake.config import ManagerConfig, ServiceConfig
@@ -58,7 +59,7 @@ class ScaleManager(object):
         # Remember whether this was previous managed.
         managed = self.service_owned(service)
 
-        # Find the cloest key.
+        # Find the closest key.
         keys = self.key_to_manager.keys()
         index = bisect.bisect(keys, service.key())
         if len(keys) == 0:
@@ -238,6 +239,16 @@ class ScaleManager(object):
             ips = []
         return ips
 
+    def active_ips(self, service_name):
+        """
+        Returns all confirmed and static ips for the service.
+        """
+        ips = []
+        ips += self.confirmed_ips(service_name)
+        if service_name in self.services:
+            ips += self.services[service_name].static_addresses()
+        return ips
+
     def drop_ip(self, service_name, ip_address):
         self.zk_conn.delete(paths.confirmed_ip(service_name, ip_address))
         self.zk_conn.delete(paths.ip_address(ip_address))
@@ -261,14 +272,18 @@ class ScaleManager(object):
                     break
 
     def update_loadbalancer(self, service, addresses = None):
-        if addresses == None:
-            addresses = []
-            for service_name in self.key_to_services.get(service.key(), []):
-                addresses += self.confirmed_ips(service_name)
-                addresses += self.services[service_name].static_addresses()
+        all_addresses = []
+
+        # Go through all services with the same keys.
+        for service_name in self.key_to_services.get(service.key(), []):
+            if addresses and (self.services[service] == service):
+                all_addresses += addresses
+            else:
+                all_addresses += self.active_ips(service_name)
+
         logging.info("Updating loadbalancer for url %s with addresses %s" %
-                     (service.service_url(), addresses))
-        self.load_balancer.change(service.service_url(), addresses)
+                     (service.service_url(), all_addresses))
+        self.load_balancer.change(service.service_url(), all_addresses)
         self.load_balancer.save()
 
     def reload_loadbalancer(self):
@@ -276,8 +291,7 @@ class ScaleManager(object):
         for service in self.services.values():
             addresses = []
             for service_name in self.key_to_services.get(service.key(), []):
-            	addresses += self.confirmed_ips(service_name)
-                addresses += self.services[service_name].static_addresses()
+            	addresses += self.active_ips(service_name)
             self.load_balancer.change(service.service_url(), addresses)
         self.load_balancer.save()
 
@@ -300,27 +314,56 @@ class ScaleManager(object):
 
         return remove_instance
 
-    def health_check(self):
+    def update_metrics(self):
         # Update all the service metrics from the loadbalancer.
         metrics = self.load_balancer.metrics()
-        logging.debug("Load balancer returned metrics: %s" %(metrics))
+        logging.debug("Load balancer returned metrics: %s" % (metrics))
+
         metrics_by_key = {}
         service_addresses = {}
         for ip in metrics:
             for service in self.services.values():
                 if not service.name in service_addresses:
-                    service_addresses[service.name] = \
-                        service.addresses() + service.static_addresses()
-                service_ips = service_addresses[service.name] 
+                    service_addresses[service.name] = self.active_ips(service.name)
+                service_ips = service_addresses[service.name]
                 if not(service.key() in metrics_by_key):
                     metrics_by_key[service.key()] = []
                 if ip in service_ips:
                     logging.debug("Metrics for ip %s belong to service %s" %(ip, service.name))
                     metrics_by_key[service.key()].append(metrics[ip])
 
-        # TODO: Register all loadbalancer metrics in Zookeeper, so that the
-        # manager for this service has the opportunity to read data from all
-        # loadbalancers, not just their own.
+        # Stuff all the metrics into Zookeeper.
+        self.zk_conn.write(paths.manager_metrics(self.uuid), \
+                           json.dumps(metrics_by_key), \
+                           ephemeral=True)
+
+        # Load all metrics.
+        all_metrics = {}
+
+        # Read the keys for all other managers.
+        for manager in self.managers:
+            # Skip re-reading the local metrics.
+            if manager == self.uuid:
+                manager_metrics = metrics_by_key
+            else:
+                manager_metrics = self.zk_conn.read(paths.manager_metrics(manager))
+                if manager_metrics:
+                    manager_metrics = json.loads(manager_metrics)
+                else:
+                    continue
+
+            # Merge into the all_metrics dictionary.
+            for key in manager_metrics:
+                if not(key in all_metrics):
+                    all_metrics[key] = []
+                all_metrics[key].extend(manager_metrics[key])
+
+        # Return all available global metrics.
+        return all_metrics
+
+    def health_check(self):
+        # Save and load the current metrics.
+        service_metrics = self.update_metrics()
 
         # Does a health check on all the services that are being managed.
         for service in self.services.values():
@@ -331,10 +374,23 @@ class ScaleManager(object):
             try:
                 # Run a health check on this service.
                 service.health_check()
+
+                # Read any default metrics.
+                metrics = service_metrics.get(service.key(), [])
+                default_metrics = self.zk_conn.read(paths.service_custom_metrics(service.name))
+                if default_metrics:
+                    # This should be a dictionary { "name" : (weight, value) }
+                    metrics.append(json.loads(default_metrics))
+
+                # Update the live metrics.
+                self.zk_conn.write(paths.service_live_metrics(service.name), \
+                                   json.dumps(metrics), \
+                                   ephemeral=True)
+
                 # Do the service update.
-                service.update(reconfigure=False, metrics=metrics_by_key.get(service.key(), []))
+                service.update(reconfigure=False, metrics=metrics)
             except:
-                logging.error("Error updating service %s." %(service.name))
+                logging.error("Error updating service %s." % (service.name))
 
     def run(self):
         # Note that we are running.

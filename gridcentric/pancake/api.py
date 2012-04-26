@@ -72,6 +72,11 @@ class PancakeApi:
         self.config.add_view(self.list_service_ips, route_name='service-ip-list')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list-implicit')
 
+        self.config.add_route('metric-action', '/gridcentric/pancake/service/{service_name}/metrics')
+        self.config.add_route('metric-action-implicit', '/gridcentric/pancake/service/metrics')
+        self.config.add_view(self.handle_metric_action, route_name='metric-action')
+        self.config.add_view(self.handle_metric_action, route_name='metric-action-implicit')
+
     def reconnect(self, zk_servers):
         self.client = PancakeClient(zk_servers)
 
@@ -229,7 +234,7 @@ class PancakeApi:
     @authorized
     def handle_service_action(self, context, request):
         """
-        This Handles a general service action:
+        This handles a general service action:
         GET - Returns the service config in the Response body
         POST - Either manages or updates the service with a new config in the request body
         DELETE - Unmanages the service.
@@ -247,6 +252,28 @@ class PancakeApi:
             service_config = json.loads(request.body)
             logging.info("Managing or updating service %s" % service_name)
             self.client.update_service(service_name, service_config.get('config',""))
+        return response
+
+    @connected
+    @authorized
+    def handle_metric_action(self, context, request):
+        """
+        This handles a general metric action:
+        GET - Returns the metric values in the Response body
+        POST - Either manages or updates the service with a new config in the request body
+        """
+        service_name = request.matchdict['service_name']
+        response = Response()
+        if request.method == "GET":
+            logging.info("Retrieving metrics for service %s" % service_name)
+            custom = self.client.get_service_custom_metrics(service_name)
+            live = self.client.get_service_live_metrics(service_name)
+            metrics = { "live" : live, "custom" : custom }
+            response = Response(body=json.dumps(metrics))
+        elif request.method == "POST":
+            metrics = json.loads(request.body)
+            logging.info("Updating metrics for service %s" % service_name)
+            self.client.set_service_custom_metrics(service_name, metrics)
         return response
 
     @connected
