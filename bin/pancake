@@ -10,7 +10,7 @@ import threading
 from StringIO import StringIO
 from ConfigParser import SafeConfigParser
 
-from gridcentric.pancake.api import PancakeApiClient
+from gridcentric.pancake.apiclient import PancakeApiClient
 from gridcentric.pancake import log
 import gridcentric.pancake.zookeeper.config as config
 
