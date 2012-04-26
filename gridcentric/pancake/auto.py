@@ -8,6 +8,7 @@ import json
 from pyramid.response import Response
 
 from gridcentric.pancake.api import PancakeApi
+from gridcentric.pancake.api import connected
 from gridcentric.pancake.api import authorized
 from gridcentric.pancake.manager import ScaleManager
 import gridcentric.pancake.ips as ips
@@ -21,6 +22,7 @@ class PancakeAutoApi(PancakeApi):
         self.config.add_route('api-servers', '/gridcentric/pancake/api_servers')
         self.config.add_view(self.set_api_servers, route_name='api-servers')
 
+    @connected
     @authorized
     def set_api_servers(self, context, request):
         """
