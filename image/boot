@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# Remove the pancake password.
+# This will prevent interactive logins unless this script is somehow disabled
+# on first boot, we rely on key injection.
+passwd -d pancake
