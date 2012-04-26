@@ -26,10 +26,13 @@ class NginxLogReader(object):
         self.connected = False
 
     def connect(self):
-        self.logfile = open(self.log_filename,'r')
+        self.logfile = open(self.log_filename, 'r')
+        # Seek to the end of the file, always.
+        self.logfile.seek(0, 2)
         self.connected = True
 
     def nextline(self):
+        # Open the file initially.
         if not(self.connected):
             try:
                 self.connect()
@@ -44,6 +47,15 @@ class NginxLogReader(object):
                 return m.groups()
             else:
                 line = self.logfile.readline().strip()
+
+        # If we got nothing, make sure we've got
+        # the right file open (due to rotation) and
+        # seek to the end where we should still be.
+        if not(line):
+            try:
+                self.connect()
+            except IOError:
+                pass
 
         return line
 
