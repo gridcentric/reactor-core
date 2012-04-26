@@ -77,8 +77,8 @@ def calculate_ideal_uniform(service_spec, metrics):
             else:
                 # We find the intersection of ideal servers between the
                 # existing metrics and this one.
-                ideal_instances = (max(ideal_instances(0), metric_min), \
-                                   min(ideal_instances(1), metric_max))
+                ideal_instances = (max(ideal_instances[0], metric_min), \
+                                   min(ideal_instances[1], metric_max))
             logging.debug("Returning ideal instances [%s,%s]" % (ideal_instances))
 
     return ideal_instances
