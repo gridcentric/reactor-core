@@ -23,8 +23,12 @@ update = False
 
 def default_zk_servers():
     try:
-        return config.read_config()
+        servers = config.read_config()
     except:
+        servers = []
+    if len(servers) > 0:
+        return servers
+    else:
         return ["localhost"]
 
 def usage():
