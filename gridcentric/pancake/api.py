@@ -238,8 +238,8 @@ class PancakeApi:
         response = Response()
         if request.method == "GET":
             logging.info("Retrieving service %s configuration" % service_name)
-            service_config = self.client.get_service_config(service_name)
-            response = Response(body=json.dumps({'config':service_config}))
+            service_config = ServiceConfig(self.client.get_service_config(service_name))
+            response = Response(body=json.dumps({ 'config' : str(service_config) }))
         elif request.method == "DELETE":
             logging.info("Unmanaging service %s" %(service_name))
             self.client.unmanage_service(service_name)

@@ -19,63 +19,76 @@ zk_servers = []
 password = None
 debug = False
 logfile = None
+update = False
+
+def default_zk_servers():
+    try:
+        servers = config.read_config()
+    except:
+        servers = []
+    if len(servers) > 0:
+        return servers
+    else:
+        return ["localhost"]
 
 def usage():
-    print "usage: pancake [-h|--help] [-z|--zookeeper=<zookeeper instance>] command"
+    print "usage: pancake < -h|--help | [options] command >"
     print ""
     print "Optional arguments:"
     print "   -h, --help             Display this help message"
     print ""
-    print "   -a, --api=            The API url (default is http://localhost:8080)."
+    print "   -a, --api=             The API url (default is %s)." % api_server
     print ""
     print "   -p, --password=        The password used to connect to the API."
     print ""
     print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option"
     print "                          multiple times to specific multiple instances. Only"
-    print "                          necessary for run*."
-    print "                          The default is the last configuration, or localhost."
+    print "                          necessary for run commands."
+    print "                          The default set is: %s" % ",".join(default_zk_servers())
     print ""
     print "   -d, --debug            Enables debugging log and full stack trace errors."
     print ""
     print "   -l, --log=             Log to a file instead of stdout."
     print ""
+    print "   -u, --update           Perform an incremental configuration update."
+    print ""
     print "Commands:"
-    print "    list-services            List all the services currently being managed."
+    print "    list                  List all the services currently being managed."
     print ""
-    print "    manage <service_name>    Manage a new serivce with the given name. The"
-    print "                             service configuration is read from stdin."
+    print "    manage <service>      Manage a new serivce with the given name. The"
+    print "                          service configuration is read from stdin."
     print ""
-    print "    unmanage <service_name>  Unmanged the service with the given name."
+    print "    unmanage <service>    Unmanged the service with the given name."
     print ""
-    print "    update <service_name>    Update the managed service's configuration by"
-    print "                             reading the values from stdin."
+    print "    update <service>      Update the managed service's configuration by"
+    print "                          reading the values from stdin."
     print ""
-    print "    show <service_name>      Show the current configuration for the service."
+    print "    show <service>        Show the current configuration for the service."
     print ""
-    print "    list-ips <service_name>  Displays all of the IP addresses associated with"
-    print "                             the service."
+    print "    ips <service>         Displays all of the IP addresses associated with"
+    print "                          the service."
     print ""
-    print "    list-managers-configured List all the configured managers."
+    print "    managers-configured   List all the configured managers."
     print ""
-    print "    list-managers-active     List all the active managers."
+    print "    managers-active       List all the active managers."
     print ""
-    print "    update-manager [ip]      Update the current configuration for the manager."
+    print "    update-manager [ip]   Update the current configuration for the manager."
     print ""
-    print "    show-manager [ip]        Show the current configuration for the manager."
+    print "    show-manager [ip]     Show the current configuration for the manager."
     print ""
-    print "    passwd <password>        Updates the API's password."
+    print "    passwd <password>     Updates the API's password."
     print ""
-    print "    runserver                Run the scale manager server."
+    print "    runserver             Run the scale manager server."
     print ""
-    print "    runapi                   Runs the API server."
+    print "    runapi                Runs the API server."
     print ""
-    print "    run                      Runs the API server, and either Zookeeper or the"
-    print "                             scale manager, depending on configured Zookeeper"
-    print "                             servers."
+    print "    run                   Runs the API server, and either Zookeeper or the"
+    print "                          scale manager, depending on configured Zookeeper"
+    print "                          servers."
 
 opts, args = getopt.getopt(sys.argv[1:], 
-                            "ha:p:z:dl:", 
-                           ["help","api_server=","password=","zookeeper=","debug","log="])
+                            "ha:p:z:dl:u", 
+                           ["help","api_server=","password=","zookeeper=","debug","log=","update"])
 
 for o, a in opts:
     if o in ('-h', '--help'):
@@ -91,30 +104,29 @@ for o, a in opts:
         debug=True
     elif o in ('-l','--log'):
         logfile = a
+    elif o in ('-u','--update'):
+        update = True
 
 if len(zk_servers) == 0:
-    try:
-        zk_servers = config.read_config()
-    except:
-        pass
-    if len(zk_servers) == 0:
-        zk_servers = ["localhost"]
+    zk_servers = default_zk_servers()
 
 loglevel = logging.INFO
 if debug:
     loglevel = logging.DEBUG
 
-if len(args) < 1:
-    usage()
-    sys.exit(1)
+def get_arg(n):
+    if len(args) < n+1:
+        usage()
+        sys.exit(1)
+    return args[n]
 
-command = args[0]
+command = get_arg(0)
 
 def get_api_client():
     return PancakeApiClient(api_server, password)
 
 try:
-    if command == "list-services":
+    if command == "list":
         api_client = get_api_client()
         services = api_client.list_managed_services()
         if services:
@@ -122,7 +134,7 @@ try:
                 print service
 
     elif command == "manage":
-        service_name = args[1]
+        service_name = get_arg(1)
         service_conf = ""
         for line in sys.stdin.readlines():
             service_conf += line
@@ -131,23 +143,24 @@ try:
         api_client.manage_service(service_name, service_conf)
 
     elif command == "unmanage":
-        service_name = args[1]
+        service_name = get_arg(1)
         api_client = get_api_client()
         api_client.unmanage_service(service_name)
 
     elif command == "update":
-        service_name = args[1]
+        service_name = get_arg(1)
         new_conf = ""
         for line in sys.stdin.readlines():
             new_conf += line
 
-        # Read in the existing configuration and update it with
-        # with the new configuration. This allows people to do a
-        # partial update.
         api_client = get_api_client()
-        service_conf = api_client.get_service_config(service_name)
         config = SafeConfigParser()
-        config.readfp(StringIO(service_conf))
+        if update:
+            # Read in the existing configuration and update it with
+            # with the new configuration. This allows people to do a
+            # partial update.
+            service_conf = api_client.get_service_config(service_name)
+            config.readfp(StringIO(service_conf))
         config.readfp(StringIO(new_conf))
 
         # Write out the full contents of the updated configuration.
@@ -156,19 +169,19 @@ try:
         api_client.update_service(service_name, config_value.getvalue())
 
     elif command == "show":
-        service_name = args[1]
+        service_name = get_arg(1)
         api_client = get_api_client()
         config = api_client.get_service_config(service_name)
         print config.strip()
 
-    elif command == "list-managers-configured":
+    elif command == "managers-configured":
         api_client = get_api_client()
         managers = api_client.list_managers_configured()
         if managers:
             for manager in managers:
                 print manager
 
-    elif command == "list-managers-active":
+    elif command == "managers-active":
         api_client = get_api_client()
         managers = api_client.list_managers_active()
         if managers:
@@ -184,10 +197,15 @@ try:
         for line in sys.stdin.readlines():
             new_conf += line
 
-        # Write out the full contents of the updated configuration.
         api_client = get_api_client()
         config = SafeConfigParser()
+        if update:
+            # As per above, allow for incremental updates.
+            manager_conf = api_client.get_manager_config(manager)
+            config.readfp(StringIO(manager_conf))
         config.readfp(StringIO(new_conf))
+
+        # Write out the full contents of the updated configuration.
         config_value = StringIO()
         config.write(config_value)
         api_client.update_manager(manager, config_value.getvalue())
@@ -197,19 +215,20 @@ try:
             manager = args[1]
         else:
             manager = None
+
         api_client = get_api_client()
         config = api_client.get_manager_config(manager)
         print config.strip()
 
-    elif command == "list-ips":
-        service_name = args[1]
+    elif command == "ips":
+        service_name = get_arg(1)
         api_client = get_api_client()
         ip_addresses = api_client.list_service_ips(service_name)
         for ip in ip_addresses:
             print ip
 
     elif command == "passwd":
-        new_password = args[1]
+        new_password = get_arg(1)
         api_client = get_api_client()
         api_client.update_api_key(new_password)
 
