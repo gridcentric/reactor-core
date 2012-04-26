@@ -153,12 +153,12 @@ try:
         for line in sys.stdin.readlines():
             new_conf += line
 
+        api_client = get_api_client()
         config = SafeConfigParser()
         if update:
             # Read in the existing configuration and update it with
             # with the new configuration. This allows people to do a
             # partial update.
-            api_client = get_api_client()
             service_conf = api_client.get_service_config(service_name)
             config.readfp(StringIO(service_conf))
         config.readfp(StringIO(new_conf))
@@ -197,10 +197,10 @@ try:
         for line in sys.stdin.readlines():
             new_conf += line
 
+        api_client = get_api_client()
         config = SafeConfigParser()
         if update:
             # As per above, allow for incremental updates.
-            api_client = get_api_client()
             manager_conf = api_client.get_manager_config(manager)
             config.readfp(StringIO(manager_conf))
         config.readfp(StringIO(new_conf))
@@ -215,6 +215,7 @@ try:
             manager = args[1]
         else:
             manager = None
+
         api_client = get_api_client()
         config = api_client.get_manager_config(manager)
         print config.strip()
