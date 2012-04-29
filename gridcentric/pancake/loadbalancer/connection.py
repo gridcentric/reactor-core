@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 def get_connection(name, config):
     if name == "nginx":
         config_path = config.get("config_path", "/etc/nginx/conf.d")

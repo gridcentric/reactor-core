@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """
 This defines the various paths used in zookeeper
 """

@@ -1,4 +1,3 @@
-
 import logging
 from httplib import HTTPException
 

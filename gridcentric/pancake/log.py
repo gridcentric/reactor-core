@@ -1,10 +1,10 @@
 """
 A simple module used to configure the logger for the pancake project.
 """
+
 import logging
 import logging.handlers
 import sys
-
 
 def configure(level, logfile=None):
     

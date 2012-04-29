@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import json
 
 from gridcentric.pancake.config import ServiceConfig

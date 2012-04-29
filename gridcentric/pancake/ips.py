@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import socket
 
 def list_local_ips():
