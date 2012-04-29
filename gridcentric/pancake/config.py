@@ -91,6 +91,7 @@ auth_algo=sha1
 min_instances=1
 max_instances=1
 metrics=
+source=
 
 [nova]
 instance_id=0
@@ -115,6 +116,9 @@ project=admin
 
     def metrics(self):
         return self._get("scaling", "metrics").split(",")
+
+    def source(self):
+        return self._get("scaling", "source")
 
     def get_service_auth(self):
         return (self._get("service","auth_hash"),

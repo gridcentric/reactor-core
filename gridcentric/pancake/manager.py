@@ -6,6 +6,7 @@ import uuid
 import hashlib
 import bisect
 import json
+import traceback
 from StringIO import StringIO
 
 from gridcentric.pancake.config import ManagerConfig, ServiceConfig
@@ -315,7 +316,6 @@ class ScaleManager(object):
     def update_metrics(self):
         # Update all the service metrics from the loadbalancer.
         metrics = self.load_balancer.metrics()
-        logging.debug("Load balancer returned metrics: %s" % (metrics))
 
         metrics_by_key = {}
         service_addresses = {}
@@ -327,7 +327,6 @@ class ScaleManager(object):
                 if not(service.key() in metrics_by_key):
                     metrics_by_key[service.key()] = []
                 if ip in service_ips:
-                    logging.debug("Metrics for ip %s belong to service %s" %(ip, service.name))
                     metrics_by_key[service.key()].append(metrics[ip])
 
         # Stuff all the metrics into Zookeeper.
@@ -370,11 +369,22 @@ class ScaleManager(object):
                 continue
 
             try:
-                # Run a health check on this service.
-                service.health_check()
+                # Read any default metrics. We can override the source service
+                # for metrics here (so, for example, a backend database server
+                # can inheret a set of metrics given for the front server).
+                # This, like many other things, is specified here by the name
+                # of the service we are inheriting metrics for. If not given,
+                # we default to the current service.
+                source = service.config.source()
+                if source:
+                    source_service = self.services.get(source, None)
+                    if source_service:
+                        metrics = service_metrics.get(source_service.key(), [])
+                    else:
+                        metrics = []
+                else:
+                    metrics = service_metrics.get(service.key(), [])
 
-                # Read any default metrics.
-                metrics = service_metrics.get(service.key(), [])
                 default_metrics = self.zk_conn.read(paths.service_custom_metrics(service.name))
                 if default_metrics:
                     # This should be a dictionary { "name" : (weight, value) }
@@ -385,10 +395,14 @@ class ScaleManager(object):
                                    json.dumps(metrics), \
                                    ephemeral=True)
 
+                # Run a health check on this service.
+                service.health_check()
+
                 # Do the service update.
                 service.update(reconfigure=False, metrics=metrics)
             except:
                 logging.error("Error updating service %s." % (service.name))
+                traceback.print_exc()
 
     def run(self):
         # Note that we are running.
