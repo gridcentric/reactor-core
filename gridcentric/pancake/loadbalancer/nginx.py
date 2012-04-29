@@ -16,6 +16,7 @@ import threading
 from mako.template import Template
 
 from gridcentric.pancake.loadbalancer.connection import LoadBalancerConnection
+from gridcentric.pancake.loadbalancer.netstat import connection_count
 
 class NginxLogReader(object):
     def __init__(self, log_filename, filter=None):
@@ -94,6 +95,9 @@ class NginxLogWatcher(threading.Thread):
         self.record = {}
         self.lock.release()
 
+        # Grab all active connections.
+        active_connections = connection_count()
+
         # Compute the response times.
         for host in record:
             hits = record[host][0]
@@ -102,6 +106,19 @@ class NginxLogWatcher(threading.Thread):
                 "rate" : (hits, hits / delta),
                 "response" : (hits, record[host][2] / hits),
                 "bytes" : (hits, record[host][1] / delta),
+                "active" : active_connections.get(host, 0),
+                }
+            del active_connections[host]
+            record[host] = metrics
+
+        # Compute the active counts.
+        for host in active_connections:
+            metrics = \
+                {
+                "rate" : 0.0,
+                "response" : 0.0,
+                "bytes" : 0,
+                "active" : active_connections.get(host, 0),
                 }
             record[host] = metrics
 
