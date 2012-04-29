@@ -32,7 +32,6 @@ def connection_count():
     for connection in active:
         try:
             (host, port) = connection.split(":")
-            print host, port
             active_count[host] = active_count.get(host, 0) + 1
         except:
             pass
