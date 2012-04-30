@@ -23,6 +23,7 @@ PACKAGES += python-mako
 PACKAGES += python-novaclient
 PACKAGES += python-pyramid
 PACKAGES += python-netifaces
+PACKAGES += dnsmasq
 
 PACKAGE_CMDLINE := $(PACKAGES:%=--addpkg=%)
 
@@ -45,7 +46,7 @@ clean:
 	@rm -f local/*
 .PHONY: clean
 
-chroot-%:
+chroot-%: Makefile
 	@# NOTE: The hypervisor doesn't matter here. 
 	PATH=$$PWD:$$PATH ubuntu-vm-builder kvm $* \
 	    --destdir=$$PWD/dist-$* \
