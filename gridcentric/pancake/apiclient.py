@@ -103,9 +103,8 @@ class PancakeApiClient(httplib2.Http):
         """
         Set the custom service metrics.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/service/%s/metrics' %
-                                                 service_name, 'POST',
-                                                 body=metrics)
+        self._authenticated_request('/gridcentric/pancake/service/%s/metrics' %
+                                    service_name, 'POST', body=metrics)
 
     def update_api_key(self, api_key):
         """

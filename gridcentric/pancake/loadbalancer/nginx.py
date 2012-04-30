@@ -4,10 +4,7 @@ import signal
 import urlparse
 import shutil
 import glob
-import httplib2
-import json
 import re
-import threading
 import time
 import threading
 
@@ -104,7 +101,7 @@ class NginxLogWatcher(threading.Thread):
                 "rate" : (hits, hits / delta),
                 "response" : (hits, record[host][2] / hits),
                 "bytes" : (hits, record[host][1] / delta),
-                "active" : active_connections.get(host, 0),
+                "active" : (1, active_connections.get(host, 0)),
                 }
             del active_connections[host]
             record[host] = metrics
@@ -113,10 +110,10 @@ class NginxLogWatcher(threading.Thread):
         for host in active_connections:
             metrics = \
                 {
-                "rate" : 0.0,
-                "response" : 0.0,
-                "bytes" : 0,
-                "active" : active_connections.get(host, 0),
+                "rate" : (0, 0.0),
+                "response" : (0, 0.0),
+                "bytes" : (0, 0),
+                "active" : (1, active_connections.get(host, 0)),
                 }
             record[host] = metrics
 
@@ -166,7 +163,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
             return None
 
     def clear(self):
-        for conf in glob.glob(os.path.join(self.config_path, "*")):
+        for conf in glob.glob(os.path.join(self.site_path, "*")):
             try:
                 os.remove(conf)
             except OSError:
@@ -177,7 +174,15 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         uniq_id = hashlib.md5(url).hexdigest()
         conf_filename = "%s.conf" % uniq_id
 
-        # Parse the url because we need to know the netloc
+        # Check for a removal.
+        if len(addresses) == 0:
+            try:
+                os.remove(os.path.join(self.site_path,conf_filename))
+            except OSError:
+                pass
+            return
+
+        # Parse the url because we need to know the netloc.
         (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(url)
         w_port = netloc.split(":")
         netloc = w_port[0]
@@ -194,6 +199,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # Ensure that there is a path.
         path = path or "/"
 
+        # Render our given template.
         conf = self.template.render(id=uniq_id,
                                     url=url,
                                     netloc=netloc,

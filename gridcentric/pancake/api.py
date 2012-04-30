@@ -123,7 +123,7 @@ class PancakeApi:
         if service_name != None:
             service_config = ServiceConfig(self.client.get_service_config(service_name))
             auth_hash, auth_salt, auth_algo = service_config.get_service_auth()
-            
+
             if auth_hash != None and auth_hash != "":
                 if auth_key != None:
                     auth_token = self._create_service_auth_token(auth_key, auth_salt, auth_algo)
@@ -182,7 +182,7 @@ class PancakeApi:
         """
         Updates the auth key in the system.
         """
-        if request.method == 'POST':
+        if request.method == "POST":
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
             self.client.set_auth_hash(self._create_admin_auth_token(auth_key))

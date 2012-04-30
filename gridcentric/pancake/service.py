@@ -10,29 +10,33 @@ import gridcentric.pancake.metrics.calculator as metric_calculator
 
 class Service(object):
 
-    def __init__(self, name, service_config, scale_manager):
+    def __init__(self, name, service_config, scale_manager, cloud='nova'):
         self.name = name
         self.config = service_config
         self.scale_manager = scale_manager
-        self.url = self.config.url()
-        self.cloud_conn = cloud_connection.get_connection('nova')
+        self.cloud_conn = cloud_connection.get_connection(cloud)
         self.cloud_conn.connect(self.config.auth_info())
 
     def key(self):
-        return hashlib.md5(self.url).hexdigest()
+        return hashlib.md5(self.config.url()).hexdigest()
 
     def manage(self):
         # Load the configuration and configure the service.
         logging.info("Managing service %s" % (self.name))
 
     def unmanage(self):
-        # Delete all the launched instances, and unbless the instance.
-        # Essentially, return it back to the unmanaged.
-        logging.info("Unmanaging service %s" % (self.name))
+        try:
+            # Delete all the launched instances, and unbless the instance.
+            # Essentially, return it back to the unmanaged.
+            logging.info("Unmanaging service %s" % (self.name))
 
-        # Delete all the launched instances.
-        for instance in self.instances():
-            self.drop_instances(self.instances(), "service is becoming unmanaged")
+            # Delete all the launched instances.
+            for instance in self.instances():
+                self.drop_instances(self.instances(),
+                                    "service is becoming unmanaged")
+        except Exception, e:
+            traceback.print_exc()
+            logging.error("Error unmanaging service %s: %s" % (self.name, str(e)))
 
     def update(self, reconfigure=True, metrics=[]):
         try:
@@ -177,7 +181,7 @@ class Service(object):
         self.cloud_conn.start_instance(self.name, self.config.instance_id())
 
     def service_url(self):
-        return self.url
+        return self.config.url()
 
     def static_addresses(self):
         return self.config.static_ips()

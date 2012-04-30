@@ -19,7 +19,10 @@ def calculate_totals(metrics):
             totals[key] = totals.get(key, 0) + weight * value
             total_weights[key] = total_weights.get(key, 0) + weight
     for key in totals:
-        totals[key] = (float(totals[key]) / total_weights[key])
+        if total_weights[key] != 0:
+            totals[key] = (float(totals[key]) / total_weights[key])
+        else:
+            totals[key] = 0.0
     return totals
 
 def calculate_num_servers_uniform(total, bound):

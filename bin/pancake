@@ -196,7 +196,7 @@ try:
 
     elif command == "update-manager":
         if len(args) > 1:
-            manager = args[1]
+            manager = get_arg(1)
         else:
             manager = None
         new_conf = ""
@@ -218,7 +218,7 @@ try:
 
     elif command == "show-manager":
         if len(args) > 1:
-            manager = args[1]
+            manager = get_arg(1)
         else:
             manager = None
 

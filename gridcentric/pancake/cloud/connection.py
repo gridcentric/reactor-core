@@ -1,15 +1,17 @@
 """
-The generic cloud connection interface. Essentially exposes common methods used
-to interact with different clouds.
+The generic cloud connection interface.
 """
 
 def get_connection(cloud_type):
-
     if cloud_type == 'nova':
         import gridcentric.pancake.cloud.nova as nova_cloud
         return nova_cloud.NovaConnector()
+
+    elif cloud_type == 'none':
+        return CloudConnection()
+
     else:
-        raise Exception("Unsupported cloud type: %s." %(cloud_type))
+        raise Exception("Unsupported cloud type: %s." % (cloud_type))
 
 class CloudConnection(object):
     
