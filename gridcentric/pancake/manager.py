@@ -134,7 +134,7 @@ class ScaleManager(object):
         for service_name in self.services:
             if service_name not in services and \
                not(service_name == self.api_service.name):
-                self.remove_service(service_name)
+                self.remove_service(service_name, unmanage=True)
                 services_to_remove += [service_name]
 
         for service in services_to_remove:
@@ -260,7 +260,7 @@ class ScaleManager(object):
         service.update()
 
     @locked
-    def remove_service(self, service_name):
+    def remove_service(self, service_name, unmanage=False):
         """
         This removes / unmanages the service.
         """
@@ -279,7 +279,8 @@ class ScaleManager(object):
                 # fine because we are just removing it anyway.
                 service_names.remove(service_name)
 
-            if self.service_owned(service):
+            # Perform a full unmanage if this is required.
+            if unmanage and self.service_owned(service):
                 service.unmanage()
 
             self.manager_remove(service)

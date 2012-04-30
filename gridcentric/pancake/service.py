@@ -134,14 +134,15 @@ class Service(object):
 
         # Remove all old instances from loadbalancer.
         if old_url != new_url:
-            self._update_loadbalancer(remove=True)
+            self.scale_manager.remove_service(self.name)
 
         # Reload the configuration.
         self.config.reload(config_str)
 
-        # Do a normal referesh (to capture the new service).
-        if old_url != new_url or \
-           old_static_addresses != new_static_addresses:
+        # Do a referesh (to capture the new service).
+        if old_url != new_url:
+            self.scale_manager.add_service(self)
+        elif old_static_addresses != new_static_addresses:
             self._update_loadbalancer()
 
         # Run a full update.
