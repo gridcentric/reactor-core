@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os
 import traceback
+import socket
 
 import gridcentric.pancake.cloud.connection as cloud_connection
 from gridcentric.pancake.config import ServiceConfig
@@ -133,7 +134,7 @@ class Service(object):
 
         # Remove all old instances from loadbalancer.
         if old_url != new_url:
-            self._update_loadbalancer([])
+            self._update_loadbalancer(remove=True)
 
         # Reload the configuration.
         self.config.reload(config_str)
@@ -200,8 +201,8 @@ class Service(object):
                     addresses.append(network_addrs['addr'])
         return addresses
 
-    def _update_loadbalancer(self, addresses=None):
-        self.scale_manager.update_loadbalancer(self, addresses)
+    def _update_loadbalancer(self, remove=False):
+        self.scale_manager.update_loadbalancer(self, remove=remove)
 
     def health_check(self):
         instances = self.instances()
@@ -250,3 +251,44 @@ class Service(object):
 
         # We assume they're dead, so we can prune them.
         self.drop_instances(dead_instances, "instance has been marked for destruction")
+
+class APIService(Service):
+    def __init__(self, scale_manager):
+
+        class APIServiceConfig(ServiceConfig):
+            def __init__(self, scale_manager):
+                self.scale_manager = scale_manager
+            def url(self):
+                return "http://%s/" % self.scale_manager.domain
+            def port(self):
+                return 8080
+            def instance_id(self):
+                return 0
+            def min_instances(self):
+                return 0
+            def max_instances(self):
+                return 0
+            def metrics(self):
+                return ""
+            def source(self):
+                return None
+            def get_service_auth(self):
+                return (None, None, None)
+            def auth_info(self):
+                return None
+            def static_ips(self):
+                ip_addresses = []
+                for server in self.scale_manager.zk_servers:
+                    try:
+                        ip_addresses += [socket.gethostbyname(server)]
+                    except:
+                        logging.warn("Failed to determine the ip address for %s." % server)
+                return ip_addresses
+            def __str__(self):
+                return ""
+
+        # Create an API service that will automatically reload.
+        super(APIService, self).__init__("api",
+                                         APIServiceConfig(scale_manager),
+                                         scale_manager,
+                                         cloud='none')

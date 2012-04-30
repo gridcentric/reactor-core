@@ -169,8 +169,9 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
             except OSError:
                 pass
 
-    def change(self, url, addresses):
-        # We use a simple hash of the URL as the file name for the configuration file.
+    def change(self, url, port, names, addresses):
+        # We use a simple hash of the URL as the file name for the
+        # configuration file.
         uniq_id = hashlib.md5(url).hexdigest()
         conf_filename = "%s.conf" % uniq_id
 
@@ -188,13 +189,17 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         netloc = w_port[0]
         if len(w_port) == 1:
             if scheme == "http":
-                port = "80"
+                listen = "80"
             elif scheme == "https":
-                port = "443"
+                listen = "443"
             else:
-                port = "80"
+                listen = "80"
         else:
-            port = w_port[1]
+            listen = w_port[1]
+
+        # Check the front end port.
+        if not(port):
+            port = listen
 
         # Ensure that there is a path.
         path = path or "/"
@@ -206,6 +211,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
                                     path=path,
                                     scheme=scheme,
                                     port=port,
+                                    listen=listen,
                                     addresses=addresses)
 
         # Write out the config file.

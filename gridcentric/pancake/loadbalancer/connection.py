@@ -1,21 +1,62 @@
-def get_connection(name, config):
+"""
+The generic load balancer interface.
+"""
+
+def get_connection(name, config, scale_manager):
     if name == "nginx":
         config_path = config.get("config_path", "/etc/nginx/conf.d")
         site_path = config.get("site_path", "/etc/nginx/sites-enabled")
         from gridcentric.pancake.loadbalancer.nginx import NginxLoadBalancerConnection
         return NginxLoadBalancerConnection(config_path, site_path)
+
+    elif name == "dnsmasq":
+        config_path = config.get("config_path", "/etc/dnsmasq.d")
+        hosts_path = config.get("hosts_path", "/etc/hosts.pancake")
+        from gridcentric.pancake.loadbalancer.dnsmasq import DnsmasqLoadBalancerConnection
+        return DnsmasqLoadBalancerConnection(config_path, hosts_path, scale_manager)
+
     elif name == "none":
         return LoadBalancerConnection()
+
     else:
         raise Exception("Unknown load balancer: %s" % name)
 
 class LoadBalancerConnection(object):
     def clear(self):
         pass
-    def change(self, url, addresses):
+    def change(self, url, port, names, addresses):
         pass
     def save(self):
         pass
-    def metrics(self, url):
-        # Returns { key : (weight, value) }
+    def metrics(self):
+        # Returns { host : (weight, value) }
         return {}
+
+class LoadBalancers(list):
+    def clear(self):
+        for lb in self:
+            lb.clear()
+    def change(self, url, port, names, addresses):
+        for lb in self:
+            lb.change(url, port, names, addresses)
+    def save(self):
+        for lb in self:
+            lb.save()
+    def metrics(self):
+        # This is the only complex metric (that requires multiplexing).  We
+        # combine the load balancer metrics by hostname, adding weights where
+        # they are not unique.
+        results = {}
+        for lb in self:
+            result = lb.metrics()
+            for (host, value) in result.items():
+                if not(host in results):
+                    results[host] = value
+                else:
+                    (oldweight, oldvalue) = results[host]
+                    (newweight, newvalue) = value
+                    weight = (oldweight + newweight)
+                    value = ((oldvalue * oldweight) + (newvalue * newweight)) / weight
+                    results[host] = (weight, value)
+
+        return results

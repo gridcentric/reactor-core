@@ -9,8 +9,10 @@ import json
 import traceback
 from StringIO import StringIO
 
-from gridcentric.pancake.config import ManagerConfig, ServiceConfig
+from gridcentric.pancake.config import ManagerConfig
+from gridcentric.pancake.config import ServiceConfig
 from gridcentric.pancake.service import Service
+from gridcentric.pancake.service import APIService
 import gridcentric.pancake.loadbalancer.connection as lb_connection
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
@@ -25,7 +27,8 @@ class ScaleManager(object):
         self.config     = ManagerConfig("")
         self.cond       = threading.Condition()
 
-        self.uuid = str(uuid.uuid4()) # Manager uuid (generated).
+        self.uuid   = str(uuid.uuid4()) # Manager uuid (generated).
+        self.domain = None              # Pancake domain.
 
         self.services = {}        # Service map (name -> service)
         self.key_to_services = {} # Service map (key() -> [services...])
@@ -35,7 +38,8 @@ class ScaleManager(object):
         self.key_to_manager = {}  # Reverse map for manager keys.
         self.key_to_owned = {}    # Service to ownership.
 
-        self.load_balancer = None # Load balancer connection.
+        self.load_balancer = None # Load balancer connections.
+        self.api_service   = None # The implicit API service.
 
     def locked(fn):
         def wrapped_fn(self, *args, **kwargs):
@@ -54,9 +58,24 @@ class ScaleManager(object):
         # Register ourselves.
         self.manager_register(initial=True)
 
-        # Create the loadbalancer connection.
-        self.load_balancer = lb_connection.get_connection(self.config.loadbalancer_name(),
-                                                          self.config.loadbalancer_config())
+        # Create the loadbalancer connections.
+        self.load_balancer = lb_connection.LoadBalancers()
+        for name in self.config.loadbalancer_names():
+            self.load_balancer.append(\
+                lb_connection.get_connection(\
+                    name, self.config.loadbalancer_config(name), self))
+
+        # Read the domain.
+        self.reload_domain(self.zk_conn.watch_contents(\
+                                paths.domain(),
+                                self.reload_domain,
+                                default_value=self.domain))
+
+        # Add the implicit API service.
+        if not(self.api_service):
+            self.api_service = APIService(self)
+            if not(self.api_service in self.services):
+                self.add_service(self.api_service)
 
         # Watch all IPs.
         self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
@@ -107,12 +126,14 @@ class ScaleManager(object):
                      (services, self.services.keys()))
 
         for service_name in services:
-            if service_name not in self.services:
+            if service_name not in self.services and \
+               not(service_name == self.api_service.name):
                 self.create_service(service_name)
 
         services_to_remove = []
         for service_name in self.services:
-            if service_name not in services:
+            if service_name not in services and \
+               not(service_name == self.api_service.name):
                 self.remove_service(service_name)
                 services_to_remove += [service_name]
 
@@ -311,17 +332,21 @@ class ScaleManager(object):
     @locked
     def update_loadbalancer(self, service, remove = False):
         all_addresses = []
+        names = []
 
         # Go through all services with the same keys.
         for service_name in self.key_to_services.get(service.key(), []):
-            if addresses and (self.services[service] == service):
-                all_addresses += addresses
+            if remove and (self.services[service_name] == service):
+                continue
             else:
+                names.append(service_name)
                 all_addresses += self.active_ips(service_name)
 
         logging.info("Updating loadbalancer for url %s with addresses %s" %
                      (service.service_url(), all_addresses))
-        self.load_balancer.change(service.service_url(), all_addresses)
+        self.load_balancer.change(service.service_url(),
+                                  service.config.port(),
+                                  names, all_addresses)
         self.load_balancer.save()
 
     @locked
@@ -329,11 +354,24 @@ class ScaleManager(object):
         self.load_balancer.clear()
         for service in self.services.values():
             addresses = []
+            names = []
             for service_name in self.key_to_services.get(service.key(), []):
-            	addresses += self.active_ips(service_name)
-            self.load_balancer.change(service.service_url(), addresses)
+                names.append(service_name)
+                addresses += self.active_ips(service_name)
+            self.load_balancer.change(service.service_url(), 
+                                      service.config.port(),
+                                      names, addresses)
         self.load_balancer.save()
 
+    @locked
+    def reload_domain(self, domain):
+        self.domain = domain
+        if self.api_service:
+            self.remove_service(self.api_service.name)
+            self.add_service(self.api_service)
+            self.reload_loadbalancer()
+
+    @locked
     def mark_instance(self, service_name, instance_id):
         # Increment the mark counter.
         remove_instance = False
