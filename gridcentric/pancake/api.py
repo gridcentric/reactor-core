@@ -19,7 +19,6 @@ def authorized(request_handler):
          if self._authorize_admin_access(context, request, auth_key) or \
             self._authorize_service_access(context, request, auth_key) or \
             self._authorize_ip_access(context, request):
-               
             return request_handler(self, context, request)
          else:
             # Return an unauthorized response.
@@ -91,21 +90,6 @@ class PancakeApi:
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
 
-    def authorized_admin_only(request_handler):
-        """
-        A Decorator that does a simple check to ensure that the reqyest
-        is authorized by the admin only before executing the actual handler.
-        """
-        def fn(self, context, request):
-             
-             auth_key = request.headers.get('X-Auth-Key', None)
-             if self._authorize_admin_access(context, request, auth_key):
-                return request_handler(self, context, request)
-             else:
-                 # Return an unauthorized response.
-                return Response(status=401)
-        return fn
-
     @connected
     def _authorize_admin_access(self, context, request, auth_key):
         auth_hash = self.client.auth_hash()
@@ -161,7 +145,7 @@ class PancakeApi:
     def _create_admin_auth_token(self, auth_key):
         salt = 'gridcentricpancake'
         return hashlib.sha1("%s%s" %(salt, auth_key)).hexdigest()
-    
+
     def _create_service_auth_token(self, auth_key, auth_salt, algo):
         if auth_salt == None:
             auth_salt = ""
@@ -260,17 +244,29 @@ class PancakeApi:
         """
         service_name = request.matchdict['service_name']
         response = Response()
+
         if request.method == "GET":
             logging.info("Retrieving service %s configuration" % service_name)
             service_config = ServiceConfig(self.client.get_service_config(service_name))
             response = Response(body=json.dumps({ 'config' : str(service_config) }))
+
         elif request.method == "DELETE":
-            logging.info("Unmanaging service %s" %(service_name))
-            self.client.unmanage_service(service_name)
+            auth_key = request.headers.get('X-Auth-Key', None)
+            if not(self._authorize_admin_access(context, request, auth_key)):
+                response = Response(status=401)
+            else:
+                logging.info("Unmanaging service %s" %(service_name))
+                self.client.unmanage_service(service_name)
+
         elif request.method == "POST":
-            service_config = json.loads(request.body)
-            logging.info("Managing or updating service %s" % service_name)
-            self.client.update_service(service_name, service_config.get('config',""))
+            auth_key = request.headers.get('X-Auth-Key', None)
+            if not(self._authorize_admin_access(context, request, auth_key)):
+                response = Response(status=401)
+            else:
+                service_config = json.loads(request.body)
+                logging.info("Managing or updating service %s" % service_name)
+                self.client.update_service(service_name, service_config.get('config',""))
+
         return response
 
     @connected
@@ -283,25 +279,30 @@ class PancakeApi:
         """
         service_name = request.matchdict['service_name']
         response = Response()
+
         if request.method == "GET":
             logging.info("Retrieving metrics for service %s" % service_name)
             custom = self.client.get_service_custom_metrics(service_name)
             live = self.client.get_service_live_metrics(service_name)
             metrics = { "live" : live, "custom" : custom }
             response = Response(body=json.dumps(metrics))
+
         elif request.method == "POST":
             metrics = json.loads(request.body)
             logging.info("Updating metrics for service %s" % service_name)
             self.client.set_service_custom_metrics(service_name, metrics)
+
         return response
 
     @connected
     @authorized
     def list_service_ips(self, context, request):
         service_name = request.matchdict['service_name']
+
         if request.method == 'GET':
             return Response(body=json.dumps(
-                        {'ip_addresses': self.client.get_service_ip_addresses(service_name)}))
+                {'ip_addresses': self.client.get_service_ip_addresses(service_name)}))
+
         return Response()
 
     @connected
