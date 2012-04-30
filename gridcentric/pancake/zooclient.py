@@ -83,3 +83,9 @@ class PancakeClient(object):
 
     def set_auth_hash(self, auth_hash):
         self.zk_conn.write(paths.auth_hash(), auth_hash)
+
+    def domain(self):
+        return self.zk_conn.read(paths.domain())
+
+    def set_domain(self, domain):
+        self.zk_conn.write(paths.domain(), domain)

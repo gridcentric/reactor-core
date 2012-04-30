@@ -113,6 +113,20 @@ class PancakeApiClient(httplib2.Http):
         self._authenticated_request('/gridcentric/pancake/auth_key',
                                     'POST', body={'auth_key':api_key})
 
+    def get_domain(self):
+        """
+        Gets the current pancake domain.
+        """
+        resp, body = self._authenticated_request('/gridcentric/pancake/domain', 'GET')
+        return body.get("domain", '')
+
+    def set_domain(self, domain):
+        """
+        Sets the current pancake domain.
+        """
+        self._authenticated_request('/gridcentric/pancake/domain',
+                                    'POST', body={'domain':domain})
+
     def _authenticated_request(self, url, method, **kwargs):
         if self.api_key != None:
             kwargs.setdefault('headers', {})['X-Auth-Key'] = self.api_key

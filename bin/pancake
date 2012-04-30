@@ -84,6 +84,8 @@ def usage():
     print ""
     print "    passwd <password>     Updates the API's password."
     print ""
+    print "    domain [domain]       Get or set the Pancake domain."
+    print ""
     print "    runserver             Run the scale manager server."
     print ""
     print "    runapi                Runs the API server."
@@ -252,6 +254,14 @@ try:
         new_password = get_arg(1)
         api_client = get_api_client()
         api_client.update_api_key(new_password)
+
+    elif command == "domain":
+        api_client = get_api_client()
+        if len(args) > 1:
+            domain = get_arg(1)
+            api_client.set_domain(domain)
+        else:
+            print api_client.get_domain()
 
     elif command == "runserver":
 

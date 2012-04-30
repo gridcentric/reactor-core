@@ -10,6 +10,11 @@ AUTH_HASH = "%s/auth" % (ROOT)
 def auth_hash():
     return AUTH_HASH
 
+# The path to the global domain.
+DOMAIN = "%s/domain" % (ROOT)
+def domain():
+    return DOMAIN
+
 # The global configuration.
 CONFIG = "%s/config" % (ROOT)
 def config():

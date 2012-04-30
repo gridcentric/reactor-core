@@ -50,6 +50,9 @@ class PancakeApi:
         self.config.add_route('auth-key', '/gridcentric/pancake/auth_key')
         self.config.add_view(self.set_auth_key, route_name='auth-key')
 
+        self.config.add_route('domain-action', '/gridcentric/pancake/domain')
+        self.config.add_view(self.handle_domain_action, route_name='domain-action')
+
         self.config.add_route('new-ip', '/gridcentric/pancake/new-ip/{ipaddress}')
         self.config.add_view(self.new_ip_address, route_name='new-ip')
 
@@ -188,6 +191,24 @@ class PancakeApi:
             self.client.set_auth_hash(self._create_admin_auth_token(auth_key))
 
         return Response()
+
+    @connected
+    @authorized
+    def handle_domain_action(self, context, request):
+        """
+        Updates the domain in the system.
+        """
+        response = Response()
+        if request.method == "GET":
+            logging.info("Retrieving Domain.")
+            domain = self.client.domain()
+            response = Response(body=json.dumps({'domain':domain}))
+        elif request.method == "POST":
+            domain = json.loads(request.body)['domain']
+            logging.info("Updating Domain.")
+            self.client.set_domain(domain)
+
+        return response
 
     @connected
     @authorized
