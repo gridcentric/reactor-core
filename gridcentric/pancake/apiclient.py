@@ -87,7 +87,7 @@ class PancakeApiClient(httplib2.Http):
         Returns a list of the ip addresses (both dynamically confirmed and manually configured) for
         this service.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/service/%s/ips' %
+        resp, body = self._authenticated_request('/gridcentric/pancake/services/%s/ips' %
                                                  service_name, 'GET')
         return body.get('ip_addresses',[])
 
@@ -95,7 +95,7 @@ class PancakeApiClient(httplib2.Http):
         """
         Return a list of all the available service metrics.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/service/%s/metrics' %
+        resp, body = self._authenticated_request('/gridcentric/pancake/services/%s/metrics' %
                                                  service_name, 'GET')
         return body
 
@@ -103,7 +103,7 @@ class PancakeApiClient(httplib2.Http):
         """
         Set the custom service metrics.
         """
-        self._authenticated_request('/gridcentric/pancake/service/%s/metrics' %
+        self._authenticated_request('/gridcentric/pancake/services/%s/metrics' %
                                     service_name, 'POST', body=metrics)
 
     def update_api_key(self, api_key):

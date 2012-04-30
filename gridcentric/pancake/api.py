@@ -46,6 +46,9 @@ class PancakeApi:
         self.client = None
         self.config = Configurator()
 
+        self.config.add_route('default', '/')
+        self.config.add_view(self.empty, route_name='default')
+
         self.config.add_route('auth-key', '/gridcentric/pancake/auth_key')
         self.config.add_view(self.set_auth_key, route_name='auth-key')
 
@@ -67,12 +70,12 @@ class PancakeApi:
         self.config.add_route('service-list', '/gridcentric/pancake/services')
         self.config.add_view(self.list_services, route_name='service-list')
 
-        self.config.add_route('service-ip-list', '/gridcentric/pancake/service/{service_name}/ips')
-        self.config.add_route('service-ip-list-implicit', '/gridcentric/pancake/service/ips')
+        self.config.add_route('service-ip-list', '/gridcentric/pancake/services/{service_name}/ips')
+        self.config.add_route('service-ip-list-implicit', '/gridcentric/pancakes/service/ips')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list-implicit')
 
-        self.config.add_route('metric-action', '/gridcentric/pancake/service/{service_name}/metrics')
+        self.config.add_route('metric-action', '/gridcentric/pancake/services/{service_name}/metrics')
         self.config.add_route('metric-action-implicit', '/gridcentric/pancake/service/metrics')
         self.config.add_view(self.handle_metric_action, route_name='metric-action')
         self.config.add_view(self.handle_metric_action, route_name='metric-action-implicit')
@@ -162,6 +165,10 @@ class PancakeApi:
                 logging.warn("Failed to authenticate against service %s "
                              "because algorithm type is not supported.")
                 return ""
+
+    @connected
+    def empty(self, context, request):
+        return Response()
 
     @connected
     @authorized
