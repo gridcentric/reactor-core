@@ -147,14 +147,14 @@ class PancakeApi:
 
     def _create_admin_auth_token(self, auth_key):
         salt = 'gridcentricpancake'
-        return hashlib.sha1("%s%s" %(salt, auth_key)).hexdigest()
+        return hashlib.sha1("%s%s" % (salt, auth_key)).hexdigest()
 
     def _create_service_auth_token(self, auth_key, auth_salt, algo):
         if auth_salt == None:
             auth_salt = ""
-        
+
         salted = "%s%s" % (auth_salt, auth_key)
-        
+
         if algo == "none":
             return salted
         else:
@@ -223,9 +223,9 @@ class PancakeApi:
             manager_config = json.loads(request.body)
             logging.info("Updating manager %s" % manager)
             if not(manager) or manager == "default":
-                self.client.update_config(manager_config.get('config',""))
+                self.client.update_config(manager_config.get('config', ""))
             else:
-                self.client.update_manager_config(manager, manager_config.get('config',""))
+                self.client.update_manager_config(manager, manager_config.get('config', ""))
         return response
 
     @connected
@@ -258,21 +258,13 @@ class PancakeApi:
             response = Response(body=json.dumps({ 'config' : str(service_config) }))
 
         elif request.method == "DELETE":
-            auth_key = request.headers.get('X-Auth-Key', None)
-            if not(self._authorize_admin_access(context, request, auth_key)):
-                response = Response(status=401)
-            else:
-                logging.info("Unmanaging service %s" %(service_name))
-                self.client.unmanage_service(service_name)
+            logging.info("Unmanaging service %s" % (service_name))
+            self.client.unmanage_service(service_name)
 
         elif request.method == "POST":
-            auth_key = request.headers.get('X-Auth-Key', None)
-            if not(self._authorize_admin_access(context, request, auth_key)):
-                response = Response(status=401)
-            else:
-                service_config = json.loads(request.body)
-                logging.info("Managing or updating service %s" % service_name)
-                self.client.update_service(service_name, service_config.get('config',""))
+            service_config = json.loads(request.body)
+            logging.info("Managing or updating service %s" % service_name)
+            self.client.update_service(service_name, service_config.get('config', ""))
 
         return response
 

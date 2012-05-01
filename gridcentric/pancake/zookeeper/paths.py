@@ -67,7 +67,7 @@ def manager_metrics(name):
 
 # The metrics for a particular service (posted by the API).
 def service_custom_metrics(name):
-    return "%s/custom_metrics" % (service(name)))
+    return "%s/custom_metrics" % (service(name))
 
 # The updated metrics for a particular service (posted by the manager).
 def service_live_metrics(name):
@@ -102,7 +102,7 @@ def new_ips():
 def new_ip(ip_address):
     return "%s/%s" % (NEW_IPS, ip_address)
 
-IP_ADDRESSES="%s/ip_addreses" % (ROOT)
+IP_ADDRESSES = "%s/ip_addreses" % (ROOT)
 def ip_addresses():
     return IP_ADDRESSES
 
