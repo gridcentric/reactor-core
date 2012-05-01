@@ -7,6 +7,7 @@ import glob
 import re
 import time
 import threading
+import logging
 
 from mako.template import Template
 
@@ -51,7 +52,7 @@ class NginxLogReader(object):
             try:
                 self.connect()
             except IOError:
-                pass
+                logging.warn("Unable to reopen Nginx log.")
 
         return line
 
@@ -180,7 +181,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
             try:
                 os.remove(os.path.join(self.site_path,conf_filename))
             except OSError:
-                pass
+                logging.warn("Unable to remove file: %s" % conf_filename)
             return
 
         # Parse the url because we need to know the netloc.
