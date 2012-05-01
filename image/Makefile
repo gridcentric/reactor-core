@@ -47,7 +47,7 @@ clean:
 .PHONY: clean
 
 chroot-%: Makefile
-	@# NOTE: The hypervisor doesn't matter here. 
+	@rm -rf $@
 	PATH=$$PWD:$$PATH ubuntu-vm-builder kvm $* \
 	    --destdir=$$PWD/dist-$* \
 	    --only-chroot \
