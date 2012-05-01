@@ -7,10 +7,8 @@ import logging
 import re
 import math
 
-def calculate_totals(metrics):
-    """
-    Calculates the totals for each metric across all the individual instances.
-    """
+def calculate_weighted_averages(metrics):
+    """ Calculates the weighted average for each metric """
     totals = {}
     total_weights = {}
     for metric in metrics:
@@ -24,6 +22,7 @@ def calculate_totals(metrics):
         else:
             totals[key] = 0.0
     return totals
+
 
 def calculate_num_servers_uniform(total, bound):
     return int(math.ceil(total / bound))
@@ -61,17 +60,19 @@ def calculate_ideal_uniform(service_spec, metrics):
     metrics: A list of gather metrics that will be evaluated against the service_spec
     """
 
-    metric_totals = calculate_totals(metrics)
-    logging.debug("Metric totals: %s" % (metric_totals))
+    metric_averages = calculate_weighted_averages(metrics)
+    # The number of individual metrics
+    num_metrics = len(metrics)
+    logging.debug("Metric totals: %s" % (metric_averages))
     ideal_instances = (-1, -2)
     for criteria in service_spec:
         if criteria != '':
             c = ServiceCriteria(criteria)
             logging.debug("Service criteria found: (%s, %s, %s)" % \
                     (c.metric_key(), c.lower_bound(), c.upper_bound()))
-            total = metric_totals.get(c.metric_key(), 0)
+            avg = metric_averages.get(c.metric_key(), 0)
             (metric_min, metric_max) = \
-                    calculate_server_range(total, c.lower_bound(), c.upper_bound())
+                    calculate_server_range(avg * num_metrics, c.lower_bound(), c.upper_bound())
             logging.debug("Ideal instances for metric %s: %s" % \
                     (c.metric_key(), (metric_min, metric_max)))
             if ideal_instances == (-1, -2):

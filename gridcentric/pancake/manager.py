@@ -397,6 +397,7 @@ class ScaleManager(object):
         # Update all the service metrics from the loadbalancer.
         metrics = self.load_balancer.metrics()
 
+        logging.debug("Load_balancer returned metrics: %s" % metrics)
         metrics_by_key = {}
         service_addresses = {}
         for ip in metrics:
@@ -480,6 +481,7 @@ class ScaleManager(object):
                 service.health_check()
 
                 # Do the service update.
+                logging.debug("Metrics for service %s: %s" % (service.name, metrics))
                 service.update(reconfigure=False, metrics=metrics)
             except:
                 error = traceback.format_exc()
