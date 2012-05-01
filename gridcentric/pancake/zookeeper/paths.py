@@ -102,7 +102,7 @@ def new_ips():
 def new_ip(ip_address):
     return "%s/%s" % (NEW_IPS, ip_address)
 
-IP_ADDRESSES = "%s/ip_addreses" % (ROOT)
+IP_ADDRESSES = "%s/ip_addresses" % (ROOT)
 def ip_addresses():
     return IP_ADDRESSES
 
