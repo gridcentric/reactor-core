@@ -27,14 +27,20 @@ class PancakeClient(object):
     def update_service(self, service_name, config):
         self.zk_conn.write(paths.service(service_name), config)
 
-    def set_service_custom_metrics(self, service_name, metrics):
-        self.zk_conn.write(paths.service_custom_metrics(service_name), json.dumps(metrics))
+    def set_service_metrics(self, service_name, metrics, service_host=None):
+        if service_host:
+            self.zk_conn.write(
+                paths.service_host_metrics(service_name, service_host),
+                json.dumps(metrics))
+        else:
+            self.zk_conn.write(
+                paths.service_custom_metrics(service_name),
+                json.dumps(metrics))
 
-    def get_service_custom_metrics(self, service_name):
-        return json.loads(self.zk_conn.read(paths.service_custom_metrics(service_name), default='{}'))
-
-    def get_service_live_metrics(self, service_name):
-        return json.loads(self.zk_conn.read(paths.service_live_metrics(service_name), default='[]'))
+    def get_service_metrics(self, service_name):
+        return json.loads(self.zk_conn.read(\
+            paths.service_live_metrics(service_name),
+            default='[]'))
 
     def get_service_config(self, service_name):
         return self.zk_conn.read(paths.service(service_name))
@@ -57,11 +63,13 @@ class PancakeClient(object):
         associated with the service.
         """
         ip_addresses = []
-        confirmed_ips = self.zk_conn.list_children(paths.confirmed_ips(service_name))
+        confirmed_ips = self.zk_conn.list_children(\
+            paths.confirmed_ips(service_name))
         if confirmed_ips != None:
             ip_addresses += confirmed_ips
 
-        configured_ips = ServiceConfig(self.get_service_config(service_name)).static_ips()
+        configured_ips = ServiceConfig(\
+            self.get_service_config(service_name)).static_ips()
         if configured_ips != None:
             ip_addresses += configured_ips
 

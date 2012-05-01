@@ -65,7 +65,11 @@ def manager_keys(name):
 def manager_metrics(name):
     return "%s/%s" % (MANAGER_METRICS, name)
 
-# The metrics for a particular service (posted by the API).
+# The custom metrics for a particular host.
+def service_host_metrics(name, host):
+    return "%s/host_metrics/%s" % (service(name), host)
+
+# The global custom metrics for a service (posted by the API).
 def service_custom_metrics(name):
     return "%s/custom_metrics" % (service(name))
 
