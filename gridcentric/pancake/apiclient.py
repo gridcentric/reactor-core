@@ -15,6 +15,13 @@ class PancakeApiClient(httplib2.Http):
         # Needed to httplib2
         self.force_exception_to_status_code = True
 
+    def version(self):
+        """
+        Return the API version.
+        """
+        resp, body = self._authenticated_request('/', 'GET')
+        return body.get('version',None)
+    
     def list_managed_services(self):
         """
         Returns a list of all the services currently being managed by the pancake.

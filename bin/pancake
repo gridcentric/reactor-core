@@ -54,6 +54,8 @@ def usage():
     print "   -u, --update           Perform an incremental configuration update."
     print ""
     print "Commands:"
+    print "    version               Get the server API version."
+    print ""
     print "    list                  List all the services currently being managed."
     print ""
     print "    manage <service>      Manage a new serivce with the given name. The"
@@ -134,7 +136,11 @@ def get_api_client():
     return PancakeApiClient(api_server, password)
 
 try:
-    if command == "list":
+    if command == "version":
+        api_client = get_api_client()
+        print api_client.version()
+
+    elif command == "list":
         api_client = get_api_client()
         services = api_client.list_managed_services()
         if services:

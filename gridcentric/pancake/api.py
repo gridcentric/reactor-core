@@ -46,8 +46,8 @@ class PancakeApi:
         self.client = None
         self.config = Configurator()
 
-        self.config.add_route('default', '/')
-        self.config.add_view(self.empty, route_name='default')
+        self.config.add_route('version', '/')
+        self.config.add_view(self.version, route_name='version')
 
         self.config.add_route('auth-key', '/gridcentric/pancake/auth_key')
         self.config.add_view(self.set_auth_key, route_name='auth-key')
