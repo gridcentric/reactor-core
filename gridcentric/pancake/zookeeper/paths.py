@@ -67,11 +67,11 @@ def manager_metrics(name):
 
 # The metrics for a particular service (posted by the API).
 def service_custom_metrics(name):
-    return "%s/custom-%s" % (MANAGER_METRICS, name)
+    return "%s/custom_metrics" % (service(name)))
 
 # The updated metrics for a particular service (posted by the manager).
 def service_live_metrics(name):
-    return "%s/live-%s" % (MANAGER_METRICS, name)
+    return "%s/live_metrics" % (service(name))
 
 # The ips that have been confirmed by the system for a particular service. An
 # ip is confirmed once it sends a message to a pancake.

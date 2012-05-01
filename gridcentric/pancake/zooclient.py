@@ -22,7 +22,6 @@ class PancakeClient(object):
         self.zk_conn.write(paths.service(service_name), config)
 
     def unmanage_service(self, service_name):
-        self.zk_conn.delete(paths.service_custom_metrics(service_name))
         self.zk_conn.delete(paths.service(service_name))
 
     def update_service(self, service_name, config):
