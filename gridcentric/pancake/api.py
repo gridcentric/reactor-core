@@ -71,7 +71,7 @@ class PancakeApi:
         self.config.add_view(self.list_services, route_name='service-list')
 
         self.config.add_route('service-ip-list', '/gridcentric/pancake/services/{service_name}/ips')
-        self.config.add_route('service-ip-list-implicit', '/gridcentric/pancakes/service/ips')
+        self.config.add_route('service-ip-list-implicit', '/gridcentric/pancake/services/ips')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list-implicit')
 
@@ -167,8 +167,8 @@ class PancakeApi:
                 return ""
 
     @connected
-    def empty(self, context, request):
-        return Response()
+    def version(self, context, request):
+        return Response(body=json.dumps({'version':'1.0'}))
 
     @connected
     @authorized
