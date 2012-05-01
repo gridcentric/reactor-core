@@ -12,12 +12,20 @@ from StringIO import StringIO
 from gridcentric.pancake.config import ManagerConfig
 from gridcentric.pancake.config import ServiceConfig
 from gridcentric.pancake.service import Service
-from gridcentric.pancake.service import APIService
 import gridcentric.pancake.loadbalancer.connection as lb_connection
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
 import gridcentric.pancake.zookeeper.paths as paths
 import gridcentric.pancake.ips as ips
+
+def locked(fn):
+    def wrapped_fn(self, *args, **kwargs):
+        try:
+            self.cond.acquire()
+            return fn(self, *args, **kwargs)
+        finally:
+            self.cond.release()
+    return wrapped_fn
 
 class ScaleManager(object):
 
@@ -39,16 +47,6 @@ class ScaleManager(object):
         self.key_to_owned = {}    # Service to ownership.
 
         self.load_balancer = None # Load balancer connections.
-        self.api_service = None # The implicit API service.
-
-    def locked(fn):
-        def wrapped_fn(self, *args, **kwargs):
-            try:
-                self.cond.acquire()
-                return fn(self, *args, **kwargs)
-            finally:
-                self.cond.release()
-        return wrapped_fn
 
     @locked
     def serve(self):
@@ -70,12 +68,6 @@ class ScaleManager(object):
                                 paths.domain(),
                                 self.reload_domain,
                                 default_value=self.domain))
-
-        # Add the implicit API service.
-        if not(self.api_service):
-            self.api_service = APIService(self)
-            if not(self.api_service in self.services):
-                self.add_service(self.api_service)
 
         # Watch all IPs.
         self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
@@ -126,14 +118,12 @@ class ScaleManager(object):
                      (services, self.services.keys()))
 
         for service_name in services:
-            if service_name not in self.services and \
-               not(service_name == self.api_service.name):
+            if service_name not in self.services:
                 self.create_service(service_name)
 
         services_to_remove = []
         for service_name in self.services:
-            if service_name not in services and \
-               not(service_name == self.api_service.name):
+            if service_name not in services:
                 self.remove_service(service_name, unmanage=True)
                 services_to_remove += [service_name]
 
@@ -234,7 +224,7 @@ class ScaleManager(object):
                          service_config=service_config)
 
     @locked
-    def add_service(self, service, service_path=None, service_config=None):
+    def add_service(self, service, service_path=None, service_config=''):
         self.services[service.name] = service
         service_key = service.key()
         self.key_to_services[service_key] = \
@@ -367,10 +357,6 @@ class ScaleManager(object):
     @locked
     def reload_domain(self, domain):
         self.domain = domain
-        if self.api_service:
-            self.remove_service(self.api_service.name)
-            self.add_service(self.api_service)
-            self.reload_loadbalancer()
 
     @locked
     def mark_instance(self, service_name, instance_id):

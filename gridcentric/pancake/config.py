@@ -7,7 +7,7 @@ from StringIO import StringIO
 from gridcentric.pancake.exceptions import ConfigFileNotFound
 
 class Config(object):
-    
+
     def __init__(self, defaultcfg = None):
         self.defaultcfg = defaultcfg
         self.config = None

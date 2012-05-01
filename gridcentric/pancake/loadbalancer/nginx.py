@@ -206,6 +206,10 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # Ensure that there is a path.
         path = path or "/"
 
+        # Ensure that there is a server name.
+        if not(netloc):
+            netloc = "example.com"
+
         # Render our given template.
         conf = self.template.render(id=uniq_id,
                                     url=url,
