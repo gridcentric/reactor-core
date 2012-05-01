@@ -35,16 +35,14 @@ class Service(object):
             for instance in self.instances():
                 self.drop_instances(self.instances(),
                                     "service is becoming unmanaged")
-        except Exception, e:
-            traceback.print_exc()
-            logging.error("Error unmanaging service %s: %s" % (self.name, str(e)))
+        except:
+            logging.error("Error unmanaging service %s: %s" % (self.name, traceback.format_exc()))
 
     def update(self, reconfigure=True, metrics=[]):
         try:
             self._update(reconfigure, metrics)
-        except Exception, e:
-            traceback.print_exc()
-            logging.error("Error updating service %s: %s" % (self.name, str(e)))
+        except:
+            logging.error("Error updating service %s: %s" % (self.name, traceback.format_exc()))
 
     def _determine_target_instances_range(self, metrics):
         """
