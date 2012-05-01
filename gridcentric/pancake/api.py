@@ -15,14 +15,19 @@ def authorized(request_handler):
     authorized before executing the actual handler. 
     """
     def fn(self, context, request):
-         auth_key = request.headers.get('X-Auth-Key', None)
-         if self._authorize_admin_access(context, request, auth_key) or \
-            self._authorize_service_access(context, request, auth_key) or \
-            self._authorize_ip_access(context, request):
-            return request_handler(self, context, request)
-         else:
-            # Return an unauthorized response.
-            return Response(status=401)
+        auth_key = request.headers.get('X-Auth-Key', None)
+        try:
+            if self._authorize_ip_access(context, request) or \
+                self._authorize_service_access(context, request, auth_key) or \
+                self._authorize_admin_access(context, request, auth_key):
+                return request_handler(self, context, request)
+            else:
+                # Return an unauthorized response.
+                return Response(status=401)
+        except Exception, e:
+            # Return an authorize (but more descriptive) response.
+            return Response(status=401, body=str(e))
+
     return fn
 
 def connected(request_handler):
@@ -70,15 +75,22 @@ class PancakeApi:
         self.config.add_route('service-list', '/gridcentric/pancake/services')
         self.config.add_view(self.list_services, route_name='service-list')
 
-        self.config.add_route('service-ip-list', '/gridcentric/pancake/services/{service_name}/ips')
-        self.config.add_route('service-ip-list-implicit', '/gridcentric/pancake/services/ips')
+        self.config.add_route('service-ip-list',
+            '/gridcentric/pancake/services/{service_name}/ips')
+        self.config.add_route('service-ip-list-implicit', '/gridcentric/pancake/service/ips')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list-implicit')
 
         self.config.add_route('metric-action', '/gridcentric/pancake/services/{service_name}/metrics')
+        self.config.add_route('metric-host-action',
+            '/gridcentric/pancake/services/{service_name}/metrics/{service_host}')
         self.config.add_route('metric-action-implicit', '/gridcentric/pancake/service/metrics')
+        self.config.add_route('metric-host-action-implicit',
+            '/gridcentric/pancake/service/metrics/{service_host}')
         self.config.add_view(self.handle_metric_action, route_name='metric-action')
         self.config.add_view(self.handle_metric_action, route_name='metric-action-implicit')
+        self.config.add_view(self.handle_metric_action, route_name='metric-host-action')
+        self.config.add_view(self.handle_metric_action, route_name='metric-host-action-implicit')
 
     def reconnect(self, zk_servers):
         self.client = PancakeClient(zk_servers)
@@ -110,20 +122,25 @@ class PancakeApi:
     @connected
     def _authorize_service_access(self, context, request, auth_key):
         service_name = request.matchdict.get('service_name', None)
+
         if service_name != None:
-            service_config = ServiceConfig(self.client.get_service_config(service_name))
-            auth_hash, auth_salt, auth_algo = service_config.get_service_auth()
+            service_config = ServiceConfig(\
+                self.client.get_service_config(service_name))
+
+            auth_hash, auth_salt, auth_algo = \
+                service_config.get_service_auth()
 
             if auth_hash != None and auth_hash != "":
                 if auth_key != None:
-                    auth_token = self._create_service_auth_token(auth_key, auth_salt, auth_algo)
+                    auth_token = self._create_service_auth_token(\
+                        auth_key, auth_salt, auth_algo)
                     return auth_hash == auth_token
                 else:
                     return False
             else:
-                # If there is not auth hash then authentication has not been turned
-                # on so all requests are allowed by default.
-                return True
+                # If there is not auth hash then authentication has not been
+                # turned on so all requests are denied by default.
+                return False
 
     @connected
     def _authorize_ip_access(self, context, request):
@@ -140,9 +157,13 @@ class PancakeApi:
                 request_ip = request.environ.get('REMOTE_ADDR', "")
                 service_name = self.client.get_ip_address_service(request_ip)
                 if service_name != None:
-                    # Authorize this request and set the service_name
+                    # Authorize this request and set the service_name.
                     request.matchdict['service_name'] = service_name
+                    request.matchdict['service_host'] = request_ip
                     return True
+                else:
+                    raise Exception("Must query from service host.")
+
         return False
 
     def _create_admin_auth_token(self, auth_key):
@@ -285,19 +306,18 @@ class PancakeApi:
         POST - Either manages or updates the service with a new config in the request body
         """
         service_name = request.matchdict['service_name']
+        service_host = request.matchdict.get('service_host', None)
         response = Response()
 
         if request.method == "GET":
             logging.info("Retrieving metrics for service %s" % service_name)
-            custom = self.client.get_service_custom_metrics(service_name)
-            live = self.client.get_service_live_metrics(service_name)
-            metrics = { "live" : live, "custom" : custom }
+            metrics = self.client.get_service_metrics(service_name)
             response = Response(body=json.dumps(metrics))
 
         elif request.method == "POST":
             metrics = json.loads(request.body)
             logging.info("Updating metrics for service %s" % service_name)
-            self.client.set_service_custom_metrics(service_name, metrics)
+            self.client.set_service_metrics(service_name, metrics, service_host)
 
         return response
 
@@ -308,7 +328,8 @@ class PancakeApi:
 
         if request.method == 'GET':
             return Response(body=json.dumps(
-                {'ip_addresses': self.client.get_service_ip_addresses(service_name)}))
+                {'ip_addresses': \
+                self.client.get_service_ip_addresses(service_name)}))
 
         return Response()
 
