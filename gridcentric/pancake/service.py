@@ -44,7 +44,7 @@ class Service(object):
         except:
             logging.error("Error updating service %s: %s" % (self.name, traceback.format_exc()))
 
-    def _determine_target_instances_range(self, metrics):
+    def _determine_target_instances_range(self, metrics, num_instances):
         """
         Determine the range of instances that we need to scale to. A tuple of the
         form (min_instances, max_instances) is returned.
@@ -52,8 +52,8 @@ class Service(object):
 
         # Evaluate the metrics on these instances and get the ideal bounds on the number
         # of servers that should exist.
-        ideal_min, ideal_max = metric_calculator.calculate_ideal_uniform( \
-                self.config.metrics(), metrics)
+        ideal_min, ideal_max = metric_calculator.calculate_ideal_uniform(\
+                self.config.metrics(), metrics, num_instances)
         logging.debug("Metrics for service %s: ideal_servers=%s (%s)" % \
                 (self.name, (ideal_min, ideal_max), metrics))
 
@@ -93,8 +93,10 @@ class Service(object):
     def _update(self, reconfigure, metrics):
         instances = self.instances()
         num_instances = len(instances)
+        num_confirmed_instances = len(self.scale_manager.confirmed_ips(self.name))
 
-        (target_min, target_max) = self._determine_target_instances_range(metrics)
+        (target_min, target_max) = \
+                self._determine_target_instances_range(metrics, num_confirmed_instances)
 
         if (num_instances >= target_min and num_instances <= target_max) \
             or (target_min > target_max):

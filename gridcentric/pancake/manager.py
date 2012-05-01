@@ -30,13 +30,13 @@ def locked(fn):
 class ScaleManager(object):
 
     def __init__(self, zk_servers):
-        self.running    = False
+        self.running = False
         self.zk_servers = zk_servers
-        self.config     = ManagerConfig("")
-        self.cond       = threading.Condition()
+        self.config = ManagerConfig("")
+        self.cond = threading.Condition()
 
-        self.uuid   = str(uuid.uuid4()) # Manager uuid (generated).
-        self.domain = None              # Pancake domain.
+        self.uuid = str(uuid.uuid4()) # Manager uuid (generated).
+        self.domain = ""              # Pancake domain.
 
         self.services = {}        # Service map (name -> service)
         self.key_to_services = {} # Service map (key() -> [services...])
@@ -75,7 +75,7 @@ class ScaleManager(object):
         # Watch all managers and services.
         self.manager_change(self.zk_conn.watch_children(paths.managers(), self.manager_change))
         self.service_change(self.zk_conn.watch_children(paths.services(), self.service_change))
-        
+
     @locked
     def manager_select(self, service):
         # Remember whether this was previous managed.
@@ -228,7 +228,7 @@ class ScaleManager(object):
         self.services[service.name] = service
         service_key = service.key()
         self.key_to_services[service_key] = \
-            self.key_to_services.get(service.key(),[]) + [service.name]
+            self.key_to_services.get(service.key(), []) + [service.name]
 
         if service_path:
             # Watch the config for this service.
@@ -261,7 +261,7 @@ class ScaleManager(object):
             # Update the loadbalancer for this service.
             self.update_loadbalancer(service, remove=True)
 
-            logging.info("Unmanaging service %s" %(service_name))
+            logging.info("Unmanaging service %s" % (service_name))
             service_names = self.key_to_services.get(service.key(), [])
             if service_name in service_names:
                 # Remove the service name from the list of services with the
@@ -321,7 +321,7 @@ class ScaleManager(object):
                     break
 
     @locked
-    def update_loadbalancer(self, service, remove = False):
+    def update_loadbalancer(self, service, remove=False):
         all_addresses = []
         names = []
 
@@ -349,7 +349,7 @@ class ScaleManager(object):
             for service_name in self.key_to_services.get(service.key(), []):
                 names.append(service_name)
                 addresses += self.active_ips(service_name)
-            self.load_balancer.change(service.service_url(), 
+            self.load_balancer.change(service.service_url(),
                                       service.config.port(),
                                       names, addresses)
         self.load_balancer.save()
@@ -383,6 +383,7 @@ class ScaleManager(object):
         # Update all the service metrics from the loadbalancer.
         metrics = self.load_balancer.metrics()
 
+        logging.debug("Load_balancer returned metrics: %s" % metrics)
         metrics_by_key = {}
         service_addresses = {}
         for ip in metrics:
@@ -486,6 +487,7 @@ class ScaleManager(object):
                 service.health_check()
 
                 # Do the service update.
+                logging.debug("Metrics for service %s: %s" % (service.name, metrics))
                 service.update(reconfigure=False, metrics=metrics)
             except:
                 error = traceback.format_exc()
