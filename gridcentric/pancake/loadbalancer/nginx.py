@@ -104,7 +104,8 @@ class NginxLogWatcher(threading.Thread):
                 "bytes" : (hits, record[host][1] / delta),
                 "active" : (1, active_connections.get(host, 0)),
                 }
-            del active_connections[host]
+            if host in active_connections:
+                del active_connections[host]
             record[host] = metrics
 
         # Compute the active counts.
@@ -145,18 +146,18 @@ class NginxLogWatcher(threading.Thread):
                     self.lock.release()
 
 class NginxLoadBalancerConnection(LoadBalancerConnection):
-    
+
     def __init__(self, config_path, site_path):
         self.config_path = config_path
         self.site_path = site_path
-        template_file = os.path.join(os.path.dirname(__file__),'nginx.template')
+        template_file = os.path.join(os.path.dirname(__file__), 'nginx.template')
         self.template = Template(filename=template_file)
         self.log_reader = NginxLogWatcher("/var/log/nginx/access.log")
         self.log_reader.start()
 
     def _determine_nginx_pid(self):
         if os.path.exists("/var/run/nginx.pid"):
-            pid_file = file("/var/run/nginx.pid",'r')
+            pid_file = file("/var/run/nginx.pid", 'r')
             pid = pid_file.readline().strip()
             pid_file.close()
             return int(pid)
@@ -179,7 +180,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # Check for a removal.
         if len(addresses) == 0:
             try:
-                os.remove(os.path.join(self.site_path,conf_filename))
+                os.remove(os.path.join(self.site_path, conf_filename))
             except OSError:
                 logging.warn("Unable to remove file: %s" % conf_filename)
             return
@@ -216,15 +217,15 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
                                     addresses=addresses)
 
         # Write out the config file.
-        config_file = file(os.path.join(self.site_path,conf_filename), 'wb')
+        config_file = file(os.path.join(self.site_path, conf_filename), 'wb')
         config_file.write(conf)
         config_file.flush()
         config_file.close()
 
     def save(self):
         # Copy over our base configuration.
-        shutil.copyfile(os.path.join(os.path.dirname(__file__),'pancake.conf'),
-                        os.path.join(self.config_path,'pancake.conf'))
+        shutil.copyfile(os.path.join(os.path.dirname(__file__), 'pancake.conf'),
+                        os.path.join(self.config_path, 'pancake.conf'))
 
         # Send a signal to NginX to reload the configuration
         # (Note: we might need permission to do this!!)
