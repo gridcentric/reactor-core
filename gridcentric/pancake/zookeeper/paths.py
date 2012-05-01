@@ -67,7 +67,7 @@ def manager_metrics(name):
 
 # The metrics for a particular service (posted by the API).
 def service_custom_metrics(name):
-    return "%s/custom_metrics" % (service(name)))
+    return "%s/custom_metrics" % (service(name))
 
 # The updated metrics for a particular service (posted by the manager).
 def service_live_metrics(name):
