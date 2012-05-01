@@ -89,7 +89,6 @@ class AutoScaleManager(ScaleManager):
             logging.info("API service found.")
 
             # Create the API service object.
-            service_path = paths.service(service_name)
             service = APIService(self)
             self.add_service(service, service_path=paths.service(service.name))
         else:
