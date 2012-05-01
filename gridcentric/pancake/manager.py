@@ -482,8 +482,8 @@ class ScaleManager(object):
                 # Do the service update.
                 service.update(reconfigure=False, metrics=metrics)
             except:
-                logging.error("Error updating service %s." % (service.name))
-                traceback.print_exc()
+                error = traceback.format_exc()
+                logging.error("Error updating service %s: %s" % (service.name, error))
 
     def run(self):
         # Note that we are running.
