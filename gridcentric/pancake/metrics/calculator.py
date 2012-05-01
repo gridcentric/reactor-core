@@ -47,7 +47,7 @@ def calculate_server_range(total, lower, upper):
 
     return r
 
-def calculate_ideal_uniform(service_spec, metrics):
+def calculate_ideal_uniform(service_spec, metrics, num_instances):
     """
     Returns the ideal number of instances these service spec should have as a tuple that
     defines the range (min_servers, max_servers).
@@ -58,11 +58,11 @@ def calculate_ideal_uniform(service_spec, metrics):
                  and the response rate should be between 100ms - 800ms.)
     
     metrics: A list of gather metrics that will be evaluated against the service_spec
+    
+    num_instances: The number of instances that produced these metrics
     """
 
     metric_averages = calculate_weighted_averages(metrics)
-    # The number of individual metrics
-    num_metrics = len(metrics)
     logging.debug("Metric totals: %s" % (metric_averages))
     ideal_instances = (-1, -2)
     for criteria in service_spec:
@@ -72,7 +72,7 @@ def calculate_ideal_uniform(service_spec, metrics):
                     (c.metric_key(), c.lower_bound(), c.upper_bound()))
             avg = metric_averages.get(c.metric_key(), 0)
             (metric_min, metric_max) = \
-                    calculate_server_range(avg * num_metrics, c.lower_bound(), c.upper_bound())
+                    calculate_server_range(avg * num_instances, c.lower_bound(), c.upper_bound())
             logging.debug("Ideal instances for metric %s: %s" % \
                     (c.metric_key(), (metric_min, metric_max)))
             if ideal_instances == (-1, -2):
