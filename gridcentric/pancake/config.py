@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import ConfigParser
 import logging
 import socket
@@ -46,27 +44,31 @@ class ManagerConfig(Config):
 health_check=5
 mark_maximum=20
 keys=64
-loadbalancer=nginx
+loadbalancer=nginx,dnsmasq
 
-[loadbalancer]
+[loadbalancer:nginx]
 config_path=/etc/nginx/conf.d
 site_path=/etc/nginx/sites-enabled
+
+[loadbalancer:dnsmasq]
+config_path=/etc/dnsmasq.d
+hosts_path=/etc/hosts.pancake
 """))
         self._load(config_str)
 
-    def loadbalancer_name(self):
+    def loadbalancer_names(self):
         """
         The name of the loadbalancer.
         """
-        return self._get("manager", "loadbalancer")
+        return self._get("manager", "loadbalancer").split(",")
 
-    def loadbalancer_config(self):
+    def loadbalancer_config(self, name):
         """
         The set of keys required to configure the loadbalancer.
         """
         result = {}
-        if self.config.has_section("loadbalancer"):
-            result.update(self.config.items("loadbalancer"))
+        if self.config.has_section("loadbalancer:%s" % name):
+            result.update(self.config.items("loadbalancer:%s" % name))
         return result
 
     def mark_maximum(self):
@@ -85,6 +87,7 @@ class ServiceConfig(Config):
 [service]
 url=http://example.com
 static_instances=
+port=
 auth_hash=
 auth_salt=
 auth_algo=sha1
@@ -93,6 +96,7 @@ auth_algo=sha1
 min_instances=1
 max_instances=1
 metrics=
+source=
 
 [nova]
 instance_id=0
@@ -106,6 +110,9 @@ project=admin
     def url(self):
         return self._get("service", "url")
 
+    def port(self):
+        return self._get("service", "port")
+
     def instance_id(self):
         return int(self._get("nova", "instance_id"))
 
@@ -117,6 +124,9 @@ project=admin
 
     def metrics(self):
         return self._get("scaling", "metrics").split(",")
+
+    def source(self):
+        return self._get("scaling", "source")
 
     def get_service_auth(self):
         return (self._get("service","auth_hash"),

@@ -1,0 +1,8 @@
+domain-needed
+bogus-priv
+no-resolv
+no-poll
+no-hosts
+addn-hosts=${hosts}
+expand-hosts
+domain=${domain}

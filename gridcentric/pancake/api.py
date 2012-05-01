@@ -1,7 +1,4 @@
-#!/usr/bin/env python
-
 import hashlib
-import httplib2
 import json
 import logging
 
@@ -9,130 +6,8 @@ from pyramid.config import Configurator
 from pyramid.response import Response
 
 from gridcentric.pancake.config import ServiceConfig
-from gridcentric.pancake.client import PancakeClient
+from gridcentric.pancake.zooclient import PancakeClient
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
-
-class PancakeApiClient(httplib2.Http):
-    """
-    A simple client that interacts with the REST interface of the pancakeApi. This is to be
-    used in third-party applications that want python bindings to interact with the system.
-    """
-
-    def __init__(self, api_url, api_key=None):
-        super(PancakeApiClient, self).__init__()
-        
-        self.api_url = api_url
-        self.api_key = api_key
-        # Needed to httplib2
-        self.force_exception_to_status_code = True
-
-    def list_managed_services(self):
-        """
-        Returns a list of all the services currently being managed by the pancake.
-        """
-        resp, body = self._authenticated_request('/gridcentric/pancake/services', 'GET')
-        return body.get('services',[])
-    
-    def manage_service(self, service_name, config):
-        """
-        Manage the service using the given configuration.
-        """
-        self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 
-                                    'POST',
-                                    body={'config':config})
-
-    def unmanage_service(self, service_name):
-        """
-        Unmanage the service.
-        """
-        self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 'DELETE')
-
-    def update_service(self, service_name, config):
-        """
-        Update the managed service with given configuration values. Note that the config
-        can be partial and only those values will be updated.
-        """
-        self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 'POST',
-                                    body={'config':config})
-    
-    def get_service_config(self, service_name):
-        """
-        Return the service's configuration.
-        """
-        resp, body = self._authenticated_request('/gridcentric/pancake/services/%s' %
-                                                 service_name, 'GET')
-        return body.get('config',"")
-
-    def list_managers_configured(self):
-        """
-        Returns a list of all configured managers.
-        """
-        resp, body = self._authenticated_request('/gridcentric/pancake/managers', 'GET')
-        return body.get('managers_configured',[])
-
-    def list_managers_active(self):
-        """
-        Returns a list of all active managers.
-        """
-        resp, body = self._authenticated_request('/gridcentric/pancake/managers', 'GET')
-        return body.get('managers_active',[])
-
-    def update_manager(self, manager, config):
-        """
-        Update the manager with the given configuration.
-        """
-        self._authenticated_request('/gridcentric/pancake/managers/%s' %
-                                    (manager or 'default'), 'POST',
-                                    body={'config':config})
-
-    def get_manager_config(self, manager):
-        """
-        Return the manager's configuration.
-        """
-        resp, body = self._authenticated_request('/gridcentric/pancake/managers/%s' %
-                                                 (manager or 'default'), 'GET')
-        return body.get('config',"")
-
-    def list_service_ips(self, service_name):
-        """
-        Returns a list of the ip addresses (both dynamically confirmed and manually configured) for
-        this service.
-        """
-        resp, body = self._authenticated_request('/gridcentric/pancake/service/%s/ips' %
-                                                 service_name, 'GET')
-        return body.get('ip_addresses',[])
-
-    def update_api_key(self, api_key):
-        """
-        Changes the API key in the system.
-        """
-        self._authenticated_request('/gridcentric/pancake/auth_key',
-                                    'POST', body={'auth_key':api_key})
-
-    def _authenticated_request(self, url, method, **kwargs):
-        if self.api_key != None:
-            kwargs.setdefault('headers', {})['X-Auth-Key'] = self.api_key
-        resp, body = self.request(self.api_url + url, method, **kwargs)
-        if resp.status != 200:
-            raise Exception(body)
-        return resp, body
-
-    def request(self, *args, **kwargs):
-        kwargs.setdefault('headers', kwargs.get('headers', {}))
-        if 'body' in kwargs:
-            kwargs['headers']['Content-Type'] = 'application/json'
-            kwargs['body'] = json.dumps(kwargs['body'])
-
-        resp, body = super(PancakeApiClient, self).request(*args, **kwargs)
-
-        if resp.status in (401,):
-            raise Exception("Permission denied.")
-        if body:
-            try:
-                body = json.loads(body)
-            except ValueError, e:
-                pass
-        return resp, body
 
 def authorized(request_handler):
     """
@@ -144,7 +19,6 @@ def authorized(request_handler):
          if self._authorize_admin_access(context, request, auth_key) or \
             self._authorize_service_access(context, request, auth_key) or \
             self._authorize_ip_access(context, request):
-               
             return request_handler(self, context, request)
          else:
             # Return an unauthorized response.
@@ -172,8 +46,14 @@ class PancakeApi:
         self.client = None
         self.config = Configurator()
 
+        self.config.add_route('version', '/')
+        self.config.add_view(self.version, route_name='version')
+
         self.config.add_route('auth-key', '/gridcentric/pancake/auth_key')
         self.config.add_view(self.set_auth_key, route_name='auth-key')
+
+        self.config.add_route('domain-action', '/gridcentric/pancake/domain')
+        self.config.add_view(self.handle_domain_action, route_name='domain-action')
 
         self.config.add_route('new-ip', '/gridcentric/pancake/new-ip/{ipaddress}')
         self.config.add_view(self.new_ip_address, route_name='new-ip')
@@ -190,10 +70,15 @@ class PancakeApi:
         self.config.add_route('service-list', '/gridcentric/pancake/services')
         self.config.add_view(self.list_services, route_name='service-list')
 
-        self.config.add_route('service-ip-list', '/gridcentric/pancake/service/{service_name}/ips')
-        self.config.add_route('service-ip-list-implicit', '/gridcentric/pancake/service/ips')
+        self.config.add_route('service-ip-list', '/gridcentric/pancake/services/{service_name}/ips')
+        self.config.add_route('service-ip-list-implicit', '/gridcentric/pancake/services/ips')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list-implicit')
+
+        self.config.add_route('metric-action', '/gridcentric/pancake/services/{service_name}/metrics')
+        self.config.add_route('metric-action-implicit', '/gridcentric/pancake/service/metrics')
+        self.config.add_view(self.handle_metric_action, route_name='metric-action')
+        self.config.add_view(self.handle_metric_action, route_name='metric-action-implicit')
 
     def reconnect(self, zk_servers):
         self.client = PancakeClient(zk_servers)
@@ -207,21 +92,6 @@ class PancakeApi:
 
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
-
-    def authorized_admin_only(request_handler):
-        """
-        A Decorator that does a simple check to ensure that the reqyest
-        is authorized by the admin only before executing the actual handler.
-        """
-        def fn(self, context, request):
-             
-             auth_key = request.headers.get('X-Auth-Key', None)
-             if self._authorize_admin_access(context, request, auth_key):
-                return request_handler(self, context, request)
-             else:
-                 # Return an unauthorized response.
-                return Response(status=401)
-        return fn
 
     @connected
     def _authorize_admin_access(self, context, request, auth_key):
@@ -243,7 +113,7 @@ class PancakeApi:
         if service_name != None:
             service_config = ServiceConfig(self.client.get_service_config(service_name))
             auth_hash, auth_salt, auth_algo = service_config.get_service_auth()
-            
+
             if auth_hash != None and auth_hash != "":
                 if auth_key != None:
                     auth_token = self._create_service_auth_token(auth_key, auth_salt, auth_algo)
@@ -278,7 +148,7 @@ class PancakeApi:
     def _create_admin_auth_token(self, auth_key):
         salt = 'gridcentricpancake'
         return hashlib.sha1("%s%s" %(salt, auth_key)).hexdigest()
-    
+
     def _create_service_auth_token(self, auth_key, auth_salt, algo):
         if auth_salt == None:
             auth_salt = ""
@@ -297,17 +167,39 @@ class PancakeApi:
                 return ""
 
     @connected
+    def version(self, context, request):
+        return Response(body=json.dumps({'version':'1.0'}))
+
+    @connected
     @authorized
     def set_auth_key(self, context, request):
         """
         Updates the auth key in the system.
         """
-        if request.method == 'POST':
+        if request.method == "POST":
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
             self.client.set_auth_hash(self._create_admin_auth_token(auth_key))
 
         return Response()
+
+    @connected
+    @authorized
+    def handle_domain_action(self, context, request):
+        """
+        Updates the domain in the system.
+        """
+        response = Response()
+        if request.method == "GET":
+            logging.info("Retrieving Domain.")
+            domain = self.client.domain()
+            response = Response(body=json.dumps({'domain':domain}))
+        elif request.method == "POST":
+            domain = json.loads(request.body)['domain']
+            logging.info("Updating Domain.")
+            self.client.set_domain(domain)
+
+        return response
 
     @connected
     @authorized
@@ -352,33 +244,72 @@ class PancakeApi:
     @authorized
     def handle_service_action(self, context, request):
         """
-        This Handles a general service action:
+        This handles a general service action:
         GET - Returns the service config in the Response body
         POST - Either manages or updates the service with a new config in the request body
         DELETE - Unmanages the service.
         """
         service_name = request.matchdict['service_name']
         response = Response()
+
         if request.method == "GET":
             logging.info("Retrieving service %s configuration" % service_name)
             service_config = ServiceConfig(self.client.get_service_config(service_name))
             response = Response(body=json.dumps({ 'config' : str(service_config) }))
+
         elif request.method == "DELETE":
-            logging.info("Unmanaging service %s" %(service_name))
-            self.client.unmanage_service(service_name)
+            auth_key = request.headers.get('X-Auth-Key', None)
+            if not(self._authorize_admin_access(context, request, auth_key)):
+                response = Response(status=401)
+            else:
+                logging.info("Unmanaging service %s" %(service_name))
+                self.client.unmanage_service(service_name)
+
         elif request.method == "POST":
-            service_config = json.loads(request.body)
-            logging.info("Managing or updating service %s" % service_name)
-            self.client.update_service(service_name, service_config.get('config',""))
+            auth_key = request.headers.get('X-Auth-Key', None)
+            if not(self._authorize_admin_access(context, request, auth_key)):
+                response = Response(status=401)
+            else:
+                service_config = json.loads(request.body)
+                logging.info("Managing or updating service %s" % service_name)
+                self.client.update_service(service_name, service_config.get('config',""))
+
+        return response
+
+    @connected
+    @authorized
+    def handle_metric_action(self, context, request):
+        """
+        This handles a general metric action:
+        GET - Returns the metric values in the Response body
+        POST - Either manages or updates the service with a new config in the request body
+        """
+        service_name = request.matchdict['service_name']
+        response = Response()
+
+        if request.method == "GET":
+            logging.info("Retrieving metrics for service %s" % service_name)
+            custom = self.client.get_service_custom_metrics(service_name)
+            live = self.client.get_service_live_metrics(service_name)
+            metrics = { "live" : live, "custom" : custom }
+            response = Response(body=json.dumps(metrics))
+
+        elif request.method == "POST":
+            metrics = json.loads(request.body)
+            logging.info("Updating metrics for service %s" % service_name)
+            self.client.set_service_custom_metrics(service_name, metrics)
+
         return response
 
     @connected
     @authorized
     def list_service_ips(self, context, request):
         service_name = request.matchdict['service_name']
+
         if request.method == 'GET':
             return Response(body=json.dumps(
-                        {'ip_addresses': self.client.get_service_ip_addresses(service_name)}))
+                {'ip_addresses': self.client.get_service_ip_addresses(service_name)}))
+
         return Response()
 
     @connected

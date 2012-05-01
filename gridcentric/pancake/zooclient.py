@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+import json
 
 from gridcentric.pancake.config import ServiceConfig
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
@@ -27,12 +27,21 @@ class PancakeClient(object):
     def update_service(self, service_name, config):
         self.zk_conn.write(paths.service(service_name), config)
 
+    def set_service_custom_metrics(self, service_name, metrics):
+        self.zk_conn.write(paths.service_custom_metrics(service_name), json.dumps(metrics))
+
+    def get_service_custom_metrics(self, service_name):
+        return json.loads(self.zk_conn.read(paths.service_custom_metrics(service_name), default='{}'))
+
+    def get_service_live_metrics(self, service_name):
+        return json.loads(self.zk_conn.read(paths.service_live_metrics(service_name), default='[]'))
+
     def get_service_config(self, service_name):
         return self.zk_conn.read(paths.service(service_name))
 
     def update_config(self, config):
         self.zk_conn.write(paths.config(), config)
-
+ 
     def update_manager_config(self, manager, config):
         self.zk_conn.write(paths.manager_config(manager), config)
 
@@ -73,3 +82,9 @@ class PancakeClient(object):
 
     def set_auth_hash(self, auth_hash):
         self.zk_conn.write(paths.auth_hash(), auth_hash)
+
+    def domain(self):
+        return self.zk_conn.read(paths.domain())
+
+    def set_domain(self, domain):
+        self.zk_conn.write(paths.domain(), domain)

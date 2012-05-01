@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import ConfigParser
 import logging
 import threading
@@ -7,10 +5,14 @@ import time
 import uuid
 import hashlib
 import bisect
+import json
+import traceback
 from StringIO import StringIO
 
-from gridcentric.pancake.config import ManagerConfig, ServiceConfig
+from gridcentric.pancake.config import ManagerConfig
+from gridcentric.pancake.config import ServiceConfig
 from gridcentric.pancake.service import Service
+from gridcentric.pancake.service import APIService
 import gridcentric.pancake.loadbalancer.connection as lb_connection
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
@@ -20,11 +22,13 @@ import gridcentric.pancake.ips as ips
 class ScaleManager(object):
 
     def __init__(self, zk_servers):
-        self.running = False
+        self.running    = False
         self.zk_servers = zk_servers
-        self.config = ManagerConfig("")
+        self.config     = ManagerConfig("")
+        self.cond       = threading.Condition()
 
-        self.uuid = str(uuid.uuid4()) # Manager uuid (generated).
+        self.uuid   = str(uuid.uuid4()) # Manager uuid (generated).
+        self.domain = None              # Pancake domain.
 
         self.services = {}        # Service map (name -> service)
         self.key_to_services = {} # Service map (key() -> [services...])
@@ -34,8 +38,19 @@ class ScaleManager(object):
         self.key_to_manager = {}  # Reverse map for manager keys.
         self.key_to_owned = {}    # Service to ownership.
 
-        self.load_balancer = None # Load balancer connection.
+        self.load_balancer = None # Load balancer connections.
+        self.api_service   = None # The implicit API service.
 
+    def locked(fn):
+        def wrapped_fn(self, *args, **kwargs):
+            try:
+                self.cond.acquire()
+                return fn(self, *args, **kwargs)
+            finally:
+                self.cond.release()
+        return wrapped_fn
+
+    @locked
     def serve(self):
         # Create a Zookeeper connection.
         self.zk_conn = ZookeeperConnection(self.zk_servers)
@@ -43,9 +58,24 @@ class ScaleManager(object):
         # Register ourselves.
         self.manager_register(initial=True)
 
-        # Create the loadbalancer connection.
-        self.load_balancer = lb_connection.get_connection(self.config.loadbalancer_name(),
-                                                          self.config.loadbalancer_config())
+        # Create the loadbalancer connections.
+        self.load_balancer = lb_connection.LoadBalancers()
+        for name in self.config.loadbalancer_names():
+            self.load_balancer.append(\
+                lb_connection.get_connection(\
+                    name, self.config.loadbalancer_config(name), self))
+
+        # Read the domain.
+        self.reload_domain(self.zk_conn.watch_contents(\
+                                paths.domain(),
+                                self.reload_domain,
+                                default_value=self.domain))
+
+        # Add the implicit API service.
+        if not(self.api_service):
+            self.api_service = APIService(self)
+            if not(self.api_service in self.services):
+                self.add_service(self.api_service)
 
         # Watch all IPs.
         self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
@@ -53,12 +83,13 @@ class ScaleManager(object):
         # Watch all managers and services.
         self.manager_change(self.zk_conn.watch_children(paths.managers(), self.manager_change))
         self.service_change(self.zk_conn.watch_children(paths.services(), self.service_change))
-
+        
+    @locked
     def manager_select(self, service):
         # Remember whether this was previous managed.
         managed = self.service_owned(service)
 
-        # Find the cloest key.
+        # Find the closest key.
         keys = self.key_to_manager.keys()
         index = bisect.bisect(keys, service.key())
         if len(keys) == 0:
@@ -80,33 +111,40 @@ class ScaleManager(object):
         if not(managed) and self.service_owned(service):
             self.start_service(service)
 
+    @locked
     def manager_remove(self, service):
         if self.key_to_owned.has_key(service.key()):
             del self.key_to_owned[service.key()]
 
+    @locked
     def service_owned(self, service):
         return self.key_to_owned.get(service.key(), False)
 
+    @locked
     def service_change(self, services):
         logging.info("Services have changed: new=%s, existing=%s" %
                      (services, self.services.keys()))
 
         for service_name in services:
-            if service_name not in self.services:
+            if service_name not in self.services and \
+               not(service_name == self.api_service.name):
                 self.create_service(service_name)
 
         services_to_remove = []
         for service_name in self.services:
-            if service_name not in services:
-                self.remove_service(service_name)
+            if service_name not in services and \
+               not(service_name == self.api_service.name):
+                self.remove_service(service_name, unmanage=True)
                 services_to_remove += [service_name]
 
         for service in services_to_remove:
             del self.services[service]
 
+    @locked
     def manager_config_change(self, value):
         self.manager_register(initial=False)
 
+    @locked
     def manager_register(self, initial=False):
         # Figure out our global IPs.
         global_ip = ips.find_global()
@@ -154,6 +192,7 @@ class ScaleManager(object):
             for service in self.services.values():
                 self.manager_select(service)
 
+    @locked
     def manager_change(self, managers):
         for manager in managers:
             if manager not in self.managers:
@@ -182,6 +221,7 @@ class ScaleManager(object):
         for service in self.services.values():
             self.manager_select(service)
 
+    @locked
     def create_service(self, service_name):
         logging.info("New service %s found to be managed." % service_name)
 
@@ -189,26 +229,38 @@ class ScaleManager(object):
         service_path = paths.service(service_name)
         service_config = ServiceConfig(self.zk_conn.read(service_path))
         service = Service(service_name, service_config, self)
-        self.services[service_name] = service
+        self.add_service(service,
+                         service_path=service_path,
+                         service_config=service_config)
+
+    @locked
+    def add_service(self, service, service_path=None, service_config=None):
+        self.services[service.name] = service
         service_key = service.key()
         self.key_to_services[service_key] = \
-            self.key_to_services.get(service.key(),[]) + [service_name]
+            self.key_to_services.get(service.key(),[]) + [service.name]
 
-        # Watch the config for this service.
-        logging.info("Watching service %s." % (service_name))
-        self.zk_conn.watch_contents(service_path,
-                                    service.update_config,
-                                    str(service_config))
+        if service_path:
+            # Watch the config for this service.
+            logging.info("Watching service %s." % (service.name))
+            self.zk_conn.watch_contents(service_path,
+                                        service.update_config,
+                                        str(service_config))
 
         # Select the manager for this service.
         self.manager_select(service)
 
+        # Update the loadbalancer for this service.
+        self.update_loadbalancer(service)
+
+    @locked
     def start_service(self, service):
         # This service is now being managed by us.
         service.manage()
         service.update()
 
-    def remove_service(self, service_name):
+    @locked
+    def remove_service(self, service_name, unmanage=False):
         """
         This removes / unmanages the service.
         """
@@ -216,6 +268,9 @@ class ScaleManager(object):
         service = self.services.get(service_name, None)
 
         if service:
+            # Update the loadbalancer for this service.
+            self.update_loadbalancer(service, remove=True)
+
             logging.info("Unmanaging service %s" %(service_name))
             service_names = self.key_to_services.get(service.key(), [])
             if service_name in service_names:
@@ -224,11 +279,13 @@ class ScaleManager(object):
                 # fine because we are just removing it anyway.
                 service_names.remove(service_name)
 
-            if self.service_owned(service):
+            # Perform a full unmanage if this is required.
+            if unmanage and self.service_owned(service):
                 service.unmanage()
 
             self.manager_remove(service)
 
+    @locked
     def confirmed_ips(self, service_name):
         """
         Returns a list of all the confirmed ips for the service.
@@ -238,10 +295,23 @@ class ScaleManager(object):
             ips = []
         return ips
 
+    @locked
+    def active_ips(self, service_name):
+        """
+        Returns all confirmed and static ips for the service.
+        """
+        ips = []
+        ips += self.confirmed_ips(service_name)
+        if service_name in self.services:
+            ips += self.services[service_name].static_addresses()
+        return ips
+
+    @locked
     def drop_ip(self, service_name, ip_address):
         self.zk_conn.delete(paths.confirmed_ip(service_name, ip_address))
         self.zk_conn.delete(paths.ip_address(ip_address))
 
+    @locked
     def register_ip(self, ips):
         def _register_ip(scale_manager, service, ip):
             logging.info("Service %s found for IP %s" % (service.name, ip))
@@ -260,27 +330,49 @@ class ScaleManager(object):
                     _register_ip(self, service, ip)
                     break
 
-    def update_loadbalancer(self, service, addresses = None):
-        if addresses == None:
-            addresses = []
-            for service_name in self.key_to_services.get(service.key(), []):
-                addresses += self.confirmed_ips(service_name)
-                addresses += self.services[service_name].static_addresses()
+    @locked
+    def update_loadbalancer(self, service, remove = False):
+        all_addresses = []
+        names = []
+
+        # Go through all services with the same keys.
+        for service_name in self.key_to_services.get(service.key(), []):
+            if remove and (self.services[service_name] == service):
+                continue
+            else:
+                names.append(service_name)
+                all_addresses += self.active_ips(service_name)
+
         logging.info("Updating loadbalancer for url %s with addresses %s" %
-                     (service.service_url(), addresses))
-        self.load_balancer.change(service.service_url(), addresses)
+                     (service.service_url(), all_addresses))
+        self.load_balancer.change(service.service_url(),
+                                  service.config.port(),
+                                  names, all_addresses)
         self.load_balancer.save()
 
+    @locked
     def reload_loadbalancer(self):
         self.load_balancer.clear()
         for service in self.services.values():
             addresses = []
+            names = []
             for service_name in self.key_to_services.get(service.key(), []):
-            	addresses += self.confirmed_ips(service_name)
-                addresses += self.services[service_name].static_addresses()
-            self.load_balancer.change(service.service_url(), addresses)
+                names.append(service_name)
+                addresses += self.active_ips(service_name)
+            self.load_balancer.change(service.service_url(), 
+                                      service.config.port(),
+                                      names, addresses)
         self.load_balancer.save()
 
+    @locked
+    def reload_domain(self, domain):
+        self.domain = domain
+        if self.api_service:
+            self.remove_service(self.api_service.name)
+            self.add_service(self.api_service)
+            self.reload_loadbalancer()
+
+    @locked
     def mark_instance(self, service_name, instance_id):
         # Increment the mark counter.
         remove_instance = False
@@ -300,27 +392,56 @@ class ScaleManager(object):
 
         return remove_instance
 
-    def health_check(self):
+    @locked
+    def update_metrics(self):
         # Update all the service metrics from the loadbalancer.
         metrics = self.load_balancer.metrics()
-        logging.debug("Load balancer returned metrics: %s" %(metrics))
+
         metrics_by_key = {}
         service_addresses = {}
         for ip in metrics:
             for service in self.services.values():
                 if not service.name in service_addresses:
-                    service_addresses[service.name] = \
-                        service.addresses() + service.static_addresses()
-                service_ips = service_addresses[service.name] 
+                    service_addresses[service.name] = self.active_ips(service.name)
+                service_ips = service_addresses[service.name]
                 if not(service.key() in metrics_by_key):
                     metrics_by_key[service.key()] = []
                 if ip in service_ips:
-                    logging.debug("Metrics for ip %s belong to service %s" %(ip, service.name))
                     metrics_by_key[service.key()].append(metrics[ip])
 
-        # TODO: Register all loadbalancer metrics in Zookeeper, so that the
-        # manager for this service has the opportunity to read data from all
-        # loadbalancers, not just their own.
+        # Stuff all the metrics into Zookeeper.
+        self.zk_conn.write(paths.manager_metrics(self.uuid), \
+                           json.dumps(metrics_by_key), \
+                           ephemeral=True)
+
+        # Load all metrics.
+        all_metrics = {}
+
+        # Read the keys for all other managers.
+        for manager in self.managers:
+            # Skip re-reading the local metrics.
+            if manager == self.uuid:
+                manager_metrics = metrics_by_key
+            else:
+                manager_metrics = self.zk_conn.read(paths.manager_metrics(manager))
+                if manager_metrics:
+                    manager_metrics = json.loads(manager_metrics)
+                else:
+                    continue
+
+            # Merge into the all_metrics dictionary.
+            for key in manager_metrics:
+                if not(key in all_metrics):
+                    all_metrics[key] = []
+                all_metrics[key].extend(manager_metrics[key])
+
+        # Return all available global metrics.
+        return all_metrics
+
+    @locked
+    def health_check(self):
+        # Save and load the current metrics.
+        service_metrics = self.update_metrics()
 
         # Does a health check on all the services that are being managed.
         for service in self.services.values():
@@ -328,13 +449,41 @@ class ScaleManager(object):
             if not(self.service_owned(service)):
                 continue
 
-            # Run a health check on this service.
             try:
+                # Read any default metrics. We can override the source service
+                # for metrics here (so, for example, a backend database server
+                # can inheret a set of metrics given for the front server).
+                # This, like many other things, is specified here by the name
+                # of the service we are inheriting metrics for. If not given,
+                # we default to the current service.
+                source = service.config.source()
+                if source:
+                    source_service = self.services.get(source, None)
+                    if source_service:
+                        metrics = service_metrics.get(source_service.key(), [])
+                    else:
+                        metrics = []
+                else:
+                    metrics = service_metrics.get(service.key(), [])
+
+                default_metrics = self.zk_conn.read(paths.service_custom_metrics(service.name))
+                if default_metrics:
+                    # This should be a dictionary { "name" : (weight, value) }
+                    metrics.append(json.loads(default_metrics))
+
+                # Update the live metrics.
+                self.zk_conn.write(paths.service_live_metrics(service.name), \
+                                   json.dumps(metrics), \
+                                   ephemeral=True)
+
+                # Run a health check on this service.
                 service.health_check()
+
                 # Do the service update.
-                service.update(reconfigure=False, metrics=metrics_by_key.get(service.key(), []))
+                service.update(reconfigure=False, metrics=metrics)
             except:
-                logging.error("Error updating service %s." %(service.name))
+                error = traceback.format_exc()
+                logging.error("Error updating service %s: %s" % (service.name, error))
 
     def run(self):
         # Note that we are running.

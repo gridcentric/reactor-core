@@ -1,21 +1,18 @@
-#!/usr/bin/env python
-
 import hashlib
 import os
 import signal
 import urlparse
 import shutil
 import glob
-import httplib2
-import json
 import re
-import threading
 import time
 import threading
+import logging
 
 from mako.template import Template
 
 from gridcentric.pancake.loadbalancer.connection import LoadBalancerConnection
+from gridcentric.pancake.loadbalancer.netstat import connection_count
 
 class NginxLogReader(object):
     def __init__(self, log_filename, filter=None):
@@ -55,7 +52,7 @@ class NginxLogReader(object):
             try:
                 self.connect()
             except IOError:
-                pass
+                logging.warn("Unable to reopen Nginx log.")
 
         return line
 
@@ -94,6 +91,9 @@ class NginxLogWatcher(threading.Thread):
         self.record = {}
         self.lock.release()
 
+        # Grab all active connections.
+        active_connections = connection_count()
+
         # Compute the response times.
         for host in record:
             hits = record[host][0]
@@ -102,6 +102,19 @@ class NginxLogWatcher(threading.Thread):
                 "rate" : (hits, hits / delta),
                 "response" : (hits, record[host][2] / hits),
                 "bytes" : (hits, record[host][1] / delta),
+                "active" : (1, active_connections.get(host, 0)),
+                }
+            del active_connections[host]
+            record[host] = metrics
+
+        # Compute the active counts.
+        for host in active_connections:
+            metrics = \
+                {
+                "rate" : (0, 0.0),
+                "response" : (0, 0.0),
+                "bytes" : (0, 0),
+                "active" : (1, active_connections.get(host, 0)),
                 }
             record[host] = metrics
 
@@ -151,40 +164,55 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
             return None
 
     def clear(self):
-        for conf in glob.glob(os.path.join(self.config_path, "*")):
+        for conf in glob.glob(os.path.join(self.site_path, "*")):
             try:
                 os.remove(conf)
             except OSError:
                 pass
 
-    def change(self, url, addresses):
-        # We use a simple hash of the URL as the file name for the configuration file.
+    def change(self, url, port, names, addresses):
+        # We use a simple hash of the URL as the file name for the
+        # configuration file.
         uniq_id = hashlib.md5(url).hexdigest()
         conf_filename = "%s.conf" % uniq_id
 
-        # Parse the url because we need to know the netloc
+        # Check for a removal.
+        if len(addresses) == 0:
+            try:
+                os.remove(os.path.join(self.site_path,conf_filename))
+            except OSError:
+                logging.warn("Unable to remove file: %s" % conf_filename)
+            return
+
+        # Parse the url because we need to know the netloc.
         (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(url)
         w_port = netloc.split(":")
         netloc = w_port[0]
         if len(w_port) == 1:
             if scheme == "http":
-                port = "80"
+                listen = "80"
             elif scheme == "https":
-                port = "443"
+                listen = "443"
             else:
-                port = "80"
+                listen = "80"
         else:
-            port = w_port[1]
+            listen = w_port[1]
+
+        # Check the front end port.
+        if not(port):
+            port = listen
 
         # Ensure that there is a path.
         path = path or "/"
 
+        # Render our given template.
         conf = self.template.render(id=uniq_id,
                                     url=url,
                                     netloc=netloc,
                                     path=path,
                                     scheme=scheme,
                                     port=port,
+                                    listen=listen,
                                     addresses=addresses)
 
         # Write out the config file.
