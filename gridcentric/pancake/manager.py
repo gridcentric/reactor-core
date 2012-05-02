@@ -144,8 +144,7 @@ class ScaleManager(object):
         self.config = ManagerConfig("")
         if initial:
             global_config = self.zk_conn.watch_contents(paths.config(),
-                                                        self.manager_config_change,
-                                                        str(self.config))
+                                                        self.manager_config_change)
         else:
             global_config = self.zk_conn.read(paths.config())
         if global_config:
@@ -160,15 +159,14 @@ class ScaleManager(object):
                 # Reload our local config.
                 if initial:
                     local_config = self.zk_conn.watch_contents(paths.manager_config(ip),
-                                                               self.manager_config_change,
-                                                               str(self.config))
+                                                               self.manager_config_change)
                 else:
                     local_config = self.zk_conn.read(paths.manager_config(ip))
                 if local_config:
                     self.config.reload(local_config)
 
-            # Register our IP.
-            self.zk_conn.write(paths.manager_ip(ip), self.uuid, ephemeral=True)
+                # Register our IP.
+                self.zk_conn.write(paths.manager_ip(ip), self.uuid, ephemeral=True)
 
         # Generate keys.
         while len(self.manager_keys) < self.config.keys():
@@ -181,6 +179,7 @@ class ScaleManager(object):
         # Write out our associated hash keys as an ephemeral node.
         key_string = ",".join(self.manager_keys)
         self.zk_conn.write(paths.manager_keys(self.uuid), key_string, ephemeral=True)
+        logging.info("Generated %d keys." % len(self.manager_keys))
 
         if not(initial):
             # If we're not doing initial setup, refresh services.
