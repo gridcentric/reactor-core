@@ -531,7 +531,6 @@ class ScaleManager(object):
                     # This should be a dictionary { "name" : (weight, value) }
                     ip_metrics = json.loads(ip_metrics)
                     metrics.append(ip_metrics)
-                    logging.debug("************* DRS DEBUG ************* metrics for ip %s: %s" % (ip_address, ip_metrics))
                     if self.metric_indicates_active(ip_metrics):
                         active_connections.append(ip_address)
                 except ValueError:
@@ -545,7 +544,6 @@ class ScaleManager(object):
                     if ip_metrics:
                         try:
                             ip_metrics = json.loads(ip_metrics)
-                            logging.debug("************* DRS DEBUG ************* DECOMMISSIONED: metrics for ip %s: %s" % (ip_address, ip_metrics))
                             if self.metric_indicates_active(ip_metrics):
                                 active_connections.append(ip_address)
                         except ValueError:

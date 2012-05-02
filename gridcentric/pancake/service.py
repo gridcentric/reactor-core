@@ -17,6 +17,7 @@ class Service(object):
         self.scale_manager = scale_manager
         self.cloud_conn = cloud_connection.get_connection(cloud)
         self.cloud_conn.connect(self.config.auth_info())
+        self.decommissioned_instances = self.scale_manager.decommissioned_instances(self.name)
 
     def key(self):
         return hashlib.md5(self.config.url()).hexdigest()
@@ -165,6 +166,7 @@ class Service(object):
             logging.info("Decommissioning instance %s for server %s (reason: %s)" %
                     (instance['id'], self.name, reason))
             self.scale_manager.decommission_instance(self.name, instance['id'], self.extract_addresses_from([instance]))
+            self.decommissioned_instances += [instance['id']]
 
     def _decommission_addresses(self, instances):
         # Drops all the addresses associated with these instances.
@@ -176,6 +178,12 @@ class Service(object):
         logging.info("Deleting instance %s for server %s" % (instance_id, self.name))
         self.cloud_conn.delete_instance(instance_id)
         self.scale_manager.drop_decommissioned_instance(self.name, instance_id)
+        try:
+            self.decommissioned_instances.remove(instance_id)
+        except:
+            # An exception is thrown if we are unable to remove it. This is fine because
+            # we are trying to remove it anyway.
+            pass
 
     def _launch_instance(self, reason):
         # Launch the instance.
@@ -190,8 +198,18 @@ class Service(object):
     def static_addresses(self):
         return self.config.static_ips()
 
-    def instances(self):
-        return self.cloud_conn.list_instances(self.config.instance_id())
+    def instances(self, filter=True):
+        instances = self.cloud_conn.list_instances(self.config.instance_id())
+
+        if filter:
+            # Filter out the decommissioned instances from the returned list.
+            all_instances = instances
+            instances = []
+            for instance in all_instances:
+                if not(instance['id'] in self.decommissioned_instances):
+                    instances.append(instance)
+
+        return instances
 
     def addresses(self):
         return self.extract_addresses_from(self.instances())
@@ -208,7 +226,7 @@ class Service(object):
         self.scale_manager.update_loadbalancer(self, remove=remove)
 
     def health_check(self, active_ips):
-        instances = self.instances()
+        instances = self.instances(filter=False)
 
         # Check if any expected machines have failed to come up and confirm
         # their IP address.
@@ -219,7 +237,6 @@ class Service(object):
         # There are the confirmed ips that are actually associated with an
         # instance. Other confirmed ones will need to be dropped because the
         # instances they refer to no longer exists.
-        logging.debug("************* DRS DEBUG ************* active_ips: %s" % (active_ips))
         associated_confirmed_ips = set()
         inactive_instance_ids = []
         for instance in instances:
