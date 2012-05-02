@@ -166,12 +166,12 @@ class PancakeAutoApi(PancakeApi):
     # In the end, it doesn't really matter, as long as you have
     # at least one 'non-API' server.
     def check_service(self, zk_servers):
-        is_local = False # ips.any_local(zk_servers)
+        is_local = ips.any_local(zk_servers)
 
         if not(is_local):
             # Ensure that Zookeeper is stopped.
             logging.info("Stopping Zookeeper; starting manager.")
-            #zk_config.ensure_stopped()
+            zk_config.ensure_stopped()
             zk_config.check_config(zk_servers)
             self.start_manager(zk_servers)
 
