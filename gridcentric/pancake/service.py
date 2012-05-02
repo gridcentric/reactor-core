@@ -129,9 +129,11 @@ class Service(object):
         # Check if our configuration is about to change.
         old_url = self.config.url()
         old_static_addresses = self.config.static_ips()
+        old_auth_info = self.config.auth_info()
         new_config = ServiceConfig(config_str)
         new_url = new_config.url()
         new_static_addresses = new_config.static_ips()
+        new_auth_info = new_config.auth_info()
 
         # Remove all old instances from loadbalancer.
         if old_url != new_url:
@@ -139,6 +141,11 @@ class Service(object):
 
         # Reload the configuration.
         self.config.reload(config_str)
+
+        # Reconnect to the cloud controller (if necessary).
+        if old_auth_info != new_auth_info:
+            self.cloud_conn = cloud_connection.get_connection(cloud)
+            self.cloud_conn.connect(self.config.auth_info())
 
         # Do a referesh (to capture the new service).
         if old_url != new_url:

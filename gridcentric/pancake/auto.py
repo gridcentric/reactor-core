@@ -31,7 +31,7 @@ class APIService(Service):
                 pass
 
             def url(self):
-                return "http://%s/" % self.scale_manager.domain
+                return "http://api.%s/" % self.scale_manager.domain
             def port(self):
                 return 8080
             def instance_id(self):
@@ -97,11 +97,14 @@ class AutoScaleManager(ScaleManager):
 
     @locked
     def reload_domain(self, domain):
+        if self.api_service:
+            # Teardown (based on the old domain).
+            self.remove_service(self.api_service.name)
+
         super(AutoScaleManager, self).reload_domain(domain)
 
-        # Reload the implicit service.
         if self.api_service:
-            self.remove_service(self.api_service.name)
+            # Reload the implicit service.
             self.add_service(self.api_service)
 
 class PancakeAutoApi(PancakeApi):

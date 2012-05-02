@@ -51,7 +51,7 @@ class PancakeClient(object):
     def update_manager_config(self, manager, config):
         self.zk_conn.write(paths.manager_config(manager), config)
 
-    def get_config(self, config):
+    def get_config(self):
         return self.zk_conn.read(paths.config())
 
     def get_manager_config(self, manager):
