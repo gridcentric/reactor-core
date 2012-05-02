@@ -24,6 +24,7 @@ PACKAGES += python-novaclient
 PACKAGES += python-pyramid
 PACKAGES += python-netifaces
 PACKAGES += dnsmasq
+PACKAGES += graphviz
 
 PACKAGE_CMDLINE := $(PACKAGES:%=--addpkg=%)
 
