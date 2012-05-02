@@ -407,11 +407,15 @@ class ScaleManager(object):
         """ Delete the decommissioned instance """
         self.zk_conn.delete(paths.decommissioned_instance(service_name, instance_id))
 
-
     def metric_indicates_active(self, metrics):
         """ Returns true if the metrics indicate that there are active connections. """
-        return metrics.get("active", (0, 0))[1] > 0
-
+        active_metrics = metrics.get("active", (0, 0))
+        try:
+            return active_metrics[1] > 0
+        except:
+            # The active metric is defined but as a bad form.
+            logging.warning("Malformed metrics found: %s" % (active_metrics))
+            return False
 
     @locked
     def update_metrics(self):
