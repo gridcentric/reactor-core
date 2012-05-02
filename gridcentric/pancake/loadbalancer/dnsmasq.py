@@ -48,9 +48,13 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
             hosts.write("%s %s\n" % (address, " ".join(set(names))))
         hosts.close()
 
+        # Make sure we have a domain.
+        domain = self.scale_manager.domain
+        if not(domain):
+            domain = "example.com"
+
         # Write out our configuration template.
-        conf = self.template.render(domain=self.scale_manager.domain,
-                                    hosts=self.hosts_path)
+        conf = self.template.render(domain=domain, hosts=self.hosts_path)
 
         # Write out the config file.
         config_file = file(os.path.join(self.config_path,"pancake.conf"), 'wb')
