@@ -17,6 +17,7 @@ class Service(object):
         self.scale_manager = scale_manager
         self.cloud_conn = cloud_connection.get_connection(cloud)
         self.cloud_conn.connect(self.config.auth_info())
+        self.decommissioned_instances = self.scale_manager.decommissioned_instances(self.name)
 
     def key(self):
         return hashlib.md5(self.config.url()).hexdigest()
@@ -33,7 +34,7 @@ class Service(object):
 
             # Delete all the launched instances.
             for instance in self.instances():
-                self.drop_instances(self.instances(),
+                self.decommission_instances(self.instances(),
                                     "service is becoming unmanaged")
         except:
             logging.error("Error unmanaging service %s: %s" % (self.name, traceback.format_exc()))
@@ -121,7 +122,7 @@ class Service(object):
         instances_to_delete = instances[target:]
         instances = instances[:target]
 
-        self.drop_instances(instances_to_delete,
+        self.decommission_instances(instances_to_delete,
             "bringing instance total down to target %s" % target)
 
     def update_config(self, config_str):
@@ -155,32 +156,41 @@ class Service(object):
         # Run a full update.
         self.update()
 
-    def drop_instances(self, instances, reason):
+    def decommission_instances(self, instances, reason):
         """
         Drop the instances from the system. Note: a reason should be given for why
         the instances are being dropped.
         """
 
         # Update the load balancer before bringing down the instances.
-        self._drop_addresses(instances)
+        self._decommission_addresses(instances)
         if len(instances) > 0:
             self._update_loadbalancer()
 
         # It might be good to wait a little bit for the servers to clear out
         # any requests they are currently serving.
         for instance in instances:
-            logging.info("Shutting down instance %s for server %s (reason: %s)" %
+            logging.info("Decommissioning instance %s for server %s (reason: %s)" %
                     (instance['id'], self.name, reason))
-            self._delete_instance(instance)
+            self.scale_manager.decommission_instance(self.name, instance['id'], self.extract_addresses_from([instance]))
+            self.decommissioned_instances += [instance['id']]
 
-    def _drop_addresses(self, instances):
+    def _decommission_addresses(self, instances):
         # Drops all the addresses associated with these instances.
         for address in self.extract_addresses_from(instances):
             self.scale_manager.drop_ip(self.name, address)
 
-    def _delete_instance(self, instance):
-        # Delete the instance from nova            
-        self.cloud_conn.delete_instance(instance['id'])
+    def _delete_instance(self, instance_id):
+        # Delete the instance from nova
+        logging.info("Deleting instance %s for server %s" % (instance_id, self.name))
+        self.cloud_conn.delete_instance(instance_id)
+        self.scale_manager.drop_decommissioned_instance(self.name, instance_id)
+        try:
+            self.decommissioned_instances.remove(instance_id)
+        except:
+            # An exception is thrown if we are unable to remove it. This is fine because
+            # we are trying to remove it anyway.
+            pass
 
     def _launch_instance(self, reason):
         # Launch the instance.
@@ -195,8 +205,18 @@ class Service(object):
     def static_addresses(self):
         return self.config.static_ips()
 
-    def instances(self):
-        return self.cloud_conn.list_instances(self.config.instance_id())
+    def instances(self, filter=True):
+        instances = self.cloud_conn.list_instances(self.config.instance_id())
+
+        if filter:
+            # Filter out the decommissioned instances from the returned list.
+            all_instances = instances
+            instances = []
+            for instance in all_instances:
+                if not(instance['id'] in self.decommissioned_instances):
+                    instances.append(instance)
+
+        return instances
 
     def addresses(self):
         return self.extract_addresses_from(self.instances())
@@ -212,8 +232,8 @@ class Service(object):
     def _update_loadbalancer(self, remove=False):
         self.scale_manager.update_loadbalancer(self, remove=remove)
 
-    def health_check(self):
-        instances = self.instances()
+    def health_check(self, active_ips):
+        instances = self.instances(filter=False)
 
         # Check if any expected machines have failed to come up and confirm
         # their IP address.
@@ -225,8 +245,9 @@ class Service(object):
         # instance. Other confirmed ones will need to be dropped because the
         # instances they refer to no longer exists.
         associated_confirmed_ips = set()
+        inactive_instance_ids = []
         for instance in instances:
-            expected_ips = self.extract_addresses_from([instance])
+            expected_ips = set(self.extract_addresses_from([instance]))
             # As long as there is one expected_ip in the confirmed_ip,
             # everything is good. Otherwise This instance has not checked in.
             # We need to mark it, and it if has enough marks it will be
@@ -241,6 +262,11 @@ class Service(object):
                     dead_instances += [instance]
             else:
                 associated_confirmed_ips = associated_confirmed_ips.union(instance_confirmed_ips)
+
+            # Check if any of these expected_ips are not in our active set. If so that this instance
+            # is currently considered inactive
+            if len(expected_ips.intersection(active_ips)) == 0:
+                inactive_instance_ids += [str(instance['id'])]
 
         # TODO(dscannell) We also need to ensure that the confirmed IPs are
         # still valid. In other words, we have a running instance with the
@@ -258,4 +284,10 @@ class Service(object):
             self._update_loadbalancer()
 
         # We assume they're dead, so we can prune them.
-        self.drop_instances(dead_instances, "instance has been marked for destruction")
+        self.decommission_instances(dead_instances, "instance has been marked for destruction")
+
+        # See if there are any decommissioned instances that are now inactive.
+        decommissioned_instance_ids = self.scale_manager.decommissioned_instances(self.name)
+        for inactive_instance_id in inactive_instance_ids:
+            if inactive_instance_id in decommissioned_instance_ids:
+                self._delete_instance(inactive_instance_id)
