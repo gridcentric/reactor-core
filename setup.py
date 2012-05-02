@@ -23,7 +23,7 @@ setup(
               "gridcentric.pancake.metrics",
               "gridcentric.pancake.cloud"],
     package_data={'gridcentric.pancake.loadbalancer':\
-            ["nginx.template", "pancake.conf"]},
+            ["nginx.template", "dnsmasq.template", "pancake.conf"]},
     include_package_data=True,
     scripts=["bin/pancake"]
 )

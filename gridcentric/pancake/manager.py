@@ -474,6 +474,45 @@ class ScaleManager(object):
         return (all_metrics, all_active_connections)
 
     @locked
+    def load_metrics(self, service, service_metrics={}):
+        # Read any default metrics. We can override the source service
+        # for metrics here (so, for example, a backend database server
+        # can inheret a set of metrics given for the front server).
+        # This, like many other things, is specified here by the name
+        # of the service we are inheriting metrics for. If not given,
+        # we default to the current service.
+        source = service.config.source()
+        if source:
+            source_service = self.services.get(source, None)
+            if source_service:
+                metrics = service_metrics.get(source_service.key(), [])
+            else:
+                metrics = []
+        else:
+            metrics = service_metrics.get(service.key(), [])
+
+        default_metrics = self.zk_conn.read(paths.service_custom_metrics(service.name))
+        if default_metrics:
+            try:
+                # This should be a dictionary { "name" : (weight, value) }
+                metrics.append(json.loads(default_metrics))
+            except ValueError:
+                logging.warn("Invalid custom metrics for %s." % (service.name))
+      
+        # Read other metrics for given hosts.
+        for host in self.active_ips(service.name):
+            host_metrics = self.zk_conn.read(paths.service_host_metrics(service.name, host))
+            if host_metrics:
+                try:
+                    # This should be a dictionary { "name" : (weight, value) }
+                    metrics.append(json.loads(host_metrics))
+                except ValueError:
+                    logging.warn("Invalid host metrics for %s:%s." % (service.name, host))
+
+        # Return the metrics.
+        return metrics
+
+    @locked
     def health_check(self):
         # Save and load the current metrics.
         service_metrics, active_connections = self.update_metrics()
@@ -485,26 +524,7 @@ class ScaleManager(object):
                 continue
 
             try:
-                # Read any default metrics. We can override the source service
-                # for metrics here (so, for example, a backend database server
-                # can inheret a set of metrics given for the front server).
-                # This, like many other things, is specified here by the name
-                # of the service we are inheriting metrics for. If not given,
-                # we default to the current service.
-                source = service.config.source()
-                if source:
-                    source_service = self.services.get(source, None)
-                    if source_service:
-                        metrics = service_metrics.get(source_service.key(), [])
-                    else:
-                        metrics = []
-                else:
-                    metrics = service_metrics.get(service.key(), [])
-
-                default_metrics = self.zk_conn.read(paths.service_custom_metrics(service.name))
-                if default_metrics:
-                    # This should be a dictionary { "name" : (weight, value) }
-                    metrics.append(json.loads(default_metrics))
+                metrics = self.load_metrics(service, service_metrics)
 
                 # Update the live metrics.
                 self.zk_conn.write(paths.service_live_metrics(service.name), \
