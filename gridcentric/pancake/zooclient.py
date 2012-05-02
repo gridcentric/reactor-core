@@ -27,10 +27,10 @@ class PancakeClient(object):
     def update_service(self, service_name, config):
         self.zk_conn.write(paths.service(service_name), config)
 
-    def set_service_metrics(self, service_name, metrics, service_host=None):
-        if service_host:
+    def set_service_metrics(self, service_name, metrics, service_ip=None):
+        if service_ip:
             self.zk_conn.write(
-                paths.service_host_metrics(service_name, service_host),
+                paths.service_ip_metrics(service_name, service_ip),
                 json.dumps(metrics))
         else:
             self.zk_conn.write(
@@ -47,7 +47,7 @@ class PancakeClient(object):
 
     def update_config(self, config):
         self.zk_conn.write(paths.config(), config)
- 
+
     def update_manager_config(self, manager, config):
         self.zk_conn.write(paths.manager_config(manager), config)
 

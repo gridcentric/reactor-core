@@ -65,9 +65,13 @@ def manager_keys(name):
 def manager_metrics(name):
     return "%s/%s" % (MANAGER_METRICS, name)
 
+# The mappings of service to ip address that have no connections
+def manager_active_connections(name):
+    return "%s/active_connections/%s" % (MANAGERS, name)
+
 # The custom metrics for a particular host.
-def service_host_metrics(name, host):
-    return "%s/host_metrics/%s" % (service(name), host)
+def service_ip_metrics(name, ip_address):
+    return "%s/ip_metrics/%s" % (service(name), ip_address)
 
 # The global custom metrics for a service (posted by the API).
 def service_custom_metrics(name):
@@ -96,6 +100,16 @@ def marked_instances(name):
 # should attempt to clean it up because there is something wrong with it.
 def marked_instance(name, instance_id):
     return "%s/%s" % (marked_instances(name), instance_id)
+
+# The instance ids that have been decommissioned. A decommissioned instance
+# is basically marked for deletion but waiting for client / connections to
+# finish up.
+def decommissioned_instances(name):
+    return "%s/decommissioned" % (service(name))
+
+# The particular instance id that has been decommissioned for a service.
+def decommissioned_instance(name, instance_id):
+    return "%s/%s" % (decommissioned_instances(name), instance_id)
 
 # New IPs currently not associated with any service are logged here.
 NEW_IPS = "%s/new-ips" % (ROOT)
