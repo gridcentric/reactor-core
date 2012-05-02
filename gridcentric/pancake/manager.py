@@ -137,33 +137,36 @@ class ScaleManager(object):
     @locked
     def manager_register(self, initial=False):
         # Figure out our global IPs.
-        global_ip = ips.find_global()
-        logging.info("Manager %s has key %s." % (global_ip, self.uuid))
+        global_ips = ips.find_global()
+        logging.info("Manager %s has key %s." % (str(global_ips), self.uuid))
 
         # Reload our global config.
         self.config = ManagerConfig("")
         if initial:
             global_config = self.zk_conn.watch_contents(paths.config(),
-                                                        self.manager_config_change,
-                                                        str(self.config))
+                                                        self.manager_config_change)
         else:
             global_config = self.zk_conn.read(paths.config())
         if global_config:
             self.config.reload(global_config)
 
-        if global_ip:
-            # Reload our local config.
-            if initial:
-                local_config = self.zk_conn.watch_contents(paths.manager_config(global_ip),
-                                                           self.manager_config_change,
-                                                           str(self.config))
-            else:
-                local_config = self.zk_conn.read(paths.manager_config(global_ip))
-            if local_config:
-                self.config.reload(local_config)
+        # NOTE: We may have multiple global IPs (especially in the case of
+        # provisioning a cluster that could have floating IPs that move around.
+        # We read in each of the configuration blocks in turn, and hope that
+        # they are not somehow mutually incompatible.
+        if global_ips:
+            for ip in global_ips:
+                # Reload our local config.
+                if initial:
+                    local_config = self.zk_conn.watch_contents(paths.manager_config(ip),
+                                                               self.manager_config_change)
+                else:
+                    local_config = self.zk_conn.read(paths.manager_config(ip))
+                if local_config:
+                    self.config.reload(local_config)
 
-            # Register our IP.
-            self.zk_conn.write(paths.manager_ip(global_ip), self.uuid, ephemeral=True)
+                # Register our IP.
+                self.zk_conn.write(paths.manager_ip(ip), self.uuid, ephemeral=True)
 
         # Generate keys.
         while len(self.manager_keys) < self.config.keys():
@@ -176,6 +179,7 @@ class ScaleManager(object):
         # Write out our associated hash keys as an ephemeral node.
         key_string = ",".join(self.manager_keys)
         self.zk_conn.write(paths.manager_keys(self.uuid), key_string, ephemeral=True)
+        logging.info("Generated %d keys." % len(self.manager_keys))
 
         if not(initial):
             # If we're not doing initial setup, refresh services.

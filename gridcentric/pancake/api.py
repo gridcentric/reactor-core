@@ -6,6 +6,7 @@ from pyramid.config import Configurator
 from pyramid.response import Response
 
 from gridcentric.pancake.config import ServiceConfig
+from gridcentric.pancake.config import ManagerConfig
 from gridcentric.pancake.zooclient import PancakeClient
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
 
@@ -60,8 +61,8 @@ class PancakeApi:
         self.config.add_route('domain-action', '/gridcentric/pancake/domain')
         self.config.add_view(self.handle_domain_action, route_name='domain-action')
 
-        self.config.add_route('new-ip', '/gridcentric/pancake/new-ip/{ipaddress}')
-        self.config.add_view(self.new_ip_address, route_name='new-ip')
+        self.config.add_route('register', '/gridcentric/pancake/register')
+        self.config.add_view(self.new_ip_address, route_name='register')
 
         self.config.add_route('manager-action', '/gridcentric/pancake/managers/{manager}')
         self.config.add_view(self.handle_manager_action, route_name='manager-action')
@@ -233,13 +234,15 @@ class PancakeApi:
         """
         manager = request.matchdict['manager']
         response = Response()
+
         if request.method == "GET":
             logging.info("Retrieving manager %s configuration" % manager)
             if not(manager) or manager == "default":
-                manager_config = self.client.get_config(manager) or ""
+                manager_config = ManagerConfig(self.client.get_config())
             else:
-                manager_config = self.client.get_manager_config(manager) or ""
-            response = Response(body=json.dumps({'config':manager_config}))
+                manager_config = ManagerConfig(self.client.get_manager_config(manager))
+            response = Response(body=json.dumps({'config' : str(manager_config)}))
+
         elif request.method == "POST":
             manager_config = json.loads(request.body)
             logging.info("Updating manager %s" % manager)
@@ -247,6 +250,7 @@ class PancakeApi:
                 self.client.update_config(manager_config.get('config', ""))
             else:
                 self.client.update_manager_config(manager, manager_config.get('config', ""))
+
         return response
 
     @connected
@@ -276,7 +280,7 @@ class PancakeApi:
         if request.method == "GET":
             logging.info("Retrieving service %s configuration" % service_name)
             service_config = ServiceConfig(self.client.get_service_config(service_name))
-            response = Response(body=json.dumps({ 'config' : str(service_config) }))
+            response = Response(body=json.dumps({'config' : str(service_config)}))
 
         elif request.method == "DELETE":
             logging.info("Unmanaging service %s" % (service_name))
@@ -336,7 +340,7 @@ class PancakeApi:
 
     @connected
     def new_ip_address(self, context, request):
-        ip_address = request.matchdict['ipaddress']
+        ip_address = request.environ.get('REMOTE_ADDR', "")
         logging.info("New IP address %s has been recieved." % (ip_address))
         self.client.record_new_ipaddress(ip_address)
         return Response()

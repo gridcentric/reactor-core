@@ -43,4 +43,4 @@ def find_global():
     if len(filtered) == 0:
         return None
     else:
-        return filtered[0]
+        return filtered
