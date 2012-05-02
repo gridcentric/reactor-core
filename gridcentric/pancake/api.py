@@ -62,7 +62,7 @@ class PancakeApi:
         self.config.add_view(self.handle_domain_action, route_name='domain-action')
 
         self.config.add_route('register', '/gridcentric/pancake/register')
-        self.config.add_view(self.new_ip_address, route_name='register')
+        self.config.add_view(self.register_ip_address, route_name='register')
 
         self.config.add_route('manager-action', '/gridcentric/pancake/managers/{manager}')
         self.config.add_view(self.handle_manager_action, route_name='manager-action')
@@ -339,7 +339,7 @@ class PancakeApi:
         return Response(body=json.dumps({'services':services}))
 
     @connected
-    def new_ip_address(self, context, request):
+    def register_ip_address(self, context, request):
         ip_address = request.environ.get('REMOTE_ADDR', "")
         logging.info("New IP address %s has been recieved." % (ip_address))
         self.client.record_new_ipaddress(ip_address)
