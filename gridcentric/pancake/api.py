@@ -6,6 +6,7 @@ from pyramid.config import Configurator
 from pyramid.response import Response
 
 from gridcentric.pancake.config import ServiceConfig
+from gridcentric.pancake.config import ManagerConfig
 from gridcentric.pancake.zooclient import PancakeClient
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
 
@@ -233,13 +234,15 @@ class PancakeApi:
         """
         manager = request.matchdict['manager']
         response = Response()
+
         if request.method == "GET":
             logging.info("Retrieving manager %s configuration" % manager)
             if not(manager) or manager == "default":
-                manager_config = self.client.get_config(manager) or ""
+                manager_config = ManagerConfig(self.client.get_config())
             else:
-                manager_config = self.client.get_manager_config(manager) or ""
-            response = Response(body=json.dumps({'config':manager_config}))
+                manager_config = ManagerConfig(self.client.get_manager_config(manager))
+            response = Response(body=json.dumps({'config' : str(manager_config)}))
+
         elif request.method == "POST":
             manager_config = json.loads(request.body)
             logging.info("Updating manager %s" % manager)
@@ -247,6 +250,7 @@ class PancakeApi:
                 self.client.update_config(manager_config.get('config', ""))
             else:
                 self.client.update_manager_config(manager, manager_config.get('config', ""))
+
         return response
 
     @connected
@@ -276,7 +280,7 @@ class PancakeApi:
         if request.method == "GET":
             logging.info("Retrieving service %s configuration" % service_name)
             service_config = ServiceConfig(self.client.get_service_config(service_name))
-            response = Response(body=json.dumps({ 'config' : str(service_config) }))
+            response = Response(body=json.dumps({'config' : str(service_config)}))
 
         elif request.method == "DELETE":
             logging.info("Unmanaging service %s" % (service_name))
