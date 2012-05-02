@@ -19,7 +19,8 @@ def connections():
     for line in lines:
         try:
             (proto, recvq, sendq, local, foreign, state) = line.split()
-            active.append(foreign)
+            if state == "ESTABLISHED":
+                active.append(foreign)
         except:
             pass
 
