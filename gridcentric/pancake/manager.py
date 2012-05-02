@@ -379,12 +379,13 @@ class ScaleManager(object):
         return remove_instance
 
     @locked
-    def decommission_instance(self, service_name, instance_id):
+    def decommission_instance(self, service_name, instance_id, ip_addresses):
         """ Mark the instance id as being decommissioned. """
-        self.zk_conn.write(paths.decommissioned_instance(service_name, instance_id), "")
+        self.zk_conn.write(paths.decommissioned_instance(service_name, instance_id),
+                           json.dumps(ip_addresses))
 
     @locked
-    def get_decommissioned_instances(self, service_name):
+    def decommissioned_instances(self, service_name):
         """ Return a list of all the decommissioned instances. """
         decommissioned_instances = self.zk_conn.list_children(paths.decommissioned_instances(service_name))
         if decommissioned_instances == None:
@@ -392,9 +393,24 @@ class ScaleManager(object):
         return decommissioned_instances
 
     @locked
+    def decomissioned_instance_ip_addresses(self, service_name, instance_id):
+        """ Return the ip address of a decomissioned instance. """
+        ip_addresses = self.zk_conn.read(paths.decommissioned_instance(service_name, instance_id))
+        if ip_addresses != None:
+            ip_addresses = json.loads(ip_addresses)
+        else:
+            ip_addresses = []
+        return ip_addresses
+
+    @locked
     def drop_decommissioned_instance(self, service_name, instance_id):
         """ Delete the decommissioned instance """
         self.zk_conn.delete(paths.decommissioned_instance(service_name, instance_id))
+
+
+    def metric_indicates_active(self, metrics):
+        """ Returns true if the metrics indicate that there are active connections. """
+        return metrics.get("active", (0, 0))[1] > 0
 
 
     @locked
@@ -427,7 +443,7 @@ class ScaleManager(object):
                 if ip in service_ips:
                     metrics_by_key[service.key()].append(metrics[ip])
                     ip_to_service_name[ip] = service.name
-                    if metrics[ip].get("active", 0) > 0:
+                    if self.metric_indicates_active(metrics[ip]):
                         active_connections[service.name].append(ip)
 
         # Stuff all the metrics into Zookeeper.
@@ -475,6 +491,13 @@ class ScaleManager(object):
 
     @locked
     def load_metrics(self, service, service_metrics={}):
+        """ 
+        Load the particular metrics for a service and return
+        a tuple (metrics, active_connections) where metrics
+        are the metrics to use for the service and active_connections
+        is a list of ip addresses with active connections.
+        """
+
         # Read any default metrics. We can override the source service
         # for metrics here (so, for example, a backend database server
         # can inheret a set of metrics given for the front server).
@@ -498,19 +521,39 @@ class ScaleManager(object):
                 metrics.append(json.loads(default_metrics))
             except ValueError:
                 logging.warn("Invalid custom metrics for %s." % (service.name))
-      
+
         # Read other metrics for given hosts.
-        for host in self.active_ips(service.name):
-            host_metrics = self.zk_conn.read(paths.service_host_metrics(service.name, host))
-            if host_metrics:
+        active_connections = []
+        for ip_address in self.active_ips(service.name):
+            ip_metrics = self.zk_conn.read(paths.service_ip_metrics(service.name, ip_address))
+            if ip_metrics:
                 try:
                     # This should be a dictionary { "name" : (weight, value) }
-                    metrics.append(json.loads(host_metrics))
+                    ip_metrics = json.loads(ip_metrics)
+                    metrics.append(ip_metrics)
+                    logging.debug("************* DRS DEBUG ************* metrics for ip %s: %s" % (ip_address, ip_metrics))
+                    if self.metric_indicates_active(ip_metrics):
+                        active_connections.append(ip_address)
                 except ValueError:
-                    logging.warn("Invalid host metrics for %s:%s." % (service.name, host))
+                    logging.warn("Invalid instance metrics for %s:%s." % (service.name, ip_address))
+
+        for instance_id in self.decommissioned_instances(service.name):
+            # Also check the metrics of decommissioned instances looking for any active counts.
+            for ip_address in self.decomissioned_instance_ip_addresses(service.name, instance_id):
+                if ip_address:
+                    ip_metrics = self.zk_conn.read(paths.service_ip_metrics(service.name, ip_address))
+                    if ip_metrics:
+                        try:
+                            ip_metrics = json.loads(ip_metrics)
+                            logging.debug("************* DRS DEBUG ************* DECOMMISSIONED: metrics for ip %s: %s" % (ip_address, ip_metrics))
+                            if self.metric_indicates_active(ip_metrics):
+                                active_connections.append(ip_address)
+                        except ValueError:
+                            logging.warn("Invalid instance metrics for %s:%s."
+                                         % (service.name, ip_address))
 
         # Return the metrics.
-        return metrics
+        return metrics, active_connections
 
     @locked
     def health_check(self):
@@ -524,7 +567,7 @@ class ScaleManager(object):
                 continue
 
             try:
-                metrics = self.load_metrics(service, service_metrics)
+                metrics, service_active_connections = self.load_metrics(service, service_metrics)
 
                 # Update the live metrics.
                 self.zk_conn.write(paths.service_live_metrics(service.name), \
@@ -532,7 +575,7 @@ class ScaleManager(object):
                                    ephemeral=True)
 
                 # Run a health check on this service.
-                service.health_check(active_connections[service.name])
+                service.health_check(active_connections[service.name] + service_active_connections)
 
                 # Do the service update.
                 logging.debug("Metrics for service %s: %s" % (service.name, metrics))

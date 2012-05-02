@@ -82,15 +82,15 @@ class PancakeApi:
         self.config.add_view(self.list_service_ips, route_name='service-ip-list-implicit')
 
         self.config.add_route('metric-action', '/gridcentric/pancake/services/{service_name}/metrics')
-        self.config.add_route('metric-host-action',
-            '/gridcentric/pancake/services/{service_name}/metrics/{service_host}')
         self.config.add_route('metric-action-implicit', '/gridcentric/pancake/service/metrics')
-        self.config.add_route('metric-host-action-implicit',
-            '/gridcentric/pancake/service/metrics/{service_host}')
+        self.config.add_route('metric-ip-action',
+            '/gridcentric/pancake/services/{service_name}/metrics/{service_ip}')
+        self.config.add_route('metric-ip-action-implicit',
+            '/gridcentric/pancake/service/metrics/{service_ip}')
         self.config.add_view(self.handle_metric_action, route_name='metric-action')
         self.config.add_view(self.handle_metric_action, route_name='metric-action-implicit')
-        self.config.add_view(self.handle_metric_action, route_name='metric-host-action')
-        self.config.add_view(self.handle_metric_action, route_name='metric-host-action-implicit')
+        self.config.add_view(self.handle_metric_action, route_name='metric-ip-action')
+        self.config.add_view(self.handle_metric_action, route_name='metric-ip-action-implicit')
 
     def reconnect(self, zk_servers):
         self.client = PancakeClient(zk_servers)
@@ -159,10 +159,10 @@ class PancakeApi:
                 if service_name != None:
                     # Authorize this request and set the service_name.
                     request.matchdict['service_name'] = service_name
-                    request.matchdict['service_host'] = request_ip
+                    request.matchdict['service_ip'] = request_ip
                     return True
                 else:
-                    raise Exception("Must query from service host.")
+                    raise Exception("Must query from service ip.")
 
         return False
 
@@ -298,7 +298,7 @@ class PancakeApi:
         POST - Either manages or updates the service with a new config in the request body
         """
         service_name = request.matchdict['service_name']
-        service_host = request.matchdict.get('service_host', None)
+        service_ip = request.matchdict.get('service_ip', None)
         response = Response()
 
         if request.method == "GET":
@@ -309,7 +309,7 @@ class PancakeApi:
         elif request.method == "POST":
             metrics = json.loads(request.body)
             logging.info("Updating metrics for service %s" % service_name)
-            self.client.set_service_metrics(service_name, metrics, service_host)
+            self.client.set_service_metrics(service_name, metrics, service_ip)
 
         return response
 

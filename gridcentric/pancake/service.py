@@ -164,7 +164,7 @@ class Service(object):
         for instance in instances:
             logging.info("Decommissioning instance %s for server %s (reason: %s)" %
                     (instance['id'], self.name, reason))
-            self.scale_manager.decommission_instance(self.name, instance['id'])
+            self.scale_manager.decommission_instance(self.name, instance['id'], self.extract_addresses_from([instance]))
 
     def _decommission_addresses(self, instances):
         # Drops all the addresses associated with these instances.
@@ -219,6 +219,7 @@ class Service(object):
         # There are the confirmed ips that are actually associated with an
         # instance. Other confirmed ones will need to be dropped because the
         # instances they refer to no longer exists.
+        logging.debug("************* DRS DEBUG ************* active_ips: %s" % (active_ips))
         associated_confirmed_ips = set()
         inactive_instance_ids = []
         for instance in instances:
@@ -262,7 +263,7 @@ class Service(object):
         self.decommission_instances(dead_instances, "instance has been marked for destruction")
 
         # See if there are any decommissioned instances that are now inactive.
-        decommissioned_instance_ids = self.scale_manager.get_decommissioned_instances(self.name)
+        decommissioned_instance_ids = self.scale_manager.decommissioned_instances(self.name)
         for inactive_instance_id in inactive_instance_ids:
             if inactive_instance_id in decommissioned_instance_ids:
                 self._delete_instance(inactive_instance_id)

@@ -70,8 +70,8 @@ def manager_active_connections(name):
     return "%s/active_connections/%s" % (MANAGERS, name)
 
 # The custom metrics for a particular host.
-def service_host_metrics(name, host):
-    return "%s/host_metrics/%s" % (service(name), host)
+def service_ip_metrics(name, ip_address):
+    return "%s/ip_metrics/%s" % (service(name), ip_address)
 
 # The global custom metrics for a service (posted by the API).
 def service_custom_metrics(name):
