@@ -38,6 +38,13 @@ gridcentric-nova
 nginx
     The default load balancer used by pancake.
 
+dnsmasq
+    Required if you are using the 'dnsmasq' load balancer.
+
+graphviz
+    Required if you want to use the auto run mechanism and graph URL.
+    This feature will generate an accurate graph of the Pancake cluster.
+
 zookeeper (3.4.x) (http://zookeeper.apache.org/)
     This the main datastore / control mechanism.
     You must also install the python bindings. 
