@@ -55,7 +55,16 @@ class ZookeeperConnection(object):
             if zookeeper.exists(self.handle, partial_path) == None:
                 zookeeper.create(self.handle, partial_path, '', [self.acl], 0)
 
-        if zookeeper.exists(self.handle, path):
+        exists = zookeeper.exists(self.handle, path)
+
+        # We make sure that we have the creation flags for ephemeral nodes,
+        # otherwise they could be associated with previous connections that
+        # have not yet timed out.
+        if ephemeral and exists:
+            zookeeper.delete(self.handle, path)
+            exists = False
+
+        if exists:
             zookeeper.set(self.handle, path, contents)
         else:
             flags = (ephemeral and zookeeper.EPHEMERAL or 0)
