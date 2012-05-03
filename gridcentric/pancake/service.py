@@ -129,10 +129,12 @@ class Service(object):
         # Check if our configuration is about to change.
         old_url = self.config.url()
         old_static_addresses = self.config.static_ips()
+        old_port = self.config.port()
         old_auth_info = self.config.auth_info()
         new_config = ServiceConfig(config_str)
         new_url = new_config.url()
         new_static_addresses = new_config.static_ips()
+        new_port = new_config.port()
         new_auth_info = new_config.auth_info()
 
         # Remove all old instances from loadbalancer.
@@ -150,7 +152,8 @@ class Service(object):
         # Do a referesh (to capture the new service).
         if old_url != new_url:
             self.scale_manager.add_service(self)
-        elif old_static_addresses != new_static_addresses:
+        elif old_static_addresses != new_static_addresses or \
+             old_port != new_port:
             self._update_loadbalancer()
 
         # Run a full update.
