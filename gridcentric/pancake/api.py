@@ -148,18 +148,20 @@ class PancakeApi:
         # request.environ['REMOTE_ADDR'].  This value may need to be added by
         # some WSGI middleware depending on what webserver is fronting this
         # app.
-        ip_address = request.headers.get('X-Forwarded-For', "")
-        if not(ip_address):
-            ip_address = request.environ.get('REMOTE_ADDR', "")
+        ip_address = request.environ.get('REMOTE_ADDR', "")
+        forwarded_for = request.headers.get('X-Forwarded-For', "")
+
+        # We may be running the API behind scale managers. We don't want to
+        # necessarily trust the X-Forwarded-For header that the client passes,
+        # but if we've been forwarded from an active manager then we can assume
+        # that this header has been placed by a trusted middleman.
+        if forwarded_for and ip_address in self.client.list_managers_active():
+            ip_address = forwarded_for
+
         return ip_address
 
     @connected
     def _authorize_ip_access(self, context, request):
-        # TODO(dscannell): The remote ip address is taken from the
-        # request.environ['REMOTE_ADDR'].  This value may need to be added by
-        # some WSGI middleware depending on what webserver is fronting this
-        # app.
-
         matched_route = request.matched_route
         if matched_route != None:
             if matched_route.name.endswith("-implicit"):
