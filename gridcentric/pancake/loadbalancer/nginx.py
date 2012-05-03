@@ -165,11 +165,12 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         uniq_id = hashlib.md5(url).hexdigest()
         conf_filename = "%s.conf" % uniq_id
 
-        # We track mappings address port pairs for active connections.
-        self.tracked[uniq_id] = (port, addresses)
-
         # Check for a removal.
         if len(addresses) == 0:
+            # Remove the connection from our tracking list.
+            if uniq_id in self.tracked:
+                del self.tracked[uniq_id]
+
             try:
                 os.remove(os.path.join(self.site_path, conf_filename))
             except OSError:
@@ -200,6 +201,9 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # Ensure that there is a server name.
         if not(netloc):
             netloc = "example.com"
+
+        # Add the connection to our tracking list.
+        self.tracked[uniq_id] = (int(port), addresses)
 
         # Render our given template.
         conf = self.template.render(id=uniq_id,

@@ -576,17 +576,22 @@ class ScaleManager(object):
 
             try:
                 metrics, service_active_connections = self.load_metrics(service, service_metrics)
+                connections = list(set(active_connections.get(service.name, []) + \
+                                       service_active_connections))
 
-                # Update the live metrics.
+                # Update the live metrics and connections.
+                logging.debug("Metrics for service %s: %s" % (service.name, metrics))
                 self.zk_conn.write(paths.service_live_metrics(service.name), \
                                    json.dumps(metrics), \
                                    ephemeral=True)
+                self.zk_conn.write(paths.service_live_connections(service.name), \
+                                   json.dumps(connections), \
+                                   ephemeral=True)
 
                 # Run a health check on this service.
-                service.health_check(active_connections[service.name] + service_active_connections)
+                service.health_check(connections)
 
                 # Do the service update.
-                logging.debug("Metrics for service %s: %s" % (service.name, metrics))
                 service.update(reconfigure=False, metrics=metrics)
             except:
                 error = traceback.format_exc()

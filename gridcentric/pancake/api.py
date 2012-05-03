@@ -321,7 +321,9 @@ class PancakeApi:
         if request.method == "GET":
             logging.info("Retrieving metrics for service %s" % service_name)
             metrics = self.client.get_service_metrics(service_name)
-            response = Response(body=json.dumps(metrics))
+            connections = self.client.get_service_connections(service_name)
+            body = json.dumps({ 'metrics' : metrics, 'connections' : connections})
+            response = Response(body=body)
 
         elif request.method == "POST":
             metrics = json.loads(request.body)

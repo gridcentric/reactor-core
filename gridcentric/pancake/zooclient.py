@@ -42,6 +42,11 @@ class PancakeClient(object):
             paths.service_live_metrics(service_name),
             default='[]'))
 
+    def get_service_connections(self, service_name):
+        return json.loads(self.zk_conn.read(\
+            paths.service_live_connections(service_name),
+            default='[]'))
+
     def get_service_config(self, service_name):
         return self.zk_conn.read(paths.service(service_name))
 
