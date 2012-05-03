@@ -317,9 +317,9 @@ class ScaleManager(object):
             scale_manager.zk_conn.delete(paths.new_ip(ip))
             scale_manager.update_loadbalancer(service)
 
-        for ip in ips:
-            for service in self.services.values():
-                service_ips = service.addresses()
+        for service in self.services.values():
+            service_ips = service.addresses()
+            for ip in ips:
                 if ip in service_ips:
                     _register_ip(self, service, ip)
                     break
@@ -363,24 +363,29 @@ class ScaleManager(object):
         self.domain = domain
 
     @locked
-    def mark_instance(self, service_name, instance_id):
+    def mark_instance(self, service_name, instance_id, label):
         # Increment the mark counter.
         remove_instance = False
-        mark_counter = int(self.zk_conn.read(\
-            paths.marked_instance(service_name, instance_id), '0'))
+        mark_counters = \
+                self.zk_conn.read(paths.marked_instance(service_name, instance_id), '{}')
+        mark_counters = json.loads(mark_counters)
+        mark_counter = mark_counters.get(label, 0)
         mark_counter += 1
 
-        if mark_counter >= self.config.mark_maximum():
+        if mark_counter >= self.config.mark_maximum(label):
             # This instance has been marked too many times. There is likely
             # something really wrong with it, so we'll clean it up.
+            logging.warning("Instance %s for service %s has been marked too many times and"
+                         " will be removed. (count=%s)" % (instance_id, service_name, mark_counter))
             remove_instance = True
             self.zk_conn.delete(paths.marked_instance(service_name, instance_id))
         else:
             # Just save the mark counter
             logging.info("Instance %s for service %s has been marked (count=%s)" %
                          (instance_id, service_name, mark_counter))
-            self.zk_conn.write(\
-                paths.marked_instance(service_name, instance_id), str(mark_counter))
+            mark_counters[label] = mark_counter
+            self.zk_conn.write(paths.marked_instance(service_name, instance_id),
+                               json.dumps(mark_counters))
 
         return remove_instance
 
