@@ -181,10 +181,9 @@ class ScaleManager(object):
         self.zk_conn.write(paths.manager_keys(self.uuid), key_string, ephemeral=True)
         logging.info("Generated %d keys." % len(self.manager_keys))
 
-        if not(initial):
-            # If we're not doing initial setup, refresh services.
-            for service in self.services.values():
-                self.manager_select(service)
+        # If we're not doing initial setup, refresh services.
+        for service in self.services.values():
+            self.manager_select(service)
 
     @locked
     def manager_change(self, managers):

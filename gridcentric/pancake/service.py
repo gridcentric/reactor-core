@@ -231,7 +231,7 @@ class Service(object):
         return instances
 
     def addresses(self):
-        return self.extract_addresses_from(self.instances())
+        return self.extract_addresses_from(self.instances(filter=False))
 
     def extract_addresses_from(self, instances):
         addresses = []
