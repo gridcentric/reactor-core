@@ -14,6 +14,7 @@ from gridcentric.pancake.config import ServiceConfig
 from gridcentric.pancake.api import PancakeApi
 from gridcentric.pancake.api import connected
 from gridcentric.pancake.api import authorized
+from gridcentric.pancake.graph import dot
 
 import gridcentric.pancake.ips as ips
 import gridcentric.pancake.zookeeper.config as zk_config
@@ -115,6 +116,9 @@ class PancakeAutoApi(PancakeApi):
         self.config.add_route('api-servers', '/gridcentric/pancake/api_servers')
         self.config.add_view(self.set_api_servers, route_name='api-servers')
 
+        self.config.add_route('graph', '/gridcentric/pancake/graph')
+        self.config.add_view(self.build_graph, route_name='graph')
+
         # Check the service.
         self.check_service(zk_servers)
 
@@ -130,6 +134,12 @@ class PancakeAutoApi(PancakeApi):
             self.reconnect(api_servers)
 
         return Response()
+
+    @connected
+    @authorized
+    def build_graph(self, context, request):
+        output = dot(self.client, overrides={ "api" : self.zk_servers })
+        return Response(body=output, content_type="image/png")
 
     def start_manager(self, zk_servers):
         zk_servers.sort()
