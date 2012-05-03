@@ -64,7 +64,7 @@ def calculate_ideal_uniform(service_spec, metrics, num_instances):
 
     metric_averages = calculate_weighted_averages(metrics)
     logging.debug("Metric totals: %s" % (metric_averages))
-    ideal_instances = (-1, -2)
+    ideal_instances = (-1, -1)
     for criteria in service_spec:
         if criteria != '':
             c = ServiceCriteria(criteria)
@@ -75,7 +75,7 @@ def calculate_ideal_uniform(service_spec, metrics, num_instances):
                     calculate_server_range(avg * num_instances, c.lower_bound(), c.upper_bound())
             logging.debug("Ideal instances for metric %s: %s" % \
                     (c.metric_key(), (metric_min, metric_max)))
-            if ideal_instances == (-1, -2):
+            if ideal_instances == (-1, -1):
                 # First time through the loop so we just set it to the first ideal values.
                 ideal_instances = (metric_min, metric_max)
             else:

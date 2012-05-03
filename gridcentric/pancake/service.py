@@ -64,8 +64,8 @@ class Service(object):
             if metrics != []:
                 # Only log the warning if there were values for the metrics provided. In other words
                 # only if the metrics could have made a difference.
-                logging.warn("Either no metrics have been defined for service %s or they have "
-                             "resulted in a conflicting result. (service metrics: %s)"
+                logging.warn("The metrics defined for service %s have resulted in a "
+                             "conflicting result. (service metrics: %s)"
                              % (self.name, self.config.metrics()))
             return (ideal_min, ideal_max)
 
