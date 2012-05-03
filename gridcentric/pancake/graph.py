@@ -7,7 +7,7 @@ import uuid
 import subprocess
 from StringIO import StringIO
 
-def dot(client, overrides={}):
+def dot(client, extras={}):
     # Build our string.
     output = StringIO()
     nodemap = { "" : 0 }
@@ -54,30 +54,30 @@ def dot(client, overrides={}):
     service_ips = {}
 
     start_graph(output)
-    node_declare("input")
 
     # Build our clusters.
-    manager_cluster = build_cluster(output, "scaler", managers, filled=True)
+    manager_cluster = build_cluster(output, "managers", managers, filled=True)
     for service in services:
-        if not(service in overrides):
+        if not(service in extras):
             service_ips[service] = client.get_service_ip_addresses(service)
             build_cluster(output, service, service_ips[service])
 
-    for service in overrides:
-        build_cluster(output, service, overrides[service], filled=True)
+    # Build special clusters.
+    for service in extras:
+        build_cluster(output, service, extras[service], filled=True)
 
-    # Connect the inputs.
+    # Connect the management nodes.
     for ip in managers:
-        connect(output, "input", ip)
 
-        # Connect to all overrides.
-        for service in overrides:
-            connect_all(output, ip, overrides[service])
+        # Connect to all extras.
+        for service in extras:
+            connect_all(output, ip, extras[service])
 
-        # Connect the service boxes.
+        # Connect service nodes.
         for service in services:
-            if not(service in overrides):
-                connect_all(output, ip, service_ips[service])
+            if not(service in extras):
+                nodes = client.get_service_connections(service)
+                connect_all(output, ip, nodes)
 
     end_graph(output)
 
