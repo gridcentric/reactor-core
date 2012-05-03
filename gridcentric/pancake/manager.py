@@ -367,7 +367,7 @@ class ScaleManager(object):
         # Increment the mark counter.
         remove_instance = False
         mark_counters = \
-                int(self.zk_conn.read(paths.marked_instance(service_name, instance_id), '{}'))
+                self.zk_conn.read(paths.marked_instance(service_name, instance_id), '{}')
         mark_counters = json.loads(mark_counters)
         mark_counter = mark_counters.get(label, 0)
         mark_counter += 1
