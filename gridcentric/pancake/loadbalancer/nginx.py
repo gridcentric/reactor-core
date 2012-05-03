@@ -91,9 +91,6 @@ class NginxLogWatcher(threading.Thread):
         self.record = {}
         self.lock.release()
 
-        # Grab all active connections.
-        active_connections = connection_count()
-
         # Compute the response times.
         for host in record:
             hits = record[host][0]
@@ -102,20 +99,6 @@ class NginxLogWatcher(threading.Thread):
                 "rate" : (hits, hits / delta),
                 "response" : (hits, record[host][2] / hits),
                 "bytes" : (hits, record[host][1] / delta),
-                "active" : (1, active_connections.get(host, 0)),
-                }
-            if host in active_connections:
-                del active_connections[host]
-            record[host] = metrics
-
-        # Compute the active counts.
-        for host in active_connections:
-            metrics = \
-                {
-                "rate" : (0, 0.0),
-                "response" : (0, 0.0),
-                "bytes" : (0, 0),
-                "active" : (1, active_connections.get(host, 0)),
                 }
             record[host] = metrics
 
@@ -148,6 +131,7 @@ class NginxLogWatcher(threading.Thread):
 class NginxLoadBalancerConnection(LoadBalancerConnection):
 
     def __init__(self, config_path, site_path):
+        self.tracked = {}
         self.config_path = config_path
         self.site_path = site_path
         template_file = os.path.join(os.path.dirname(__file__), 'nginx.template')
@@ -165,17 +149,24 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
             return None
 
     def clear(self):
+        # Remove all sites configurations.
         for conf in glob.glob(os.path.join(self.site_path, "*")):
             try:
                 os.remove(conf)
             except OSError:
                 pass
 
+        # Remove all tracked connections.
+        self.tracked = {}
+
     def change(self, url, port, names, addresses):
         # We use a simple hash of the URL as the file name for the
         # configuration file.
         uniq_id = hashlib.md5(url).hexdigest()
         conf_filename = "%s.conf" % uniq_id
+
+        # We track mappings address port pairs for active connections.
+        self.tracked[uniq_id] = (port, addresses)
 
         # Check for a removal.
         if len(addresses) == 0:
@@ -238,4 +229,17 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
             os.kill(nginx_pid, signal.SIGHUP)
 
     def metrics(self):
-        return self.log_reader.pull()
+        # Grab the log records.
+        records = self.log_reader.pull()
+
+        # Grab the active connections.
+        active_connections = connection_count()
+
+        for (port, addresses) in self.tracked.values():
+            for address in addresses:
+                active = active_connections.get((address, port), 0)
+                if not(address in records):
+                    records[address] = {}
+                records[address]["active"] = (1, active)
+
+        return records
