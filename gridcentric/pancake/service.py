@@ -29,17 +29,8 @@ class Service(object):
         self.decommissioned_instances = self.scale_manager.decommissioned_instances(self.name)
 
     def unmanage(self):
-        try:
-            # Delete all the launched instances, and unbless the instance.
-            # Essentially, return it back to the unmanaged.
-            logging.info("Unmanaging service %s" % (self.name))
-
-            # Delete all the launched instances.
-            for instance in self.instances():
-                self.decommission_instances(self.instances(),
-                                    "service is becoming unmanaged")
-        except:
-            logging.error("Error unmanaging service %s: %s" % (self.name, traceback.format_exc()))
+        # Do nothing.
+        logging.info("Unmanaging service %s" % (self.name))
 
     def update(self, reconfigure=True, metrics=[]):
         try:
@@ -166,7 +157,6 @@ class Service(object):
         Drop the instances from the system. Note: a reason should be given for why
         the instances are being dropped.
         """
-
         # Update the load balancer before bringing down the instances.
         self._decommission_addresses(instances)
         if len(instances) > 0:
@@ -177,7 +167,8 @@ class Service(object):
         for instance in instances:
             logging.info("Decommissioning instance %s for server %s (reason: %s)" %
                     (instance['id'], self.name, reason))
-            self.scale_manager.decommission_instance(self.name, instance['id'], self.extract_addresses_from([instance]))
+            self.scale_manager.decommission_instance(\
+                self.name, instance['id'], self.extract_addresses_from([instance]))
             self.decommissioned_instances += [str(instance['id'])]
 
     def _decommission_addresses(self, instances):
@@ -212,14 +203,30 @@ class Service(object):
 
     def instances(self, filter=True):
         instances = self.cloud_conn.list_instances(self.config.instance_id())
+        confirmed_ips = set(self.scale_manager.confirmed_ips(self.name))
 
         if filter:
-            # Filter out the decommissioned instances from the returned list.
+            # Filter out all the decommissioned instances and non-confirmed
+            # instances from the list. The non-confirmed instances will be
+            # cleaned up by one mechanism, while decommisioned servers will be
+            # cleaned up by the other. We don't want to potentially decommision
+            # a server before it has had a chance to register.
+
             all_instances = instances
             instances = []
             for instance in all_instances:
-                if not(str(instance['id']) in self.decommissioned_instances):
-                    instances.append(instance)
+                # Check if this is not yet a confirmed instance.
+                expected_ips = set(self.extract_addresses_from([instance]))
+                instance_confirmed_ips = confirmed_ips.intersection(expected_ips)
+                if len(instance_confirmed_ips) == 0:
+                    continue
+
+                # Check if this is a decommissioned instance.
+                if str(instance['id']) in self.decommissioned_instances:
+                    continue
+
+                # Good to go.
+                instances.append(instance)
 
         return instances
 
@@ -268,8 +275,8 @@ class Service(object):
             else:
                 associated_confirmed_ips = associated_confirmed_ips.union(instance_confirmed_ips)
 
-            # Check if any of these expected_ips are not in our active set. If so that this instance
-            # is currently considered inactive
+            # Check if any of these expected_ips are not in our active set. If
+            # so that this instance is currently considered inactive.
             if len(expected_ips.intersection(active_ips)) == 0:
                 inactive_instance_ids += [str(instance['id'])]
 
@@ -293,7 +300,9 @@ class Service(object):
 
         # See if there are any decommissioned instances that are now inactive.
         decommissioned_instance_ids = self.decommissioned_instances
-        logging.debug("Active instances: %s:%s:%s" % (active_ips, inactive_instance_ids, decommissioned_instance_ids))
+        logging.debug("Active instances: %s:%s:%s" % \
+            (active_ips, inactive_instance_ids, decommissioned_instance_ids))
+
         for inactive_instance_id in inactive_instance_ids:
             if inactive_instance_id in decommissioned_instance_ids:
                 if self.scale_manager.mark_instance(self.name,
