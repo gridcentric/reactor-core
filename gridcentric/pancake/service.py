@@ -257,7 +257,7 @@ class Service(object):
             if len(instance_confirmed_ips) == 0:
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
-                if self.scale_manager.mark_instance(self.name, instance['id']):
+                if self.scale_manager.mark_instance(self.name, instance['id'], 'unregistered'):
                     # This instance has been deemed to be dead and should be cleaned up.
                     dead_instances += [instance]
             else:
@@ -291,4 +291,7 @@ class Service(object):
         logging.debug("Active instances: %s:%s:%s" % (active_ips, inactive_instance_ids, decommissioned_instance_ids))
         for inactive_instance_id in inactive_instance_ids:
             if inactive_instance_id in decommissioned_instance_ids:
-                self._delete_instance(inactive_instance_id)
+                if self.scale_manager.mark_instance(self.name,
+                                                    inactive_instance_id,
+                                                    'decommissioned'):
+                        self._delete_instance(inactive_instance_id)
