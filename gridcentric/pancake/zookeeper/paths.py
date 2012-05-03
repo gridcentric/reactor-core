@@ -20,16 +20,6 @@ CONFIG = "%s/config" % (ROOT)
 def config():
     return CONFIG
 
-# The services subtree. Basically anything related to a particular service
-# should be rooted here.
-SERVICES = "%s/service" % (ROOT)
-def services():
-    return SERVICES
-
-# The subtree for a particular service.
-def service(name):
-    return "%s/%s" % (SERVICES, name)
-
 # The subtree for managers.
 MANAGERS = "%s/managers" % (ROOT)
 
@@ -68,6 +58,16 @@ def manager_metrics(name):
 # The mappings of service to ip address that have no connections
 def manager_active_connections(name):
     return "%s/active_connections/%s" % (MANAGERS, name)
+
+# The services subtree. Basically anything related to a particular service
+# should be rooted here.
+SERVICES = "%s/service" % (ROOT)
+def services():
+    return SERVICES
+
+# The subtree for a particular service.
+def service(name):
+    return "%s/%s" % (SERVICES, name)
 
 # The custom metrics for a particular host.
 def service_ip_metrics(name, ip_address):

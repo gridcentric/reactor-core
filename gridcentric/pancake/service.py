@@ -17,7 +17,6 @@ class Service(object):
         self.scale_manager = scale_manager
         self.cloud_conn = cloud_connection.get_connection(cloud)
         self.cloud_conn.connect(self.config.auth_info())
-        self.decommissioned_instances = self.scale_manager.decommissioned_instances(self.name)
 
     def key(self):
         return hashlib.md5(self.config.url()).hexdigest()
@@ -25,6 +24,7 @@ class Service(object):
     def manage(self):
         # Load the configuration and configure the service.
         logging.info("Managing service %s" % (self.name))
+        self.decommissioned_instances = self.scale_manager.decommissioned_instances(self.name)
 
     def unmanage(self):
         try:
@@ -64,8 +64,8 @@ class Service(object):
             if metrics != []:
                 # Only log the warning if there were values for the metrics provided. In other words
                 # only if the metrics could have made a difference.
-                logging.warn("Either no metrics have been defined for service %s or they have "
-                             "resulted in a conflicting result. (service metrics: %s)"
+                logging.warn("The metrics defined for service %s have resulted in a "
+                             "conflicting result. (service metrics: %s)"
                              % (self.name, self.config.metrics()))
             return (ideal_min, ideal_max)
 
@@ -176,7 +176,7 @@ class Service(object):
             logging.info("Decommissioning instance %s for server %s (reason: %s)" %
                     (instance['id'], self.name, reason))
             self.scale_manager.decommission_instance(self.name, instance['id'], self.extract_addresses_from([instance]))
-            self.decommissioned_instances += [instance['id']]
+            self.decommissioned_instances += [str(instance['id'])]
 
     def _decommission_addresses(self, instances):
         # Drops all the addresses associated with these instances.
@@ -216,7 +216,7 @@ class Service(object):
             all_instances = instances
             instances = []
             for instance in all_instances:
-                if not(instance['id'] in self.decommissioned_instances):
+                if not(str(instance['id']) in self.decommissioned_instances):
                     instances.append(instance)
 
         return instances
@@ -260,7 +260,7 @@ class Service(object):
             if len(instance_confirmed_ips) == 0:
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
-                if self.scale_manager.mark_instance(self.name, instance['id']):
+                if self.scale_manager.mark_instance(self.name, instance['id'], 'unregistered'):
                     # This instance has been deemed to be dead and should be cleaned up.
                     dead_instances += [instance]
             else:
@@ -290,7 +290,11 @@ class Service(object):
         self.decommission_instances(dead_instances, "instance has been marked for destruction")
 
         # See if there are any decommissioned instances that are now inactive.
-        decommissioned_instance_ids = self.scale_manager.decommissioned_instances(self.name)
+        decommissioned_instance_ids = self.decommissioned_instances
+        logging.debug("Active instances: %s:%s:%s" % (active_ips, inactive_instance_ids, decommissioned_instance_ids))
         for inactive_instance_id in inactive_instance_ids:
             if inactive_instance_id in decommissioned_instance_ids:
-                self._delete_instance(inactive_instance_id)
+                if self.scale_manager.mark_instance(self.name,
+                                                    inactive_instance_id,
+                                                    'decommissioned'):
+                        self._delete_instance(inactive_instance_id)

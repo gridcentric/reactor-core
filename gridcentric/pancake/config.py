@@ -8,7 +8,7 @@ from gridcentric.pancake.exceptions import ConfigFileNotFound
 
 class Config(object):
 
-    def __init__(self, defaultcfg = None):
+    def __init__(self, defaultcfg=None):
         self.defaultcfg = defaultcfg
         self.config = None
 
@@ -42,7 +42,8 @@ class ManagerConfig(Config):
         super(ManagerConfig, self).__init__(StringIO("""
 [manager]
 health_check=5
-mark_maximum=20
+unregistered_wait=20
+decommissioned_wait=5
 keys=64
 loadbalancer=nginx,dnsmasq
 
@@ -71,8 +72,10 @@ hosts_path=/etc/hosts.pancake
             result.update(self.config.items("loadbalancer:%s" % name))
         return result
 
-    def mark_maximum(self):
-        return int(self._get("manager", "mark_maximum"))
+    def mark_maximum(self, label):
+        if label in ['unregistered', 'decommissioned']:
+            return int(self._get("manager", "%s_wait" % (label)))
+
 
     def keys(self):
         return int(self._get("manager", "keys"))
@@ -81,7 +84,7 @@ hosts_path=/etc/hosts.pancake
         return float(self._get("manager", "health_check"))
 
 class ServiceConfig(Config):
-    
+
     def __init__(self, config_str):
         super(ServiceConfig, self).__init__(StringIO("""
 [service]
@@ -129,9 +132,9 @@ project=admin
         return self._get("scaling", "source")
 
     def get_service_auth(self):
-        return (self._get("service","auth_hash"),
-                self._get("service","auth_salt"),
-                self._get("service","auth_algo"))
+        return (self._get("service", "auth_hash"),
+                self._get("service", "auth_salt"),
+                self._get("service", "auth_algo"))
 
     def auth_info(self):
         return (self._get("nova", "authurl"),
