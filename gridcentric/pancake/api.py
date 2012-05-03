@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import traceback
 
 from pyramid.config import Configurator
 from pyramid.response import Response
@@ -24,10 +25,10 @@ def authorized(request_handler):
                 return request_handler(self, context, request)
             else:
                 # Return an unauthorized response.
-                return Response(status=401)
-        except Exception, e:
-            # Return an authorize (but more descriptive) response.
-            return Response(status=401, body=str(e))
+                return Response(status=401, body="unauthorized")
+        except:
+            # Return an internal error.
+            return Response(status=500, body=traceback.format_exc())
 
     return fn
 
@@ -203,7 +204,16 @@ class PancakeApi:
 
     @connected
     def version(self, context, request):
-        return Response(body=json.dumps({'version':'1.0'}))
+        """
+        Get the version implemented by this API.
+        """
+
+        if request.method == "GET":
+            response = Response(body=json.dumps({'version':'1.0'}))
+        else:
+            response = Response(status=403)
+
+        return response
 
     @connected
     @authorized
@@ -211,12 +221,17 @@ class PancakeApi:
         """
         Updates the auth key in the system.
         """
+        response = Response()
+
         if request.method == "POST":
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
             self.client.set_auth_hash(self._create_admin_auth_token(auth_key))
 
-        return Response()
+        else:
+            response = Response(status=403)
+
+        return response
 
     @connected
     @authorized
@@ -225,14 +240,19 @@ class PancakeApi:
         Updates the domain in the system.
         """
         response = Response()
+
         if request.method == "GET":
             logging.info("Retrieving Domain.")
             domain = self.client.domain()
             response = Response(body=json.dumps({'domain':domain}))
+
         elif request.method == "POST":
             domain = json.loads(request.body)['domain']
             logging.info("Updating Domain.")
             self.client.set_domain(domain)
+
+        else:
+            response = Response(status=403)
 
         return response
 
@@ -250,19 +270,29 @@ class PancakeApi:
 
         if request.method == "GET":
             logging.info("Retrieving manager %s configuration" % manager)
+
             if not(manager) or manager == "default":
-                manager_config = ManagerConfig(self.client.get_config())
+                config = self.client.get_config()
             else:
-                manager_config = ManagerConfig(self.client.get_manager_config(manager))
-            response = Response(body=json.dumps({'config' : str(manager_config)}))
+                config = self.client.get_manager_config(manager)
+
+            if not(config):
+                response = Response(status=404, body="%s not found" % manager)
+            else:
+                manager_config = ManagerConfig(config)
+                response = Response(body=json.dumps({'config' : str(manager_config)}))
 
         elif request.method == "POST":
             manager_config = json.loads(request.body)
             logging.info("Updating manager %s" % manager)
+
             if not(manager) or manager == "default":
                 self.client.update_config(manager_config.get('config', ""))
             else:
                 self.client.update_manager_config(manager, manager_config.get('config', ""))
+
+        else:
+            response = Response(status=403)
 
         return response
 
@@ -272,10 +302,15 @@ class PancakeApi:
         """
         Returns a list of managers currently running.
         """
-        managers_configured = self.client.list_managers_configured()
-        managers_active = self.client.list_managers_active()
-        response = { 'managers_configured':managers_configured,
-                     'managers_active':managers_active }
+
+        if request.method == 'GET':
+            managers_configured = self.client.list_managers_configured()
+            managers_active = self.client.list_managers_active()
+            response = { 'managers_configured':managers_configured,
+                         'managers_active':managers_active }
+        else:
+            response = Response(status=403)
+
         return Response(body=json.dumps(response))
 
     @connected
@@ -292,8 +327,14 @@ class PancakeApi:
 
         if request.method == "GET":
             logging.info("Retrieving service %s configuration" % service_name)
-            service_config = ServiceConfig(self.client.get_service_config(service_name))
-            response = Response(body=json.dumps({'config' : str(service_config)}))
+
+            config = self.client.get_service_config(service_name)
+
+            if config:
+                service_config = ServiceConfig(self.client.get_service_config(service_name))
+                response = Response(body=json.dumps({'config' : str(service_config)}))
+            else:
+                response = Response(status=404, body="%s not found" % service_name)
 
         elif request.method == "DELETE":
             logging.info("Unmanaging service %s" % (service_name))
@@ -304,6 +345,9 @@ class PancakeApi:
             logging.info("Managing or updating service %s" % service_name)
             self.client.update_service(service_name, service_config.get('config', ""))
 
+        else:
+            response = Response(status=403)
+ 
         return response
 
     @connected
@@ -322,13 +366,20 @@ class PancakeApi:
             logging.info("Retrieving metrics for service %s" % service_name)
             metrics = self.client.get_service_metrics(service_name)
             connections = self.client.get_service_connections(service_name)
-            body = json.dumps({ 'metrics' : metrics, 'connections' : connections})
-            response = Response(body=body)
+
+            if metrics or connections:
+                body = json.dumps({ 'metrics' : metrics or [], 'connections' : connections or []})
+                response = Response(body=body)
+            else:
+                response = Response(status=404, body="%s not found" % service_name)
 
         elif request.method == "POST":
             metrics = json.loads(request.body)
             logging.info("Updating metrics for service %s" % service_name)
             self.client.set_service_metrics(service_name, metrics, service_ip)
+
+        else:
+            response = Response(status=403)
 
         return response
 
@@ -337,12 +388,13 @@ class PancakeApi:
     def list_service_ips(self, context, request):
         service_name = request.matchdict['service_name']
 
-        if request.method == 'GET':
-            return Response(body=json.dumps(
-                {'ip_addresses': \
+        if request.method == "GET":
+            response = Response(body=json.dumps({'ip_addresses': \
                 self.client.get_service_ip_addresses(service_name)}))
+        else:
+            response = Response(status=403)
 
-        return Response()
+        return response
 
     @connected
     @authorized
@@ -350,12 +402,25 @@ class PancakeApi:
         """
         Returns a list of services currently being managed.
         """
-        services = self.client.list_managed_services()
-        return Response(body=json.dumps({'services':services}))
+        if request.method == "GET":
+            services = self.client.list_managed_services()
+            response = Response(body=json.dumps({'services':services}))
+        else:
+            response = Response(status=403)
+
+        return response
 
     @connected
     def register_ip_address(self, context, request):
-        ip_address = self._extract_remote_ip(context, request)
-        logging.info("New IP address %s has been recieved." % (ip_address))
-        self.client.record_new_ipaddress(ip_address)
-        return Response()
+        """
+        Publish a new IP from an instance.
+        """
+        if request.method == "POST":
+            ip_address = self._extract_remote_ip(context, request)
+            logging.info("New IP address %s has been recieved." % (ip_address))
+            self.client.record_new_ipaddress(ip_address)
+            response = Response()
+        else:
+            response = Response(status=403)
+
+        return response

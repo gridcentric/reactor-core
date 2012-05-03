@@ -149,7 +149,7 @@ class PancakeApiClient(httplib2.Http):
         resp, body = super(PancakeApiClient, self).request(*args, **kwargs)
 
         if resp.status != 200:
-            raise Exception(body)
+            raise Exception("Error: %s" % str(body))
         if body:
             try:
                 body = json.loads(body)

@@ -76,7 +76,7 @@ def dot(client, extras={}):
         # Connect service nodes.
         for service in services:
             if not(service in extras):
-                nodes = client.get_service_connections(service)
+                nodes = client.get_service_connections(service) or []
                 connect_all(output, ip, nodes)
 
     end_graph(output)
