@@ -15,6 +15,7 @@ class Service(object):
         self.name = name
         self.config = service_config
         self.scale_manager = scale_manager
+        self.decommissioned_instances = []
         self.cloud_conn = cloud_connection.get_connection(cloud)
         self.cloud_conn.connect(self.config.auth_info())
 
