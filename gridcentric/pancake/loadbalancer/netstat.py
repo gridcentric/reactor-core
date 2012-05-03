@@ -19,7 +19,8 @@ def connections():
     for line in lines:
         try:
             (proto, recvq, sendq, local, foreign, state) = line.split()
-            active.append(foreign)
+            (host, port) = foreign.split(":")
+            active.append((host, int(port)))
         except:
             pass
 
@@ -29,10 +30,10 @@ def connection_count():
     active_count = {}
     active = connections()
 
-    for connection in active:
+    for (host, port) in active:
         try:
-            (host, port) = connection.split(":")
-            active_count[host] = active_count.get(host, 0) + 1
+            active_count[(host, port)] = \
+                active_count.get((host, port), 0) + 1
         except:
             pass
 

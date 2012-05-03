@@ -138,7 +138,7 @@ class PancakeAutoApi(PancakeApi):
     @connected
     @authorized
     def build_graph(self, context, request):
-        output = dot(self.client, overrides={ "api" : self.zk_servers })
+        output = dot(self.client, extras={ "api" : self.zk_servers })
         return Response(body=output, content_type="image/png")
 
     def start_manager(self, zk_servers):

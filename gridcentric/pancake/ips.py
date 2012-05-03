@@ -16,31 +16,13 @@ def is_local(host):
 
 def is_public(host):
     ip = socket.gethostbyname(host)
-    if ip.startswith("10.") or \
-       ip.startswith("172.") or \
-       ip.startswith("192.168.") or \
-       ip.startswith("127."):
+    if ip.startswith("127."):
         return False
     else:
         return True
-
-def is_private(host):
-    ip = socket.gethostbyname(host)
-    if ip.startswith("10.") or \
-       ip.startswith("172.") or \
-       ip.startswith("192.168."):
-        return True
-    else:
-        return False
 
 def any_local(hosts):
     return (True in map(is_local, hosts))
 
 def find_global():
-    filtered = [x for x in list_local_ips() if is_public(x)]
-    if len(filtered) == 0:
-        filtered = [x for x in list_local_ips() if is_private(x)]
-    if len(filtered) == 0:
-        return None
-    else:
-        return filtered
+    return [x for x in list_local_ips() if is_public(x)]

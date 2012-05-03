@@ -81,6 +81,10 @@ def service_custom_metrics(name):
 def service_live_metrics(name):
     return "%s/live_metrics" % (service(name))
 
+# The updated connections for a particular service (posted by the manager).
+def service_live_connections(name):
+    return "%s/live_connections" % (service(name))
+
 # The ips that have been confirmed by the system for a particular service. An
 # ip is confirmed once it sends a message to a pancake.
 def confirmed_ips(name):

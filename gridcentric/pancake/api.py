@@ -143,19 +143,32 @@ class PancakeApi:
                 # turned on so all requests are denied by default.
                 return False
 
-    @connected
-    def _authorize_ip_access(self, context, request):
+    def _extract_remote_ip(self, context, request):
         # TODO(dscannell): The remote ip address is taken from the
         # request.environ['REMOTE_ADDR'].  This value may need to be added by
         # some WSGI middleware depending on what webserver is fronting this
         # app.
+        ip_address = request.environ.get('REMOTE_ADDR', "")
+        forwarded_for = request.headers.get('X-Forwarded-For', "")
+
+        # We may be running the API behind scale managers. We don't want to
+        # necessarily trust the X-Forwarded-For header that the client passes,
+        # but if we've been forwarded from an active manager then we can assume
+        # that this header has been placed by a trusted middleman.
+        if forwarded_for and ip_address in self.client.list_managers_active():
+            ip_address = forwarded_for
+
+        return ip_address
+
+    @connected
+    def _authorize_ip_access(self, context, request):
         matched_route = request.matched_route
         if matched_route != None:
             if matched_route.name.endswith("-implicit"):
                 # We can only do ip authorizing on implicit routes. Essentially
                 # we will update the request to confine it to the service with
                 # this address.
-                request_ip = request.environ.get('REMOTE_ADDR', "")
+                request_ip = self._extract_remote_ip(context, request)
                 service_name = self.client.get_ip_address_service(request_ip)
                 if service_name != None:
                     # Authorize this request and set the service_name.
@@ -308,7 +321,9 @@ class PancakeApi:
         if request.method == "GET":
             logging.info("Retrieving metrics for service %s" % service_name)
             metrics = self.client.get_service_metrics(service_name)
-            response = Response(body=json.dumps(metrics))
+            connections = self.client.get_service_connections(service_name)
+            body = json.dumps({ 'metrics' : metrics, 'connections' : connections})
+            response = Response(body=body)
 
         elif request.method == "POST":
             metrics = json.loads(request.body)
@@ -340,7 +355,7 @@ class PancakeApi:
 
     @connected
     def register_ip_address(self, context, request):
-        ip_address = request.environ.get('REMOTE_ADDR', "")
+        ip_address = self._extract_remote_ip(context, request)
         logging.info("New IP address %s has been recieved." % (ip_address))
         self.client.record_new_ipaddress(ip_address)
         return Response()
