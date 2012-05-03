@@ -15,8 +15,9 @@ class Service(object):
         self.name = name
         self.config = service_config
         self.scale_manager = scale_manager
+        self.cloud = cloud
         self.decommissioned_instances = []
-        self.cloud_conn = cloud_connection.get_connection(cloud)
+        self.cloud_conn = cloud_connection.get_connection(self.cloud)
         self.cloud_conn.connect(self.config.auth_info())
 
     def key(self):
@@ -147,7 +148,7 @@ class Service(object):
 
         # Reconnect to the cloud controller (if necessary).
         if old_auth_info != new_auth_info:
-            self.cloud_conn = cloud_connection.get_connection(cloud)
+            self.cloud_conn = cloud_connection.get_connection(self.cloud)
             self.cloud_conn.connect(self.config.auth_info())
 
         # Do a referesh (to capture the new service).
