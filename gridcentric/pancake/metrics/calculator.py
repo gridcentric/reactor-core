@@ -6,6 +6,7 @@ all the gather metrics and the scaling spec of the service.
 import logging
 import re
 import math
+import sys
 
 def calculate_weighted_averages(metrics):
     """ Calculates the weighted average for each metric """
@@ -25,6 +26,14 @@ def calculate_weighted_averages(metrics):
 
 
 def calculate_num_servers_uniform(total, bound):
+    """ 
+    Determines the number of servers required to spread the 'total' load uniformly
+    across them all so that each one has at most 'bound' amount of load.
+    """
+    if bound == 0:
+        # A bound of 0 essentially indicates an inifinite number of servers.
+        # Return the maximum value possible. 
+        return sys.maxint
     return int(math.ceil(total / bound))
 
 def calculate_server_range(total, lower, upper):
