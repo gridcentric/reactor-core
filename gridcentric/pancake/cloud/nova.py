@@ -5,19 +5,18 @@ from gridcentric.nova.client.client import NovaClient
 
 import gridcentric.pancake.cloud.connection as cloud_connection
 
-
 class NovaConnector(cloud_connection.CloudConnection):
-    
+
     def __init__(self):
         self.credentials = None
         self.deleted_instance_ids = []
-    
+ 
     def connect(self, credentials):
         """
         Connects to the cloud using the provided credentials
         """
         self.credentials = credentials
-    
+
     def _novaclient(self):
         try:
             (auth_url, user, apikey, project) = self.credentials
@@ -30,7 +29,7 @@ class NovaConnector(cloud_connection.CloudConnection):
         except Exception, e:
             traceback.print_exc()
             logging.error("Error creating nova client: %s" % str(e))
-    
+
     def list_instances(self, service_identifier):
         """
         Lists the instances related to a service. The identifier is used to 
@@ -47,7 +46,7 @@ class NovaConnector(cloud_connection.CloudConnection):
 
         self.deleted_instance_ids = instance_ids_still_deleting
         return sorted(non_deleted_instances, key=lambda x: x.get('created',"")) 
-    
+
     def start_instance(self, service_identifier, instance_info):
         """
         Starts a new instance in the cloud using the service
@@ -58,8 +57,7 @@ class NovaConnector(cloud_connection.CloudConnection):
         except HTTPException, e:
             traceback.print_exc()
             logging.error("Error launching instance: %s" % str(e))
-    
-    
+
     def delete_instance(self, instance_id):
         """
         Remove the instance from the cloud
@@ -74,7 +72,7 @@ class NovaConnector(cloud_connection.CloudConnection):
 
     def _mark_instance_deleted(self, instance_id):
         self.deleted_instance_ids.append(instance_id)
-    
+
     def _unmark_instance_deleted(self, instance):
         try:
             self.deleted_instance_ids.remove(instance_id)

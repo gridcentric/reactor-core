@@ -379,6 +379,7 @@ class ScaleManager(object):
                          " will be removed. (count=%s)" % (instance_id, service_name, mark_counter))
             remove_instance = True
             self.zk_conn.delete(paths.marked_instance(service_name, instance_id))
+
         else:
             # Just save the mark counter
             logging.info("Instance %s for service %s has been marked (count=%s)" %
@@ -398,7 +399,8 @@ class ScaleManager(object):
     @locked
     def decommissioned_instances(self, service_name):
         """ Return a list of all the decommissioned instances. """
-        decommissioned_instances = self.zk_conn.list_children(paths.decommissioned_instances(service_name))
+        decommissioned_instances = self.zk_conn.list_children(\
+            paths.decommissioned_instances(service_name))
         if decommissioned_instances == None:
             decommissioned_instances = []
         return decommissioned_instances
