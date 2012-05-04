@@ -390,6 +390,9 @@ class PancakeApi:
             else:
                 response = Response(status=404, body="%s not found" % service_name)
 
+        else:
+            response = Response(status=403)
+
         return response
 
     @connected
