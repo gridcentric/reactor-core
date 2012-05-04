@@ -43,14 +43,6 @@ class PancakeApiClient(httplib2.Http):
         """
         self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 'DELETE')
 
-    def update_service(self, service_name, config):
-        """
-        Update the managed service with given configuration values. Note that the config
-        can be partial and only those values will be updated.
-        """
-        self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 'POST',
-                                    body={'config':config})
-    
     def get_service_config(self, service_name):
         """
         Return the service's configuration.
@@ -98,11 +90,11 @@ class PancakeApiClient(httplib2.Http):
                                                  service_name, 'GET')
         return body.get('ip_addresses',[])
 
-    def get_service_metrics(self, service_name):
+    def get_service_info(self, service_name):
         """
-        Return a list of all the available service metrics.
+        Return available live service info.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/services/%s/metrics' %
+        resp, body = self._authenticated_request('/gridcentric/pancake/services/%s/info' %
                                                  service_name, 'GET')
         return body
 
