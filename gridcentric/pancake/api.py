@@ -28,7 +28,8 @@ def authorized(request_handler):
                 return Response(status=401, body="unauthorized")
         except:
             # Return an internal error.
-            return Response(status=500, body=traceback.format_exc())
+            logging.error("Unexpected error: %s" % traceback.format_exc())
+            return Response(status=500, body="internal error")
 
     return fn
 
@@ -79,20 +80,31 @@ class PancakeApi:
 
         self.config.add_route('service-ip-list',
             '/gridcentric/pancake/services/{service_name}/ips')
-        self.config.add_route('service-ip-list-implicit', '/gridcentric/pancake/service/ips')
+        self.config.add_route('service-ip-list-implicit',
+            '/gridcentric/pancake/service/ips')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list-implicit')
 
-        self.config.add_route('metric-action', '/gridcentric/pancake/services/{service_name}/metrics')
-        self.config.add_route('metric-action-implicit', '/gridcentric/pancake/service/metrics')
+        self.config.add_route('metric-action',
+            '/gridcentric/pancake/services/{service_name}/metrics')
+        self.config.add_route('metric-action-implicit',
+            '/gridcentric/pancake/service/metrics')
+        self.config.add_view(self.handle_metric_action, route_name='metric-action')
+        self.config.add_view(self.handle_metric_action, route_name='metric-action-implicit')
+
         self.config.add_route('metric-ip-action',
             '/gridcentric/pancake/services/{service_name}/metrics/{service_ip}')
         self.config.add_route('metric-ip-action-implicit',
             '/gridcentric/pancake/service/metrics/{service_ip}')
-        self.config.add_view(self.handle_metric_action, route_name='metric-action')
-        self.config.add_view(self.handle_metric_action, route_name='metric-action-implicit')
         self.config.add_view(self.handle_metric_action, route_name='metric-ip-action')
         self.config.add_view(self.handle_metric_action, route_name='metric-ip-action-implicit')
+
+        self.config.add_route('service-info-action',
+            '/gridcentric/pancake/services/{service_name}/info')
+        self.config.add_route('service-info-action-implicit',
+            '/gridcentric/pancake/service/info')
+        self.config.add_view(self.handle_info_action, route_name='service-info-action')
+        self.config.add_view(self.handle_info_action, route_name='service-info-action-implicit')
 
     def reconnect(self, zk_servers):
         self.client = PancakeClient(zk_servers)
@@ -156,7 +168,7 @@ class PancakeApi:
         # necessarily trust the X-Forwarded-For header that the client passes,
         # but if we've been forwarded from an active manager then we can assume
         # that this header has been placed by a trusted middleman.
-        if forwarded_for and ip_address in self.client.list_managers_active():
+        if forwarded_for and ip_address in self.client.get_managers_active(full=False):
             ip_address = forwarded_for
 
         return ip_address
@@ -276,11 +288,11 @@ class PancakeApi:
             else:
                 config = self.client.get_manager_config(manager)
 
-            if not(config):
-                response = Response(status=404, body="%s not found" % manager)
-            else:
+            if config != None:
                 manager_config = ManagerConfig(config)
                 response = Response(body=json.dumps({'config' : str(manager_config)}))
+            else:
+                response = Response(status=404, body="%s not found" % manager)
 
         elif request.method == "POST":
             manager_config = json.loads(request.body)
@@ -305,13 +317,14 @@ class PancakeApi:
 
         if request.method == 'GET':
             managers_configured = self.client.list_managers_configured()
-            managers_active = self.client.list_managers_active()
-            response = { 'managers_configured':managers_configured,
-                         'managers_active':managers_active }
+            managers_active = self.client.get_managers_active(full=True)
+            response = Response(body=json.dumps(\
+                        { 'managers_configured' : managers_configured,
+                          'managers_active' : managers_active }))
         else:
             response = Response(status=403)
 
-        return Response(body=json.dumps(response))
+        return response
 
     @connected
     @authorized
@@ -330,7 +343,7 @@ class PancakeApi:
 
             config = self.client.get_service_config(service_name)
 
-            if config:
+            if config != None:
                 service_config = ServiceConfig(self.client.get_service_config(service_name))
                 response = Response(body=json.dumps({'config' : str(service_config)}))
             else:
@@ -352,28 +365,48 @@ class PancakeApi:
 
     @connected
     @authorized
-    def handle_metric_action(self, context, request):
+    def handle_info_action(self, context, request):
         """
-        This handles a general metric action:
-        GET - Returns the metric values in the Response body
-        POST - Either manages or updates the service with a new config in the request body
+        This handles a service info request:
+        GET - Returns the current service info
         """
         service_name = request.matchdict['service_name']
         service_ip = request.matchdict.get('service_ip', None)
         response = Response()
 
         if request.method == "GET":
-            logging.info("Retrieving metrics for service %s" % service_name)
+            logging.info("Retrieving info for service %s" % service_name)
             metrics = self.client.get_service_metrics(service_name)
             connections = self.client.get_service_connections(service_name)
+            manager = self.client.get_service_manager(service_name)
 
-            if metrics or connections:
-                body = json.dumps({ 'metrics' : metrics or [], 'connections' : connections or []})
-                response = Response(body=body)
+            if metrics or connections or manager:
+                value = { \
+                    'metrics' : metrics or [],
+                    'connections' : connections or [],
+                    'manager' : manager or None,
+                    }
+                response = Response(body=json.dumps(value))
             else:
                 response = Response(status=404, body="%s not found" % service_name)
 
-        elif request.method == "POST":
+        else:
+            response = Response(status=403)
+
+        return response
+
+    @connected
+    @authorized
+    def handle_metric_action(self, context, request):
+        """
+        This handles a general metric action:
+        POST - Updates the metric info.
+        """
+        service_name = request.matchdict['service_name']
+        service_ip = request.matchdict.get('service_ip', None)
+        response = Response()
+
+        if request.method == "POST":
             metrics = json.loads(request.body)
             logging.info("Updating metrics for service %s" % service_name)
             self.client.set_service_metrics(service_name, metrics, service_ip)

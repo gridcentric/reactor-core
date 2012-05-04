@@ -58,22 +58,19 @@ def usage():
     print ""
     print "    list                  List all the services currently being managed."
     print ""
-    print "    manage <service>      Manage a new serivce with the given name. The"
-    print "                          service configuration is read from stdin."
+    print "    manage <service>      Manage or update a serivce with the given name."
+    print "                          The service configuration is read from stdin."
     print ""
     print "    unmanage <service>    Unmanged the service with the given name."
-    print ""
-    print "    update <service>      Update the managed service's configuration by"
-    print "                          reading the values from stdin."
     print ""
     print "    show <service>        Show the current configuration for the service."
     print ""
     print "    ips <service>         Displays all of the IP addresses associated with"
     print "                          the service."
     print ""
-    print "    get <service>         Display the current service metrics."
+    print "    info <service>        Display the current service info."
     print ""
-    print "    set <service>         Set custom service metrics. The metrics are read"
+    print "    metrics <service>     Set custom service metrics. The metrics are read"
     print "                          as JSON { \"name\" : [weight, value] } from stdin."
     print ""
     print "    managers-configured   List all the configured managers."
@@ -149,20 +146,6 @@ try:
 
     elif command == "manage":
         service_name = get_arg(1)
-        service_conf = ""
-        for line in sys.stdin.readlines():
-            service_conf += line
-
-        api_client = get_api_client()
-        api_client.manage_service(service_name, service_conf)
-
-    elif command == "unmanage":
-        service_name = get_arg(1)
-        api_client = get_api_client()
-        api_client.unmanage_service(service_name)
-
-    elif command == "update":
-        service_name = get_arg(1)
         new_conf = ""
         for line in sys.stdin.readlines():
             new_conf += line
@@ -180,7 +163,12 @@ try:
         # Write out the full contents of the updated configuration.
         config_value = StringIO()
         config.write(config_value)
-        api_client.update_service(service_name, config_value.getvalue())
+        api_client.manage_service(service_name, config_value.getvalue())
+
+    elif command == "unmanage":
+        service_name = get_arg(1)
+        api_client = get_api_client()
+        api_client.unmanage_service(service_name)
 
     elif command == "show":
         service_name = get_arg(1)
@@ -191,16 +179,14 @@ try:
     elif command == "managers-configured":
         api_client = get_api_client()
         managers = api_client.list_managers_configured()
-        if managers:
-            for manager in managers:
-                print manager
+        for manager in managers:
+            print manager
 
     elif command == "managers-active":
         api_client = get_api_client()
         managers = api_client.list_managers_active()
-        if managers:
-            for manager in managers:
-                print manager
+        for (ip, key) in managers.items():
+            print ip, "(%s)" % key
 
     elif command == "update-manager":
         if len(args) > 1:
@@ -241,13 +227,13 @@ try:
         for ip in ip_addresses:
             print ip
 
-    elif command == "get":
+    elif command == "info":
         service_name = get_arg(1)
         api_client = get_api_client()
-        metrics = api_client.get_service_metrics(service_name)
-        print json.dumps(metrics)
+        info = api_client.get_service_info(service_name)
+        print json.dumps(info)
 
-    elif command == "set":
+    elif command == "metrics":
         new_metrics = ""
         for line in sys.stdin.readlines():
             new_metrics += line
