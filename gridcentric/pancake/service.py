@@ -36,7 +36,8 @@ class Service(object):
         try:
             self._update(reconfigure, metrics)
         except:
-            logging.error("Error updating service %s: %s" % (self.name, traceback.format_exc()))
+            logging.error("Error updating service %s: %s" % \
+                (self.name, traceback.format_exc()))
 
     def _determine_target_instances_range(self, metrics, num_instances):
         """
@@ -211,7 +212,12 @@ class Service(object):
         return instances
 
     def addresses(self):
-        return self.extract_addresses_from(self.instances())
+        try:
+            return self.extract_addresses_from(self.instances())
+        except:
+            logging.error("Error querying service %s addresses: %s" % \
+                (self.name, traceback.format_exc()))
+            return []
 
     def extract_addresses_from(self, instances):
         addresses = []
