@@ -50,7 +50,7 @@ def dot(client, extras={}):
 
     # Grab all the nodes in the cluster.
     services = client.list_managed_services()
-    managers = client.list_managers_active()
+    managers = client.get_managers_active()
     service_ips = {}
 
     start_graph(output)
