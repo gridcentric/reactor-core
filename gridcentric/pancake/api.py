@@ -288,11 +288,11 @@ class PancakeApi:
             else:
                 config = self.client.get_manager_config(manager)
 
-            if not(config):
-                response = Response(status=404, body="%s not found" % manager)
-            else:
+            if config != None:
                 manager_config = ManagerConfig(config)
                 response = Response(body=json.dumps({'config' : str(manager_config)}))
+            else:
+                response = Response(status=404, body="%s not found" % manager)
 
         elif request.method == "POST":
             manager_config = json.loads(request.body)
@@ -343,7 +343,7 @@ class PancakeApi:
 
             config = self.client.get_service_config(service_name)
 
-            if config:
+            if config != None:
                 service_config = ServiceConfig(self.client.get_service_config(service_name))
                 response = Response(body=json.dumps({'config' : str(service_config)}))
             else:
