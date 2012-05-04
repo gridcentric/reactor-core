@@ -36,7 +36,7 @@ class APIService(Service):
             def port(self):
                 return 8080
             def instance_id(self):
-                return 0
+                return "0"
             def min_instances(self):
                 return 0
             def max_instances(self):

@@ -157,6 +157,7 @@ class Service(object):
         Drop the instances from the system. Note: a reason should be given for why
         the instances are being dropped.
         """
+
         # Update the load balancer before bringing down the instances.
         self._decommission_addresses(instances)
         if len(instances) > 0:
@@ -168,7 +169,7 @@ class Service(object):
             logging.info("Decommissioning instance %s for server %s (reason: %s)" %
                     (instance['id'], self.name, reason))
             self.scale_manager.decommission_instance(\
-                self.name, instance['id'], self.extract_addresses_from([instance]))
+                self.name, str(instance['id']), self.extract_addresses_from([instance]))
             self.decommissioned_instances += [str(instance['id'])]
 
     def _decommission_addresses(self, instances):
@@ -203,35 +204,19 @@ class Service(object):
 
     def instances(self, filter=True):
         instances = self.cloud_conn.list_instances(self.config.instance_id())
-        confirmed_ips = set(self.scale_manager.confirmed_ips(self.name))
 
         if filter:
-            # Filter out all the decommissioned instances and non-confirmed
-            # instances from the list. The non-confirmed instances will be
-            # cleaned up by one mechanism, while decommisioned servers will be
-            # cleaned up by the other. We don't want to potentially decommision
-            # a server before it has had a chance to register.
-
+            # Filter out the decommissioned instances from the returned list.
             all_instances = instances
             instances = []
             for instance in all_instances:
-                # Check if this is not yet a confirmed instance.
-                expected_ips = set(self.extract_addresses_from([instance]))
-                instance_confirmed_ips = confirmed_ips.intersection(expected_ips)
-                if len(instance_confirmed_ips) == 0:
-                    continue
-
-                # Check if this is a decommissioned instance.
-                if str(instance['id']) in self.decommissioned_instances:
-                    continue
-
-                # Good to go.
-                instances.append(instance)
+                if not(str(instance['id']) in self.decommissioned_instances):
+                    instances.append(instance)
 
         return instances
 
     def addresses(self):
-        return self.extract_addresses_from(self.instances(filter=False))
+        return self.extract_addresses_from(self.instances())
 
     def extract_addresses_from(self, instances):
         addresses = []
@@ -269,14 +254,14 @@ class Service(object):
             if len(instance_confirmed_ips) == 0:
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
-                if self.scale_manager.mark_instance(self.name, instance['id'], 'unregistered'):
+                if self.scale_manager.mark_instance(self.name, str(instance['id']), 'unregistered'):
                     # This instance has been deemed to be dead and should be cleaned up.
                     dead_instances += [instance]
             else:
                 associated_confirmed_ips = associated_confirmed_ips.union(instance_confirmed_ips)
 
-            # Check if any of these expected_ips are not in our active set. If
-            # so that this instance is currently considered inactive.
+            # Check if any of these expected_ips are not in our active set. If so that this instance
+            # is currently considered inactive
             if len(expected_ips.intersection(active_ips)) == 0:
                 inactive_instance_ids += [str(instance['id'])]
 
