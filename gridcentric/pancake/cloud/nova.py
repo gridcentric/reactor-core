@@ -10,7 +10,7 @@ class NovaConnector(cloud_connection.CloudConnection):
     def __init__(self):
         self.credentials = None
         self.deleted_instance_ids = []
- 
+
     def connect(self, credentials):
         """
         Connects to the cloud using the provided credentials
@@ -39,19 +39,19 @@ class NovaConnector(cloud_connection.CloudConnection):
         non_deleted_instances = []
         instance_ids_still_deleting = []
         for instance in instances:
-            if instance['id'] not in self.deleted_instance_ids:
+            if str(instance['id']) not in self.deleted_instance_ids:
                 non_deleted_instances.append(instance)
             else:
-                instance_ids_still_deleting.append(instance['id'])
+                instance_ids_still_deleting.append(str(instance['id']))
 
         self.deleted_instance_ids = instance_ids_still_deleting
-        return sorted(non_deleted_instances, key=lambda x: x.get('created',"")) 
+        return sorted(non_deleted_instances, key=lambda x: x.get('created', ""))
 
     def start_instance(self, service_identifier, instance_info):
         """
         Starts a new instance in the cloud using the service
         """
-        try: 
+        try:
             instance_id = instance_info
             self._novaclient().launch_instance(instance_id)
         except HTTPException, e:

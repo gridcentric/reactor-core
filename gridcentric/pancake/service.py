@@ -169,7 +169,7 @@ class Service(object):
             logging.info("Decommissioning instance %s for server %s (reason: %s)" %
                     (instance['id'], self.name, reason))
             self.scale_manager.decommission_instance(\
-                self.name, instance['id'], self.extract_addresses_from([instance]))
+                self.name, str(instance['id']), self.extract_addresses_from([instance]))
             self.decommissioned_instances += [str(instance['id'])]
 
     def _decommission_addresses(self, instances):
@@ -254,7 +254,7 @@ class Service(object):
             if len(instance_confirmed_ips) == 0:
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
-                if self.scale_manager.mark_instance(self.name, instance['id'], 'unregistered'):
+                if self.scale_manager.mark_instance(self.name, str(instance['id']), 'unregistered'):
                     # This instance has been deemed to be dead and should be cleaned up.
                     dead_instances += [instance]
             else:

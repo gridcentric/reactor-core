@@ -117,7 +117,7 @@ project=admin
         return self._get("service", "port")
 
     def instance_id(self):
-        return int(self._get("nova", "instance_id"))
+        return str(self._get("nova", "instance_id"))
 
     def min_instances(self):
         return int(self._get("scaling", "min_instances") or 1)
