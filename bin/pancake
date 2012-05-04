@@ -186,7 +186,7 @@ try:
         api_client = get_api_client()
         managers = api_client.list_managers_active()
         for (ip, key) in managers.items():
-            print ip, "(%s)" % key
+            print ip, key
 
     elif command == "update-manager":
         if len(args) > 1:
