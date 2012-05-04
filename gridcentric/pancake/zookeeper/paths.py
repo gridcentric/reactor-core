@@ -69,6 +69,10 @@ def services():
 def service(name):
     return "%s/%s" % (SERVICES, name)
 
+# The manager for this service.
+def service_manager(name):
+    return "%s/manager" % (service(name))
+
 # The custom metrics for a particular host.
 def service_ip_metrics(name, ip_address):
     return "%s/ip_metrics/%s" % (service(name), ip_address)

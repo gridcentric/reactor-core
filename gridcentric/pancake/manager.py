@@ -101,6 +101,7 @@ class ScaleManager(object):
         # Check if it is one of our own.
         # Start the service if necessary (now owned).
         if not(managed) and self.service_owned(service):
+            self.zk_conn.write(paths.service_manager(service.name), self.uuid, ephemeral=True)
             self.start_service(service)
 
     @locked

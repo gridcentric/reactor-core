@@ -12,8 +12,15 @@ class PancakeClient(object):
     def list_managed_services(self):
         return self.zk_conn.list_children(paths.services())
 
-    def list_managers_active(self):
-        return self.zk_conn.list_children(paths.manager_ips())
+    def get_managers_active(self, full=False):
+        ips = self.zk_conn.list_children(paths.manager_ips())
+        if full:
+            managers = {}
+            for ip in ips:
+                managers[ip] = self.zk_conn.read(paths.manager_ip(ip))
+            return managers
+        else:
+            return ips
 
     def list_managers_configured(self):
         return self.zk_conn.list_children(paths.manager_configs())
@@ -50,6 +57,9 @@ class PancakeClient(object):
             return json.loads(blob)
         else:
             return blob
+
+    def get_service_manager(self, service_name):
+        return self.zk_conn.read(paths.service_manager(service_name))
 
     def get_service_config(self, service_name):
         return self.zk_conn.read(paths.service(service_name))
