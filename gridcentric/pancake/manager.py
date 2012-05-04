@@ -393,6 +393,8 @@ class ScaleManager(object):
     @locked
     def decommission_instance(self, service_name, instance_id, ip_addresses):
         """ Mark the instance id as being decommissioned. """
+        for ip_address in ip_addresses:
+            self.zk_conn.delete(paths.confirmed_ip(service_name, ip_address))
         self.zk_conn.write(paths.decommissioned_instance(service_name, instance_id),
                            json.dumps(ip_addresses))
 
@@ -418,6 +420,9 @@ class ScaleManager(object):
     @locked
     def drop_decommissioned_instance(self, service_name, instance_id):
         """ Delete the decommissioned instance """
+        ip_addresses = self.decomissioned_instance_ip_addresses(service_name, instance_id)
+        for ip_address in ip_addresses:
+            self.drop_ip(service_name, ip_address)
         self.zk_conn.delete(paths.decommissioned_instance(service_name, instance_id))
 
     def metric_indicates_active(self, metrics):

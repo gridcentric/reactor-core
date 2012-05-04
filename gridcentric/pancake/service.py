@@ -158,11 +158,6 @@ class Service(object):
         the instances are being dropped.
         """
 
-        # Update the load balancer before bringing down the instances.
-        self._decommission_addresses(instances)
-        if len(instances) > 0:
-            self._update_loadbalancer()
-
         # It might be good to wait a little bit for the servers to clear out
         # any requests they are currently serving.
         for instance in instances:
@@ -172,10 +167,10 @@ class Service(object):
                 self.name, str(instance['id']), self.extract_addresses_from([instance]))
             self.decommissioned_instances += [str(instance['id'])]
 
-    def _decommission_addresses(self, instances):
-        # Drops all the addresses associated with these instances.
-        for address in self.extract_addresses_from(instances):
-            self.scale_manager.drop_ip(self.name, address)
+        # update the load balancer. This can be done after decommissioning because these instances
+        # will stay alive as long as there is an active connection
+        if len(instances) > 0:
+            self._update_loadbalancer()
 
     def _delete_instance(self, instance_id):
         # Delete the instance from nova
