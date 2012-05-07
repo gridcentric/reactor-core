@@ -67,7 +67,11 @@ def query_state(client):
         ip_map = {}
         ips = client.list_service_ips(service)
         try:
-            active = client.get_service_info(service)["connections"]
+            # NOTE: We don't support active connections at the moment
+            # because it seems that gource does not play well with the
+            # change command. Will sort this out someday.
+            # active = client.get_service_info(service)["connections"]
+            active = []
         except:
             active = []
 
