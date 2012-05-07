@@ -88,6 +88,7 @@ class ScaleManager(object):
             logging.error("No scale manager available!")
             manager_key = None
         else:
+            keys.sort()
             index = bisect.bisect(keys, service.key())
             key = keys[index % len(self.key_to_manager)]
             manager_key = self.key_to_manager[key]
