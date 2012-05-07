@@ -55,7 +55,7 @@ def calculate_server_range(total, lower, upper):
 
     return r
 
-def calculate_ideal_uniform(service_spec, metrics_averages, num_instances):
+def calculate_ideal_uniform(service_spec, metric_averages, num_instances):
     """
     Returns the ideal number of instances these service spec should have as a tuple that
     defines the range (min_servers, max_servers).
