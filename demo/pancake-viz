@@ -157,7 +157,7 @@ if dryrun:
 else:
     # Open our gource process.
     gource = subprocess.Popen(\
-        ["gource", "-f", "--realtime", 
+        ["gource", "-w", "--realtime", 
          "--log-format", "custom", 
          "--default-user-image", os.path.join(os.path.dirname(__file__), "user.png"), 
          "--highlight-dirs",
