@@ -1,0 +1,190 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import time
+import subprocess
+import getopt
+import threading
+
+from gridcentric.pancake.apiclient import PancakeApiClient
+
+api_server = "http://localhost:8080"
+password = None
+dryrun = False
+interval = 1.0
+
+def usage():
+    print "usage: pancake-demo < -h|--help | [options] command >"
+    print "This tool requires 'gource' to be installed."
+    print ""
+    print "Optional arguments:"
+    print "   -h, --help             Display this help message"
+    print ""
+    print "   -a, --api=             The API url (default is %s)." % api_server
+    print ""
+    print "   -p, --password=        The password used to connect to the API."
+    print ""
+    print "   -d, --dryrun           Just print the log."
+    print ""
+    print "   -i, --interval=        The update interval (in seconds)."
+
+opts, args = getopt.getopt(sys.argv[1:], 
+        "ha:p:di:", ["help","api_server=","password=","dryrun","interval="])
+
+for o, a in opts:
+    if o in ('-h', '--help'):
+        usage()
+        sys.exit(0)
+    elif o in ('-a', '--api'):
+        api_server = a
+    elif o in ('-p', '--password'):
+        password = a
+    elif o in ('-d', '--dryrun'):
+        dryrun = True
+    elif o in ('-i', '--interval'):
+        interval = float(a)
+
+MANAGER_TYPE        = "manager"
+ACTIVE_TYPE         = "active"
+INACTIVE_TYPE       = "inactive"
+DECOMMISSIONED_TYPE = "decommissioned"
+COLOR_MAP = { \
+    MANAGER_TYPE        : "FF0000",
+    ACTIVE_TYPE         : "00FF00",
+    DECOMMISSIONED_TYPE : "008800",
+    INACTIVE_TYPE       : "0000FF",
+    }
+
+def query_state(client):
+    # Just grab the list of managers.
+    managers = client.list_managers_active()
+
+    # Build a map of service states.
+    services = {}
+    service_list = client.list_managed_services()
+    for service in service_list:
+        ip_map = {}
+        ips = client.list_service_ips(service)
+        try:
+            active = client.get_service_info(service)["active"]
+        except:
+            active = []
+
+        for ip in ips:
+            if ip in active:
+                ip_map[ip] = ACTIVE_TYPE
+            else:
+                ip_map[ip] = INACTIVE_TYPE
+        for ip in active:
+            if not(ip in ips):
+                ip_map[ip] = DECOMMISSIONED_TYPE
+
+        # Save the final ip_list.
+        services[service] = ip_map
+
+    return managers, services
+
+# Global cached state.
+managers_cache = []
+services_cache = {}
+
+def make_name(service, name):
+    if service:
+        return "%s/%s" % (service, name)
+    else:
+        return "%s" % name
+
+def add_entry(output, timestamp, service, name, node_type):
+    output.write("%d|pancake|A|%s|%s\n" % \
+        (int(timestamp), make_name(service, name), COLOR_MAP[node_type]))
+    output.flush()
+
+def delete_entry(output, timestamp, service, name, node_type):
+    output.write("%d|pancake|D|%s|%s\n" % \
+        (int(timestamp), make_name(service, name), COLOR_MAP[node_type]))
+    output.flush()
+
+def change_entry(output, timestamp, service, name, node_type):
+    output.write("%d|pancake|M|%s|%s\n" % \
+        (int(timestamp), make_name(service, name), COLOR_MAP[node_type]))
+    output.flush()
+
+def generate_log(output, timestamp, managers, services):
+    global managers_cache
+    global services_cache
+
+    for manager in managers:
+        if not(manager in managers_cache):
+            add_entry(output, timestamp, None, manager, MANAGER_TYPE)
+
+    for manager in managers_cache:
+        if not(manager in managers):
+            delete_entry(output, timestamp)
+
+    for service in services:
+        if not(service in services_cache):
+            curr = services[service]
+            for ip in curr:
+                add_entry(output, timestamp, service, ip, curr[ip])
+
+        else:
+            curr = services[service]
+            cache = services_cache[service]
+
+            for ip in curr:
+                if not(ip in cache):
+                    add_entry(output, timestamp, service, ip, curr[ip])
+                elif cache[ip] != curr[ip]:
+                    change_entry(output, timestamp, service, ip, curr[ip])
+            for ip in cache:
+                if not(ip in curr):
+                    delete_entry(output, timestamp, service, ip, cache[ip])
+
+    for service in services_cache:
+        if not(service in services):
+            cache = services_cache[service]
+            for ip in cache:
+                delete_entry(output, timestamp, service, ip, cache[ip])
+
+    # Save the new state as our cache.
+    managers_cache = managers
+    services_cache = services
+
+if dryrun:
+    # Open stdout.
+    output = sys.stdout
+else:
+    # Open our gource process.
+    gource = subprocess.Popen(\
+        ["gource", "-w", "--realtime", 
+         "--log-format", "custom", 
+         "--default-user-image", os.path.join(os.path.dirname(__file__), "user.png"), 
+         "--highlight-dirs",
+         "--font-size", "14",
+         "--file-idle-time", "0",
+         "-"], 
+         stdin=subprocess.PIPE)
+    output = gource.stdin
+
+# Connect to the API.
+client = PancakeApiClient(api_server, password)
+
+def update():
+    while True:
+        # Query state.
+        managers, services = query_state(client)
+
+        # Generate differential log.
+        generate_log(output, time.time(), managers, services)
+
+        # Wait.
+        time.sleep(interval)
+
+if dryrun:
+    update()
+else:
+    update_thread = threading.Thread(target=update)
+    update_thread.daemon = True
+    update_thread.start()
+    gource.wait()
