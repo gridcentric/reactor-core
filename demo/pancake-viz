@@ -67,7 +67,7 @@ def query_state(client):
         ip_map = {}
         ips = client.list_service_ips(service)
         try:
-            active = client.get_service_info(service)["active"]
+            active = client.get_service_info(service)["connections"]
         except:
             active = []
 
@@ -88,6 +88,7 @@ def query_state(client):
 # Global cached state.
 managers_cache = []
 services_cache = {}
+timestamp = 0
 
 def make_name(service, name):
     if service:
@@ -95,38 +96,41 @@ def make_name(service, name):
     else:
         return "%s" % name
 
-def add_entry(output, timestamp, service, name, node_type):
+def add_entry(output, service, name, node_type):
+    global timestamp
     output.write("%d|pancake|A|%s|%s\n" % \
-        (int(timestamp), make_name(service, name), COLOR_MAP[node_type]))
+        (timestamp, make_name(service, name), COLOR_MAP[node_type]))
     output.flush()
+    timestamp += 1
 
-def delete_entry(output, timestamp, service, name, node_type):
+def delete_entry(output, service, name, node_type):
+    global timestamp
     output.write("%d|pancake|D|%s|%s\n" % \
-        (int(timestamp), make_name(service, name), COLOR_MAP[node_type]))
+        (timestamp, make_name(service, name), COLOR_MAP[node_type]))
     output.flush()
+    timestamp += 1
 
-def change_entry(output, timestamp, service, name, node_type):
-    output.write("%d|pancake|M|%s|%s\n" % \
-        (int(timestamp), make_name(service, name), COLOR_MAP[node_type]))
-    output.flush()
+def change_entry(output, service, name, node_type):
+    delete_entry(output, service, name, node_type)
+    add_entry(output, service, name, node_type)
 
-def generate_log(output, timestamp, managers, services):
+def generate_log(output, managers, services):
     global managers_cache
     global services_cache
 
     for manager in managers:
         if not(manager in managers_cache):
-            add_entry(output, timestamp, None, manager, MANAGER_TYPE)
+            add_entry(output, None, manager, MANAGER_TYPE)
 
     for manager in managers_cache:
         if not(manager in managers):
-            delete_entry(output, timestamp)
+            delete_entry(output)
 
     for service in services:
         if not(service in services_cache):
             curr = services[service]
             for ip in curr:
-                add_entry(output, timestamp, service, ip, curr[ip])
+                add_entry(output, service, ip, curr[ip])
 
         else:
             curr = services[service]
@@ -134,18 +138,18 @@ def generate_log(output, timestamp, managers, services):
 
             for ip in curr:
                 if not(ip in cache):
-                    add_entry(output, timestamp, service, ip, curr[ip])
+                    add_entry(output, service, ip, curr[ip])
                 elif cache[ip] != curr[ip]:
-                    change_entry(output, timestamp, service, ip, curr[ip])
+                    change_entry(output, service, ip, curr[ip])
             for ip in cache:
                 if not(ip in curr):
-                    delete_entry(output, timestamp, service, ip, cache[ip])
+                    delete_entry(output, service, ip, cache[ip])
 
     for service in services_cache:
         if not(service in services):
             cache = services_cache[service]
             for ip in cache:
-                delete_entry(output, timestamp, service, ip, cache[ip])
+                delete_entry(output, service, ip, cache[ip])
 
     # Save the new state as our cache.
     managers_cache = managers
@@ -159,6 +163,7 @@ else:
     gource = subprocess.Popen(\
         ["gource", "-w", "--realtime", 
          "--log-format", "custom", 
+         "--hide", "date",
          "--default-user-image", os.path.join(os.path.dirname(__file__), "user.png"), 
          "--highlight-dirs",
          "--font-size", "14",
@@ -176,7 +181,7 @@ def update():
         managers, services = query_state(client)
 
         # Generate differential log.
-        generate_log(output, time.time(), managers, services)
+        generate_log(output, managers, services)
 
         # Wait.
         time.sleep(interval)
