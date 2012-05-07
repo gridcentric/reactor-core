@@ -58,6 +58,9 @@ pyramid (http://docs.pylonsproject.org/projects/pyramid/en/1.2-branch/index.html
 python-netifaces
     A python module for querying network interfaces.
 
+gource (very optional)
+    To run the demo tool in demo/ you'll need the gource visualization tool.
+
 ==Project Contents==
 
 bin

@@ -17,6 +17,7 @@ from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
 import gridcentric.pancake.zookeeper.paths as paths
 import gridcentric.pancake.ips as ips
+from gridcentric.pancake.metrics.calculator import calculate_weighted_averages
 
 def locked(fn):
     def wrapped_fn(self, *args, **kwargs):
@@ -83,11 +84,12 @@ class ScaleManager(object):
 
         # Find the closest key.
         keys = self.key_to_manager.keys()
-        index = bisect.bisect(keys, service.key())
         if len(keys) == 0:
             logging.error("No scale manager available!")
             manager_key = None
         else:
+            keys.sort()
+            index = bisect.bisect(keys, service.key())
             key = keys[index % len(self.key_to_manager)]
             manager_key = self.key_to_manager[key]
 
@@ -590,6 +592,7 @@ class ScaleManager(object):
                 metrics, service_active_connections = self.load_metrics(service, service_metrics)
                 connections = list(set(active_connections.get(service.name, []) + \
                                        service_active_connections))
+                metrics = calculate_weighted_averages(metrics)
 
                 # Update the live metrics and connections.
                 logging.debug("Metrics for service %s: %s" % (service.name, metrics))

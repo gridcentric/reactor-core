@@ -24,7 +24,6 @@ def calculate_weighted_averages(metrics):
             totals[key] = 0.0
     return totals
 
-
 def calculate_num_servers_uniform(total, bound):
     """ 
     Determines the number of servers required to spread the 'total' load uniformly
@@ -56,7 +55,7 @@ def calculate_server_range(total, lower, upper):
 
     return r
 
-def calculate_ideal_uniform(service_spec, metrics, num_instances):
+def calculate_ideal_uniform(service_spec, metrics_averages, num_instances):
     """
     Returns the ideal number of instances these service spec should have as a tuple that
     defines the range (min_servers, max_servers).
@@ -66,12 +65,11 @@ def calculate_ideal_uniform(service_spec, metrics, num_instances):
                 (The hits per second should be between 20 - 50 for each instance
                  and the response rate should be between 100ms - 800ms.)
     
-    metrics: A list of gather metrics that will be evaluated against the service_spec
+    metrics_averages: A set of metrics computed with calculate_weighted_averages
     
     num_instances: The number of instances that produced these metrics
     """
 
-    metric_averages = calculate_weighted_averages(metrics)
     logging.debug("Metric totals: %s" % (metric_averages))
     ideal_instances = (-1, -1)
     for criteria in service_spec:
