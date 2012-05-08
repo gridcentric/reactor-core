@@ -111,6 +111,11 @@ def change_entry(output, service, name, node_type):
         (0, make_name(service, name), COLOR_MAP[node_type]))
     output.flush()
 
+def active_entry(output, service, name, node_type):
+    output.write("%d|%s|M|%s|%s\n" % \
+        (0, service, make_name(service, name), COLOR_MAP[node_type]))
+    output.flush()
+
 def generate_log(output, managers, services):
     global managers_cache
     global services_cache
@@ -121,7 +126,7 @@ def generate_log(output, managers, services):
 
     for manager in managers_cache:
         if not(manager in managers):
-            delete_entry(output)
+            delete_entry(output, None, manager, MANAGER_TYPE)
 
     for service in services:
         if not(service in services_cache):
@@ -147,7 +152,7 @@ def generate_log(output, managers, services):
             # so instead we just do a modification to all the active nodes.
             for ip in curr:
                 if curr[ip] != INACTIVE_TYPE:
-                    change_entry(output, service, ip, curr[ip])
+                    active_entry(output, service, ip, curr[ip])
 
     for service in services_cache:
         if not(service in services):
@@ -168,7 +173,7 @@ else:
         ["gource", "-w", "--realtime", 
          "--log-format", "custom", 
          "--hide", "date",
-         "--default-user-image", os.path.join(os.path.dirname(__file__), "user.png"), 
+         "--user-image-dir", os.path.dirname(__file__),
          "--highlight-dirs",
          "--font-size", "14",
          "--file-idle-time", "0",
