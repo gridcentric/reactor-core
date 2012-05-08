@@ -52,8 +52,8 @@ DECOMMISSIONED_TYPE = "decommissioned"
 COLOR_MAP = { \
     MANAGER_TYPE        : "FF0000",
     ACTIVE_TYPE         : "00FF00",
+    INACTIVE_TYPE       : "00FF00",
     DECOMMISSIONED_TYPE : "008800",
-    INACTIVE_TYPE       : "0000FF",
     }
 
 def query_state(client):
@@ -67,11 +67,7 @@ def query_state(client):
         ip_map = {}
         ips = client.list_service_ips(service)
         try:
-            # NOTE: We don't support active connections at the moment
-            # because it seems that gource does not play well with the
-            # change command. Will sort this out someday.
-            # active = client.get_service_info(service)["connections"]
-            active = []
+            active = client.get_service_info(service)["connections"]
         except:
             active = []
 
@@ -80,6 +76,7 @@ def query_state(client):
                 ip_map[ip] = ACTIVE_TYPE
             else:
                 ip_map[ip] = INACTIVE_TYPE
+
         for ip in active:
             if not(ip in ips):
                 ip_map[ip] = DECOMMISSIONED_TYPE
@@ -92,7 +89,6 @@ def query_state(client):
 # Global cached state.
 managers_cache = []
 services_cache = {}
-timestamp = 0
 
 def make_name(service, name):
     if service:
@@ -101,22 +97,19 @@ def make_name(service, name):
         return "%s" % name
 
 def add_entry(output, service, name, node_type):
-    global timestamp
     output.write("%d|pancake|A|%s|%s\n" % \
-        (timestamp, make_name(service, name), COLOR_MAP[node_type]))
+        (0, make_name(service, name), COLOR_MAP[node_type]))
     output.flush()
-    timestamp += 1
 
 def delete_entry(output, service, name, node_type):
-    global timestamp
     output.write("%d|pancake|D|%s|%s\n" % \
-        (timestamp, make_name(service, name), COLOR_MAP[node_type]))
+        (0, make_name(service, name), COLOR_MAP[node_type]))
     output.flush()
-    timestamp += 1
 
 def change_entry(output, service, name, node_type):
-    delete_entry(output, service, name, node_type)
-    add_entry(output, service, name, node_type)
+    output.write("%d|pancake|M|%s|%s\n" % \
+        (0, make_name(service, name), COLOR_MAP[node_type]))
+    output.flush()
 
 def generate_log(output, managers, services):
     global managers_cache
@@ -145,9 +138,16 @@ def generate_log(output, managers, services):
                     add_entry(output, service, ip, curr[ip])
                 elif cache[ip] != curr[ip]:
                     change_entry(output, service, ip, curr[ip])
+
             for ip in cache:
                 if not(ip in curr):
                     delete_entry(output, service, ip, cache[ip])
+
+            # We can't really change nodes in the middle of the visualization,
+            # so instead we just do a modification to all the active nodes.
+            for ip in curr:
+                if curr[ip] != INACTIVE_TYPE:
+                    change_entry(output, service, ip, curr[ip])
 
     for service in services_cache:
         if not(service in services):
