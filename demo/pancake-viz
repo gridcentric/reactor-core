@@ -64,6 +64,9 @@ def query_state(client):
     services = {}
     service_list = client.list_managed_services()
     for service in service_list:
+        if service == "api":
+            continue
+
         ip_map = {}
         ips = client.list_service_ips(service)
         try:
