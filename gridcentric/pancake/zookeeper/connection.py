@@ -3,11 +3,11 @@ import zookeeper
 import threading
 
 ZOO_OPEN_ACL_UNSAFE = {"perms":0x1f, "scheme":"world", "id":"anyone"}
-ZOO_EVENT_NONE=0
-ZOO_EVENT_NODE_CREATED=1
-ZOO_EVENT_NODE_DELETED=2
-ZOO_EVENT_NODE_DATA_CHANGED=3
-ZOO_EVENT_NODE_CHILDREN_CHANGED=4
+ZOO_EVENT_NONE = 0
+ZOO_EVENT_NODE_CREATED = 1
+ZOO_EVENT_NODE_DELETED = 2
+ZOO_EVENT_NODE_DATA_CHANGED = 3
+ZOO_EVENT_NODE_CHILDREN_CHANGED = 4
 
 class ZookeeperConnection(object):
 
@@ -31,9 +31,19 @@ class ZookeeperConnection(object):
             # We default to port 2181 if no port is provided as part of the host specification.
             server_list = ",".join(map(lambda x: (x.find(":") > 0 and x) or "%s:2181" % x, servers))
             self.handle = zookeeper.init(server_list, connect_watcher, 10000)
+            self.connected = True
             self.cond.wait(10.0)
         finally:
             self.cond.release()
+
+    def disconnect(self):
+        """
+        Disconnect from zookeeper. This will flush any outstanding requests before returning
+        """
+        if self.connected:
+            zookeeper.close(self.handle)
+            self.connected = False
+            self.handle = None
 
     def silence(self):
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_ERROR)
