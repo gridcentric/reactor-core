@@ -6,6 +6,7 @@ import time
 import subprocess
 import getopt
 import threading
+import math
 
 from gridcentric.pancake.apiclient import PancakeApiClient
 
@@ -13,6 +14,7 @@ api_server = "http://localhost:8080"
 password = None
 dryrun = False
 interval = 1.0
+factor = 10.0
 
 def usage():
     print "usage: pancake-demo < -h|--help | [options] command >"
@@ -27,10 +29,12 @@ def usage():
     print ""
     print "   -d, --dryrun           Just print the log."
     print ""
+    print "   -f, --factor=          The active scaling factor."
+    print ""
     print "   -i, --interval=        The update interval (in seconds)."
 
 opts, args = getopt.getopt(sys.argv[1:], 
-        "ha:p:di:", ["help","api_server=","password=","dryrun","interval="])
+        "ha:p:df:i:", ["help","api_server=","password=","dryrun","factor=","interval="])
 
 for o, a in opts:
     if o in ('-h', '--help'):
@@ -42,6 +46,8 @@ for o, a in opts:
         password = a
     elif o in ('-d', '--dryrun'):
         dryrun = True
+    elif o in ('-f', '--factor'):
+        factor = float(a)
     elif o in ('-i', '--interval'):
         interval = float(a)
 
@@ -70,9 +76,18 @@ def query_state(client):
         ip_map = {}
         ips = client.list_service_ips(service)
         try:
-            active = client.get_service_info(service)["connections"]
+            info = client.get_service_info(service)
+            active = info["connections"]
+            metrics = info["metrics"]
         except:
             active = []
+            metrics = { }
+
+        try:
+            # Compute the number of "users" this service will have.
+            users = int(math.ceil(float(metrics["active"]) * len(ips) / factor))
+        except:
+            users = 1
 
         for ip in ips:
             if ip in active:
@@ -87,7 +102,7 @@ def query_state(client):
         # Save the final ip_list.
         services[service] = ip_map
 
-    return managers, services
+    return managers, services, users
 
 # Global cached state.
 managers_cache = []
@@ -114,14 +129,15 @@ def change_entry(output, service, name, node_type):
         (0, make_name(service, name), COLOR_MAP[node_type]))
     output.flush()
 
-def active_entry(output, service, name, node_type):
-    output.write("%d|%s|M|%s|%s\n" % \
-        (0, service, make_name(service, name), COLOR_MAP[node_type]))
+def active_entry(output, service, name, node_type, user_number):
+    output.write("%d|%s%d|M|%s|%s\n" % \
+        (0, service, user_number, make_name(service, name), COLOR_MAP[node_type]))
     output.flush()
 
-def generate_log(output, managers, services):
+def generate_log(output, managers, services, users):
     global managers_cache
     global services_cache
+    active = []
 
     for manager in managers:
         if not(manager in managers_cache):
@@ -155,7 +171,14 @@ def generate_log(output, managers, services):
             # so instead we just do a modification to all the active nodes.
             for ip in curr:
                 if curr[ip] != INACTIVE_TYPE:
-                    active_entry(output, service, ip, curr[ip])
+                    active.append(ip)
+
+    if len(active) > 0 and users > 0:
+        current = 0
+        for user in range(0, users):
+            current += 1
+            ip = active[current % len(active)]
+            active_entry(output, service, ip, curr[ip], user)
 
     for service in services_cache:
         if not(service in services):
@@ -175,8 +198,11 @@ else:
     gource = subprocess.Popen(\
         ["gource", "-w", "--realtime", 
          "--log-format", "custom", 
+         "--user-scale", "0.5",
+         "--max-user-speed", "20",
          "--hide", "date",
          "--user-image-dir", os.path.dirname(__file__),
+         "--default-user-image", os.path.join(os.path.dirname(__file__), "user.png"),
          "--highlight-dirs",
          "--font-size", "14",
          "--file-idle-time", "0",
@@ -190,10 +216,10 @@ client = PancakeApiClient(api_server, password)
 def update():
     while True:
         # Query state.
-        managers, services = query_state(client)
+        managers, services, users = query_state(client)
 
         # Generate differential log.
-        generate_log(output, managers, services)
+        generate_log(output, managers, services, users)
 
         # Wait.
         time.sleep(interval)
