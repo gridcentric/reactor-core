@@ -7,6 +7,7 @@ import subprocess
 import getopt
 import threading
 import math
+import random
 
 from gridcentric.pancake.apiclient import PancakeApiClient
 
@@ -85,7 +86,7 @@ def query_state(client):
 
         try:
             # Compute the number of "users" this service will have.
-            users = int(math.ceil(float(metrics["active"]) * len(ips) / factor))
+            users = int(math.ceil(float(metrics["active"]) * len(active) / factor))
         except:
             users = 1
 
@@ -174,11 +175,11 @@ def generate_log(output, managers, services, users):
                     active.append(ip)
 
     if len(active) > 0 and users > 0:
-        current = 0
+        current = random.randint(0, len(active) - 1)
         for user in range(0, users):
-            current += 1
             ip = active[current % len(active)]
             active_entry(output, service, ip, curr[ip], user)
+            current += 1
 
     for service in services_cache:
         if not(service in services):
