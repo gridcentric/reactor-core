@@ -241,7 +241,7 @@ class Service(object):
                 self.scale_manager.drop_marked_instance(self.name, instance)
         for instance in self.scale_manager.decommissioned_instances(self.name):
             if not(instance in instances):
-                self.scale_manager.drop_decommissioned_instance(self.name, instance):
+                self.scale_manager.drop_decommissioned_instance(self.name, instance)
 
         # Check if any expected machines have failed to come up and confirm
         # their IP address.
