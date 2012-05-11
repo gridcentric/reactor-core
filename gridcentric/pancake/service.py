@@ -166,7 +166,8 @@ class Service(object):
                     (instance['id'], self.name, reason))
             self.scale_manager.decommission_instance(\
                 self.name, str(instance['id']), self.extract_addresses_from([instance]))
-            self.decommissioned_instances += [str(instance['id'])]
+            if not(str(instance['id']) in self.decommissioned_instances):
+                self.decommissioned_instances += [str(instance['id'])]
 
         # update the load balancer. This can be done after decommissioning because these instances
         # will stay alive as long as there is an active connection
@@ -232,11 +233,20 @@ class Service(object):
 
     def health_check(self, active_ips):
         instances = self.instances(filter=False)
+        instance_ids = map(lambda x: str(x['id']), instances)
+
+        # Mark sure that the manager does not contain any scale data, which
+        # may result in some false metric data and clogging up Zookeeper.
+        for instance in self.scale_manager.marked_instances(self.name):
+            if not(instance in instance_ids):
+                self.scale_manager.drop_marked_instance(self.name, instance)
+        for instance in self.scale_manager.decommissioned_instances(self.name):
+            if not(instance in instance_ids):
+                self.scale_manager.drop_decommissioned_instance(self.name, instance)
 
         # Check if any expected machines have failed to come up and confirm
         # their IP address.
         confirmed_ips = set(self.scale_manager.confirmed_ips(self.name))
-
         dead_instances = []
 
         # There are the confirmed ips that are actually associated with an
@@ -261,8 +271,8 @@ class Service(object):
             else:
                 associated_confirmed_ips = associated_confirmed_ips.union(instance_confirmed_ips)
 
-            # Check if any of these expected_ips are not in our active set. If so that this instance
-            # is currently considered inactive
+            # Check if any of these expected_ips are not in our active set. If
+            # so that this instance is currently considered inactive
             if len(expected_ips.intersection(active_ips)) == 0:
                 inactive_instance_ids += [str(instance['id'])]
 
@@ -270,7 +280,6 @@ class Service(object):
         # still valid. In other words, we have a running instance with the
         # confirmed IP.
         orphaned_confirmed_ips = confirmed_ips.difference(associated_confirmed_ips)
-
         if len(orphaned_confirmed_ips) > 0:
             # There are orphaned ip addresses. We need to drop them and then
             # update the load balancer because there is no actual instance

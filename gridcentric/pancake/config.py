@@ -76,7 +76,6 @@ hosts_path=/etc/hosts.pancake
         if label in ['unregistered', 'decommissioned']:
             return int(self._get("manager", "%s_wait" % (label)))
 
-
     def keys(self):
         return int(self._get("manager", "keys"))
 
