@@ -430,6 +430,8 @@ class ScaleManager(object):
         ip_addresses = self.zk_conn.read(paths.decommissioned_instance(service_name, instance_id))
         if ip_addresses != None:
             ip_addresses = json.loads(ip_addresses)
+            if type(ip_addresses) == str:
+                ip_addresses = [ip_addresses]
         else:
             ip_addresses = []
         return ip_addresses

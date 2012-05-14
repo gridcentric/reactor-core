@@ -107,6 +107,7 @@ class PancakeApi:
         self.config.add_view(self.handle_info_action, route_name='service-info-action-implicit')
 
     def reconnect(self, zk_servers):
+        self.disconnect()
         self.zk_servers = zk_servers
         self.client = PancakeClient(zk_servers)
 
