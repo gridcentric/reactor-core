@@ -102,9 +102,10 @@ class ScaleManager(object):
 
         # Check if it is one of our own.
         # Start the service if necessary (now owned).
-        if not(managed) and self.service_owned(service):
+        if self.service_owned(service):
             self.zk_conn.write(paths.service_manager(service.name), self.uuid, ephemeral=True)
-            self.start_service(service)
+            if not(managed):
+                self.start_service(service)
 
     @locked
     def manager_remove(self, service):
@@ -304,6 +305,7 @@ class ScaleManager(object):
 
     @locked
     def drop_ip(self, service_name, ip_address):
+        self.zk_conn.delete(paths.service_ip_metrics(service_name, ip_address))
         self.zk_conn.delete(paths.confirmed_ip(service_name, ip_address))
         self.zk_conn.delete(paths.ip_address(ip_address))
 
@@ -365,6 +367,14 @@ class ScaleManager(object):
         self.domain = domain
 
     @locked
+    def marked_instances(self, service_name):
+        """ Return a list of all the marked instances. """
+        marked_instances = self.zk_conn.list_children(paths.marked_instances(service_name))
+        if marked_instances == None:
+            marked_instances = []
+        return marked_instances
+
+    @locked
     def mark_instance(self, service_name, instance_id, label):
         # Increment the mark counter.
         remove_instance = False
@@ -383,7 +393,7 @@ class ScaleManager(object):
             self.zk_conn.delete(paths.marked_instance(service_name, instance_id))
 
         else:
-            # Just save the mark counter
+            # Just save the mark counter.
             logging.info("Instance %s for service %s has been marked (count=%s)" %
                          (instance_id, service_name, mark_counter))
             mark_counters[label] = mark_counter
@@ -391,6 +401,11 @@ class ScaleManager(object):
                                json.dumps(mark_counters))
 
         return remove_instance
+
+    @locked
+    def drop_marked_instance(self, service_name, instance_id):
+        """ Delete the marked instance data. """
+        self.zk_conn.delete(paths.marked_instance(service_name, instance_id))
 
     @locked
     def decommission_instance(self, service_name, instance_id, ip_addresses):
@@ -415,6 +430,8 @@ class ScaleManager(object):
         ip_addresses = self.zk_conn.read(paths.decommissioned_instance(service_name, instance_id))
         if ip_addresses != None:
             ip_addresses = json.loads(ip_addresses)
+            if type(ip_addresses) == str:
+                ip_addresses = [ip_addresses]
         else:
             ip_addresses = []
         return ip_addresses

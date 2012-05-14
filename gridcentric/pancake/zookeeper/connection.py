@@ -3,11 +3,32 @@ import zookeeper
 import threading
 
 ZOO_OPEN_ACL_UNSAFE = {"perms":0x1f, "scheme":"world", "id":"anyone"}
-ZOO_EVENT_NONE = 0
-ZOO_EVENT_NODE_CREATED = 1
-ZOO_EVENT_NODE_DELETED = 2
-ZOO_EVENT_NODE_DATA_CHANGED = 3
-ZOO_EVENT_NODE_CHILDREN_CHANGED = 4
+ZOO_EVENT_NONE=0
+ZOO_EVENT_NODE_CREATED=1
+ZOO_EVENT_NODE_DELETED=2
+ZOO_EVENT_NODE_DATA_CHANGED=3
+ZOO_EVENT_NODE_CHILDREN_CHANGED=4
+
+def connect(servers):
+    cond = threading.Condition()
+
+    # We attempt a connection for 10 seconds here. This is a long timeout
+    # for servicing a web request, so hopefully it is successful.
+    def connect_watcher(zh, event, state, path):
+        cond.acquire()
+        cond.notify()
+        cond.release()
+
+    cond.acquire()
+    try:
+        # We default to port 2181 if no port is provided as part of the host specification.
+        server_list = ",".join(map(lambda x: (x.find(":") > 0 and x) or "%s:2181" % x, servers))
+        handle = zookeeper.init(server_list, connect_watcher, 10000)
+        cond.wait(10.0)
+    finally:
+        cond.release()
+
+    return handle
 
 class ZookeeperConnection(object):
 
@@ -17,33 +38,16 @@ class ZookeeperConnection(object):
         self.cond = threading.Condition()
         self.acl = acl
         self.watches = {}
+        self.handle = connect(servers)
 
-        # We attempt a connection for 10 seconds here. This is a long timeout
-        # for servicing a web request, so hopefully it is successful.
-
-        def connect_watcher(zh, event, state, path):
-            self.cond.acquire()
-            self.cond.notify()
-            self.cond.release()
-
+    def __del__(self):
         self.cond.acquire()
         try:
-            # We default to port 2181 if no port is provided as part of the host specification.
-            server_list = ",".join(map(lambda x: (x.find(":") > 0 and x) or "%s:2181" % x, servers))
-            self.handle = zookeeper.init(server_list, connect_watcher, 10000)
-            self.connected = True
-            self.cond.wait(10.0)
+            zookeeper.close(self.handle)
+        except:
+            logging.warn("Error closing Zookeeper handle.")
         finally:
             self.cond.release()
-
-    def disconnect(self):
-        """
-        Disconnect from zookeeper. This will flush any outstanding requests before returning
-        """
-        if self.connected:
-            zookeeper.close(self.handle)
-            self.connected = False
-            self.handle = None
 
     def silence(self):
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_ERROR)

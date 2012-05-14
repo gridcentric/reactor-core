@@ -23,7 +23,9 @@ class NginxLogReader(object):
         self.connected = False
 
     def connect(self):
+        # Re-open the file by name.
         self.logfile = open(self.log_filename, 'r')
+
         # Seek to the end of the file, always.
         self.logfile.seek(0, 2)
         self.connected = True
@@ -138,6 +140,9 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         self.template = Template(filename=template_file)
         self.log_reader = NginxLogWatcher("/var/log/nginx/access.log")
         self.log_reader.start()
+
+    def __del__(self):
+        self.log_reader.stop()
 
     def _determine_nginx_pid(self):
         if os.path.exists("/var/run/nginx.pid"):
