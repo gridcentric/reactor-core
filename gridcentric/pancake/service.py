@@ -32,7 +32,7 @@ class Service(object):
         # Do nothing.
         logging.info("Unmanaging service %s" % (self.name))
 
-    def update(self, reconfigure=True, metrics=[]):
+    def update(self, reconfigure=True, metrics={}):
         try:
             self._update(reconfigure, metrics)
         except:
