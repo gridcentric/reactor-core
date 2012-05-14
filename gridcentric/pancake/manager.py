@@ -647,14 +647,10 @@ class ScaleManager(object):
                     if self.running:
                         time.sleep(self.config.health_check())
 
-                # Disconnect from zookeeper.
-                if self.zk_conn != None:
-                    self.zk_conn.disconnect()
             except ZookeeperException:
                 # Sleep on ZooKeeper exception and retry.
                 error = traceback.format_exc()
                 logging.debug("Received ZooKeeper exception, retrying: %s" % (error))
-                self.zk_conn.disconnect()
                 if self.running:
                     time.sleep(self.config.health_check())
 
