@@ -14,6 +14,7 @@ from gridcentric.pancake.config import ServiceConfig
 from gridcentric.pancake.api import PancakeApi
 from gridcentric.pancake.api import connected
 from gridcentric.pancake.api import authorized
+from gridcentric.pancake.api import authorized_admin_only
 from gridcentric.pancake.graph import dot
 
 import gridcentric.pancake.ips as ips
@@ -123,7 +124,7 @@ class PancakeAutoApi(PancakeApi):
         self.check_service(zk_servers)
 
     @connected
-    @authorized
+    @authorized_admin_only
     def set_api_servers(self, context, request):
         """
         Updates the list of API servers in the system.
@@ -136,7 +137,7 @@ class PancakeAutoApi(PancakeApi):
         return Response()
 
     @connected
-    @authorized
+    @authorized_admin_only
     def build_graph(self, context, request):
         output = dot(self.client, extras={ "api" : self.zk_servers })
         return Response(body=output, content_type="image/png")
