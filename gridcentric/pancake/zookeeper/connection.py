@@ -35,6 +35,15 @@ class ZookeeperConnection(object):
         finally:
             self.cond.release()
 
+    def __del__(self):
+        self.cond.acquire()
+        try:
+            zookeeper.close(self.handle)
+        except:
+            logging.warn("Error closing Zookeeper handle.")
+        finally:
+            self.cond.release()
+
     def silence(self):
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_ERROR)
 
