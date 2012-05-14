@@ -238,10 +238,15 @@ class ScaleManager(object):
             self.key_to_services.get(service.key(), []) + [service.name]
 
         if service_path:
+            def update_config(value):
+                service.update_config(value)
+                if self.service_owned(service):
+                    service.update()
+
             # Watch the config for this service.
             logging.info("Watching service %s." % (service.name))
             self.zk_conn.watch_contents(service_path,
-                                        service.update_config,
+                                        update_config,
                                         str(service_config))
 
         # Select the manager for this service.

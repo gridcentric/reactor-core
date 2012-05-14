@@ -150,9 +150,6 @@ class Service(object):
              old_port != new_port:
             self._update_loadbalancer()
 
-        # Run a full update.
-        self.update()
-
     def decommission_instances(self, instances, reason):
         """
         Drop the instances from the system. Note: a reason should be given for why
