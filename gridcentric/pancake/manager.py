@@ -654,7 +654,8 @@ class ScaleManager(object):
 
             except ZookeeperException:
                 # Sleep on ZooKeeper exception and retry.
-                logging.debug("Received ZooKeeper exception, retrying.")
+                error = traceback.format_exc()
+                logging.debug("Received ZooKeeper exception, retrying: %s" % (error))
                 if self.running:
                     time.sleep(self.config.health_check())
 

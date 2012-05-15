@@ -11,13 +11,37 @@ from gridcentric.pancake.config import ManagerConfig
 from gridcentric.pancake.zooclient import PancakeClient
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
 
+def get_auth_key(request):
+    return request.headers.get('X-Auth-Key', None)
+
+def authorized_admin_only(request_handler):
+    """
+    A Decorator that does a simple check to see if the request is
+    authorized before executing the actual handler. NOTE: This will
+    only authorize for admins only. 
+    """
+    def fn(self, context, request):
+        auth_key = get_auth_key(request)
+        try:
+            if self._authorize_admin_access(context, request, auth_key):
+                return request_handler(self, context, request)
+            else:
+                # Return an unauthorized response.
+                return Response(status=401, body="unauthorized")
+        except:
+            # Return an internal error.
+            logging.error("Unexpected error: %s" % traceback.format_exc())
+            return Response(status=500, body="internal error")
+
+    return fn
+
 def authorized(request_handler):
     """
     A Decorator that does a simple check to see if the request is
     authorized before executing the actual handler. 
     """
     def fn(self, context, request):
-        auth_key = request.headers.get('X-Auth-Key', None)
+        auth_key = get_auth_key(request)
         try:
             if self._authorize_ip_access(context, request) or \
                 self._authorize_service_access(context, request, auth_key) or \
@@ -230,7 +254,7 @@ class PancakeApi:
         return response
 
     @connected
-    @authorized
+    @authorized_admin_only
     def set_auth_key(self, context, request):
         """
         Updates the auth key in the system.
@@ -248,7 +272,7 @@ class PancakeApi:
         return response
 
     @connected
-    @authorized
+    @authorized_admin_only
     def handle_domain_action(self, context, request):
         """
         Updates the domain in the system.
@@ -271,7 +295,7 @@ class PancakeApi:
         return response
 
     @connected
-    @authorized
+    @authorized_admin_only
     def handle_manager_action(self, context, request):
         """
         This Handles a general manager action:
@@ -311,7 +335,7 @@ class PancakeApi:
         return response
 
     @connected
-    @authorized
+    @authorized_admin_only
     def list_managers(self, context, request):
         """
         Returns a list of managers currently running.
@@ -350,19 +374,22 @@ class PancakeApi:
                 response = Response(body=json.dumps({'config' : str(service_config)}))
             else:
                 response = Response(status=404, body="%s not found" % service_name)
-
-        elif request.method == "DELETE":
-            logging.info("Unmanaging service %s" % (service_name))
-            self.client.unmanage_service(service_name)
-
-        elif request.method == "POST":
-            service_config = json.loads(request.body)
-            logging.info("Managing or updating service %s" % service_name)
-            self.client.update_service(service_name, service_config.get('config', ""))
-
         else:
-            response = Response(status=403)
- 
+            auth_key = get_auth_key(request)
+            if self._authorize_admin_access(context, request, auth_key):
+                # Deleting or updating a service config can only be done by an admin user.
+                if request.method == "DELETE":
+                    logging.info("Unmanaging service %s" % (service_name))
+                    self.client.unmanage_service(service_name)
+
+                elif request.method == "POST":
+                    service_config = json.loads(request.body)
+                    logging.info("Managing or updating service %s" % service_name)
+                    self.client.update_service(service_name, service_config.get('config', ""))
+            else:
+                # Return an unauthorized response.
+                return Response(status=401, body="unauthorized")
+
         return response
 
     @connected
@@ -432,7 +459,7 @@ class PancakeApi:
         return response
 
     @connected
-    @authorized
+    @authorized_admin_only
     def list_services(self, context, request):
         """
         Returns a list of services currently being managed.
