@@ -1,6 +1,7 @@
 import logging
 import zookeeper
 import threading
+import traceback
 
 ZOO_OPEN_ACL_UNSAFE = {"perms":0x1f, "scheme":"world", "id":"anyone"}
 ZOO_EVENT_NONE=0
@@ -8,6 +9,9 @@ ZOO_EVENT_NODE_CREATED=1
 ZOO_EVENT_NODE_DELETED=2
 ZOO_EVENT_NODE_DATA_CHANGED=3
 ZOO_EVENT_NODE_CHILDREN_CHANGED=4
+
+# Save the exception for use in other modules.
+ZookeeperException = zookeeper.ZooKeeperException
 
 def connect(servers):
     cond = threading.Condition()
@@ -30,14 +34,28 @@ def connect(servers):
 
     return handle
 
+def wrap_exceptions(fn):
+    # We wrap all system exceptions in the Zookeeper-specifc exception.
+    # Some versions of Zookeeper have python bindings that don't correctly
+    # throw errors for timed-out exceptions.
+    # See: https://issues.apache.org/jira/browse/ZOOKEEPER-1318
+    def wrapped_fn(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except ZookeeperException:
+            raise
+        except:
+            raise ZookeeperException("Unknown error: %s" % str(traceback.format_exc()))
+    return wrapped_fn
+
 class ZookeeperConnection(object):
 
+    @wrap_exceptions
     def __init__(self, servers, acl=ZOO_OPEN_ACL_UNSAFE):
-        self.silence()
-
         self.cond = threading.Condition()
         self.acl = acl
         self.watches = {}
+        self.silence()
         self.handle = connect(servers)
 
     def __del__(self):
@@ -49,9 +67,11 @@ class ZookeeperConnection(object):
         finally:
             self.cond.release()
 
+    @wrap_exceptions
     def silence(self):
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_ERROR)
 
+    @wrap_exceptions
     def write(self, path, contents, ephemeral=False):
         """ 
         Writes the contents to the path in zookeeper. It will create the path in
@@ -84,6 +104,7 @@ class ZookeeperConnection(object):
             flags = (ephemeral and zookeeper.EPHEMERAL or 0)
             zookeeper.create(self.handle, path, contents, [self.acl], flags)
 
+    @wrap_exceptions
     def read(self, path, default=None):
         """
         Returns the conents in the path. default is returned if the path does not exists.
@@ -94,6 +115,7 @@ class ZookeeperConnection(object):
 
         return value
 
+    @wrap_exceptions
     def list_children(self, path):
         """
         Returns a list of all the children nodes in the path. None is returned if the path does
@@ -103,6 +125,7 @@ class ZookeeperConnection(object):
             value = zookeeper.get_children(self.handle, path)
             return value
 
+    @wrap_exceptions
     def delete(self, path):
         """
         Delete the path.
@@ -113,6 +136,7 @@ class ZookeeperConnection(object):
                 self.delete(path + "/" + child)
             zookeeper.delete(self.handle, path)
 
+    @wrap_exceptions
     def watch_contents(self, path, fn, default_value=""):
         if not zookeeper.exists(self.handle, path):
             self.write(path, default_value)
@@ -125,6 +149,7 @@ class ZookeeperConnection(object):
             self.cond.release()
         return value
 
+    @wrap_exceptions
     def watch_children(self, path, fn, default_value=""):
         if not zookeeper.exists(self.handle, path):
             self.write(path, default_value)
@@ -137,6 +162,7 @@ class ZookeeperConnection(object):
             self.cond.release()
         return rval
 
+    @wrap_exceptions
     def zookeeper_watch(self, zh, event, state, path):
         self.cond.acquire()
         try:
@@ -152,6 +178,3 @@ class ZookeeperConnection(object):
                         fn(result)
         finally:
             self.cond.release()
-
-# Save the exception for use in other modules.
-ZookeeperException = zookeeper.ZooKeeperException
