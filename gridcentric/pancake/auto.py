@@ -20,6 +20,7 @@ from gridcentric.pancake.graph import dot
 import gridcentric.pancake.ips as ips
 import gridcentric.pancake.zookeeper.config as zk_config
 import gridcentric.pancake.zookeeper.paths as paths
+import gridcentric.pancake.zooclient as zooclient
 
 class APIService(Service):
     def __init__(self, scale_manager):
@@ -31,7 +32,6 @@ class APIService(Service):
                 pass
             def reload(self, config_str):
                 pass
-
             def url(self):
                 return "http://api.%s/" % self.scale_manager.domain
             def port(self):
@@ -51,14 +51,8 @@ class APIService(Service):
             def auth_info(self):
                 return None
             def static_ips(self):
-                ip_addresses = []
-                for server in self.scale_manager.zk_servers:
-                    try:
-                        ip_addresses += [socket.gethostbyname(server)]
-                    except:
-                        logging.warn("Failed to determine the ip address for %s." % server)
-                return ip_addresses
-
+                client = zooclient.PancakeClient(self.scale_manager.zk_servers)
+                return client.get_managers_active()
             def __str__(self):
                 return ""
 
