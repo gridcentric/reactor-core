@@ -66,7 +66,7 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
         # (Note: we might need permission to do this!!).
         dnsmasq_pid = self._determine_dnsmasq_pid()
         if dnsmasq_pid:
-            os.system("/etc/init.d/dnsmasq restart")
+            os.kill(dnsmasq_pid, signal.SIGHUP)
 
     def metrics(self):
         return {}
