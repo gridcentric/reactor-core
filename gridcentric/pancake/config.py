@@ -93,6 +93,7 @@ port=
 auth_hash=
 auth_salt=
 auth_algo=sha1
+cloud=nova-vms
 
 [scaling]
 min_instances=1
@@ -100,8 +101,19 @@ max_instances=1
 metrics=
 source=
 
-[nova]
+[cloud:nova-vms]
 instance_id=0
+authurl=http://localhost:8774/v1.1/
+user=admin
+apikey=admin
+project=admin
+
+[cloud:nova]
+image_id=0
+flavor_id=1
+key_name=
+instance_name=
+security_groups=
 authurl=http://localhost:8774/v1.1/
 user=admin
 apikey=admin
@@ -130,16 +142,20 @@ project=admin
     def source(self):
         return self._get("scaling", "source")
 
+    def cloud_type(self):
+        return self._get("service", "cloud")
+
+    def cloud_config(self):
+        cloud_name = self.cloud_type()
+        cloud_config = {}
+        if self.config.has_section("cloud:%s" % cloud_name):
+            cloud_config.update(self.config.items("cloud:%s" % cloud_name))
+        return cloud_config
+
     def get_service_auth(self):
         return (self._get("service", "auth_hash"),
                 self._get("service", "auth_salt"),
                 self._get("service", "auth_algo"))
-
-    def auth_info(self):
-        return (self._get("nova", "authurl"),
-                self._get("nova", "user"),
-                self._get("nova", "apikey"),
-                self._get("nova", "project"))
 
     def static_ips(self):
         """ Returns a list of static ips associated with the configured static instances. """

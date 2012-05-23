@@ -11,14 +11,13 @@ import gridcentric.pancake.metrics.calculator as metric_calculator
 
 class Service(object):
 
-    def __init__(self, name, service_config, scale_manager, cloud='nova'):
+    def __init__(self, name, service_config, scale_manager):
         self.name = name
         self.config = service_config
         self.scale_manager = scale_manager
-        self.cloud = cloud
+        self.cloud = self.config.cloud_type()
         self.decommissioned_instances = []
-        self.cloud_conn = cloud_connection.get_connection(self.cloud)
-        self.cloud_conn.connect(self.config.auth_info())
+        self.cloud_conn = cloud_connection.get_connection(self.cloud, self.config.cloud_config())
 
     def key(self):
         return hashlib.md5(self.config.url()).hexdigest()
@@ -124,12 +123,12 @@ class Service(object):
         old_url = self.config.url()
         old_static_addresses = self.config.static_ips()
         old_port = self.config.port()
-        old_auth_info = self.config.auth_info()
+        old_cloud_config = self.config.cloud_config()
         new_config = ServiceConfig(config_str)
         new_url = new_config.url()
         new_static_addresses = new_config.static_ips()
         new_port = new_config.port()
-        new_auth_info = new_config.auth_info()
+        new_cloud_config = new_config.cloud_config()
 
         # Remove all old instances from loadbalancer.
         if old_url != new_url:
@@ -139,9 +138,9 @@ class Service(object):
         self.config.reload(config_str)
 
         # Reconnect to the cloud controller (if necessary).
-        if old_auth_info != new_auth_info:
-            self.cloud_conn = cloud_connection.get_connection(self.cloud)
-            self.cloud_conn.connect(self.config.auth_info())
+        if old_cloud_config != new_cloud_config:
+            self.cloud_conn = cloud_connection.get_connection(self.config.cloud_type(),
+                                                              self.config.cloud_config())
 
         # Do a referesh (to capture the new service).
         if old_url != new_url:
@@ -188,7 +187,7 @@ class Service(object):
         logging.info(("Launching new instance for server %s " +
                      "(reason: %s)") %
                      (self.name, reason))
-        self.cloud_conn.start_instance(self.name, self.config.instance_id())
+        self.cloud_conn.start_instance()
 
     def service_url(self):
         return self.config.url()
@@ -197,7 +196,7 @@ class Service(object):
         return self.config.static_ips()
 
     def instances(self, filter=True):
-        instances = self.cloud_conn.list_instances(self.config.instance_id())
+        instances = self.cloud_conn.list_instances()
 
         if filter:
             # Filter out the decommissioned instances from the returned list.
