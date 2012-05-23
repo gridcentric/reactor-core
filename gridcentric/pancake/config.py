@@ -93,7 +93,7 @@ port=
 auth_hash=
 auth_salt=
 auth_algo=sha1
-cloud=nova-vms
+cloud=none
 
 [scaling]
 min_instances=1

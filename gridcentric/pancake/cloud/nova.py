@@ -118,7 +118,7 @@ class NovaConnector(BaseNovaConnector):
                                   self.config['image_id'],
                                   self.config['flavor_id'],
                                   security_groups=self.config['security_groups'].split(","),
-                                  key_name=self.config['key_name'])
+                                  key_name=self.config['key_name'] or None)
 
     def _delete_instance(self, instance_id):
         self._novaclient()._delete("/servers/%s" % (instance_id))
