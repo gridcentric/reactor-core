@@ -9,7 +9,7 @@ class PancakeApiClient(httplib2.Http):
 
     def __init__(self, api_url, api_key=None):
         super(PancakeApiClient, self).__init__()
-        
+
         self.api_url = api_url
         self.api_key = api_key
         # Needed to httplib2
@@ -20,20 +20,20 @@ class PancakeApiClient(httplib2.Http):
         Return the API version.
         """
         resp, body = self._authenticated_request('/', 'GET')
-        return body.get('version',None)
-    
+        return body.get('version', None)
+
     def list_managed_services(self):
         """
         Returns a list of all the services currently being managed by the pancake.
         """
         resp, body = self._authenticated_request('/gridcentric/pancake/services', 'GET')
-        return body.get('services',[])
-    
+        return body.get('services', [])
+
     def manage_service(self, service_name, config):
         """
         Manage the service using the given configuration.
         """
-        self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 
+        self._authenticated_request('/gridcentric/pancake/services/%s' % (service_name),
                                     'POST',
                                     body={'config':config})
 
@@ -41,7 +41,7 @@ class PancakeApiClient(httplib2.Http):
         """
         Unmanage the service.
         """
-        self._authenticated_request('/gridcentric/pancake/services/%s' %(service_name), 'DELETE')
+        self._authenticated_request('/gridcentric/pancake/services/%s' % (service_name), 'DELETE')
 
     def get_service_config(self, service_name):
         """
@@ -49,21 +49,21 @@ class PancakeApiClient(httplib2.Http):
         """
         resp, body = self._authenticated_request('/gridcentric/pancake/services/%s' %
                                                  service_name, 'GET')
-        return body.get('config',"")
+        return body.get('config', "")
 
     def list_managers_configured(self):
         """
         Returns a list of all configured managers.
         """
         resp, body = self._authenticated_request('/gridcentric/pancake/managers', 'GET')
-        return body.get('managers_configured',[])
+        return body.get('managers_configured', [])
 
     def list_managers_active(self):
         """
         Returns a list of all active managers.
         """
         resp, body = self._authenticated_request('/gridcentric/pancake/managers', 'GET')
-        return body.get('managers_active',[])
+        return body.get('managers_active', [])
 
     def update_manager(self, manager, config):
         """
@@ -79,7 +79,7 @@ class PancakeApiClient(httplib2.Http):
         """
         resp, body = self._authenticated_request('/gridcentric/pancake/managers/%s' %
                                                  (manager or 'default'), 'GET')
-        return body.get('config',"")
+        return body.get('config', "")
 
     def list_service_ips(self, service_name):
         """
@@ -88,7 +88,7 @@ class PancakeApiClient(httplib2.Http):
         """
         resp, body = self._authenticated_request('/gridcentric/pancake/services/%s/ips' %
                                                  service_name, 'GET')
-        return body.get('ip_addresses',[])
+        return body.get('ip_addresses', [])
 
     def get_service_info(self, service_name):
         """
@@ -141,7 +141,7 @@ class PancakeApiClient(httplib2.Http):
         resp, body = super(PancakeApiClient, self).request(*args, **kwargs)
 
         if resp.status != 200:
-            raise Exception("Error: %s" % str(body))
+            raise Exception("Error (status=%s): %s" % (resp.status, str(body)))
         if body:
             try:
                 body = json.loads(body)
