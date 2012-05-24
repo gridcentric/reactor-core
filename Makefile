@@ -47,3 +47,5 @@ image-% : all image/contrib/python-zookeeper-3.4.3.tgz
 	@mkdir -p image/local
 	@cp pancake-$(VERSION).tgz image/local
 	@sudo make -C image build-$*
+	@sudo chmod -R a+r image
+	@GID=`id -g`; sudo find image -uid 0 -exec chown $$UID:$$GID {} \;
