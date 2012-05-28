@@ -4,11 +4,11 @@ import threading
 import traceback
 
 ZOO_OPEN_ACL_UNSAFE = {"perms":0x1f, "scheme":"world", "id":"anyone"}
-ZOO_EVENT_NONE=0
-ZOO_EVENT_NODE_CREATED=1
-ZOO_EVENT_NODE_DELETED=2
-ZOO_EVENT_NODE_DATA_CHANGED=3
-ZOO_EVENT_NODE_CHILDREN_CHANGED=4
+ZOO_EVENT_NONE = 0
+ZOO_EVENT_NODE_CREATED = 1
+ZOO_EVENT_NODE_DELETED = 2
+ZOO_EVENT_NODE_DATA_CHANGED = 3
+ZOO_EVENT_NODE_CHILDREN_CHANGED = 4
 
 # Save the exception for use in other modules.
 ZookeeperException = zookeeper.ZooKeeperException
