@@ -53,14 +53,18 @@ class APIService(Service):
             def static_ips(self):
                 client = zooclient.PancakeClient(self.scale_manager.zk_servers)
                 return client.get_managers_active()
+            def cloud_type(self):
+                return "none"
+            def cloud_config(self):
+                return {}
+
             def __str__(self):
                 return ""
 
         # Create an API service that will automatically reload.
         super(APIService, self).__init__("api",
                                          APIServiceConfig(scale_manager),
-                                         scale_manager,
-                                         cloud='none')
+                                         scale_manager)
 
 class AutoScaleManager(ScaleManager):
     def __init__(self, zk_servers):
