@@ -4,11 +4,11 @@ import threading
 import traceback
 
 ZOO_OPEN_ACL_UNSAFE = {"perms":0x1f, "scheme":"world", "id":"anyone"}
-ZOO_EVENT_NONE=0
-ZOO_EVENT_NODE_CREATED=1
-ZOO_EVENT_NODE_DELETED=2
-ZOO_EVENT_NODE_DATA_CHANGED=3
-ZOO_EVENT_NODE_CHILDREN_CHANGED=4
+ZOO_EVENT_NONE = 0
+ZOO_EVENT_NODE_CREATED = 1
+ZOO_EVENT_NODE_DELETED = 2
+ZOO_EVENT_NODE_DATA_CHANGED = 3
+ZOO_EVENT_NODE_CHILDREN_CHANGED = 4
 
 # Save the exception for use in other modules.
 ZookeeperException = zookeeper.ZooKeeperException
@@ -151,10 +151,10 @@ class ZookeeperConnection(object):
 
     @wrap_exceptions
     def watch_children(self, path, fn, default_value=""):
+        self.cond.acquire()
         if not zookeeper.exists(self.handle, path):
             self.write(path, default_value)
 
-        self.cond.acquire()
         try:
             self.watches[path] = [fn] + self.watches.get(path, [])
             rval = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
