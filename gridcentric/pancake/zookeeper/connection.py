@@ -19,8 +19,11 @@ def connect(servers):
     # We attempt a connection for 10 seconds here. This is a long timeout
     # for servicing a web request, so hopefully it is successful.
     def connect_watcher(zh, event, state, path):
+        logging.debug("CONNECT WATCHER: event=%s, state=%s, path=%s" % (event, state, path))
         cond.acquire()
-        cond.notify()
+        if state == zookeeper.CONNECTED_STATE:
+            # We only want to notify the main thread once the state has been connected.
+            cond.notify()
         cond.release()
 
     cond.acquire()

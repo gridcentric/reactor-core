@@ -153,5 +153,5 @@ class NovaVmsConnector(BaseNovaConnector):
         self._novaclient().launch_instance(self.config['instance_id'])
 
     def _delete_instance(self, instance_id):
-        self.novaclient().delete_instance(instance_id)
+        self._novaclient().delete_instance(instance_id)
         pass
