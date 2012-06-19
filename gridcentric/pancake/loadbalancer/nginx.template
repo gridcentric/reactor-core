@@ -1,6 +1,6 @@
 upstream ${id} {
-    % for address in addresses:
-    server ${address}:${port};
+    % for ip in ips:
+    server ${ip}:${port};
     % endfor
 }
  

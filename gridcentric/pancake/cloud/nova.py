@@ -127,7 +127,6 @@ class NovaConnector(BaseNovaConnector):
 class NovaVmsConnector(BaseNovaConnector):
     """ Connects to a nova cloud that has the Gridcentric VMS extension enabled. """
 
-
     def __init__(self, cloud_config):
         super(NovaVmsConnector, self).__init__(cloud_config)
 
@@ -154,4 +153,3 @@ class NovaVmsConnector(BaseNovaConnector):
 
     def _delete_instance(self, instance_id):
         self._novaclient().delete_instance(instance_id)
-        pass

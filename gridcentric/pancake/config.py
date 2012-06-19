@@ -94,6 +94,7 @@ auth_hash=
 auth_salt=
 auth_algo=sha1
 cloud=none
+public=false
 
 [scaling]
 min_instances=1
@@ -126,6 +127,9 @@ project=admin
 
     def port(self):
         return self._get("service", "port")
+
+    def public(self):
+        return self._get("service", "public") == "true"
 
     def instance_id(self):
         return str(self._get("nova", "instance_id"))

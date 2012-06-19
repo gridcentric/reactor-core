@@ -36,6 +36,8 @@ class APIService(Service):
                 return "http://api.%s/" % self.scale_manager.domain
             def port(self):
                 return 8080
+            def public(self):
+                return False
             def instance_id(self):
                 return "0"
             def min_instances(self):
@@ -57,7 +59,6 @@ class APIService(Service):
                 return "none"
             def cloud_config(self):
                 return {}
-
             def __str__(self):
                 return ""
 

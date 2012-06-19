@@ -24,7 +24,7 @@ def get_connection(name, config, scale_manager):
 class LoadBalancerConnection(object):
     def clear(self):
         pass
-    def change(self, url, port, names, addresses):
+    def change(self, url, port, names, manager_ips, public_ips, private_ips):
         pass
     def save(self):
         pass
@@ -36,9 +36,9 @@ class LoadBalancers(list):
     def clear(self):
         for lb in self:
             lb.clear()
-    def change(self, url, port, names, addresses):
+    def change(self, url, port, names, manager_ips, public_ips, private_ips):
         for lb in self:
-            lb.change(url, port, names, addresses)
+            lb.change(url, port, names, manager_ips, public_ips, private_ips)
     def save(self):
         for lb in self:
             lb.save()

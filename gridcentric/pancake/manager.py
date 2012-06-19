@@ -43,6 +43,7 @@ class ScaleManager(object):
         self.key_to_services = {} # Service map (key() -> [services...])
 
         self.managers = {}        # Forward map of manager keys.
+        self.manager_ips = []     # List of all manager IPs.
         self.manager_keys = []    # Our local manager keys.
         self.key_to_manager = {}  # Reverse map for manager keys.
         self.key_to_owned = {}    # Service to ownership.
@@ -218,6 +219,12 @@ class ScaleManager(object):
         for service in self.services.values():
             self.manager_select(service)
 
+        # Reload all managers IPs.
+        self.manager_ips = self.zk_conn.list_children(paths.manager_ips())
+
+        # Kick the loadbalancer.
+        self.reload_loadbalancer()
+
     @locked
     def create_service(self, service_name):
         logging.info("New service %s found to be managed." % service_name)
@@ -335,7 +342,8 @@ class ScaleManager(object):
 
     @locked
     def update_loadbalancer(self, service, remove=False):
-        all_addresses = []
+        public_ips = []
+        private_ips = []
         names = []
 
         # Go through all services with the same keys.
@@ -344,27 +352,41 @@ class ScaleManager(object):
                 continue
             else:
                 names.append(service_name)
-                all_addresses += self.active_ips(service_name)
+                if self.services[service_name].config.public():
+                    public_ips += self.active_ips(service_name)
+                else:
+                    private_ips += self.active_ips(service_name)
 
         logging.info("Updating loadbalancer for url %s with addresses %s" %
                      (service.service_url(), all_addresses))
         self.load_balancer.change(service.service_url(),
                                   service.config.port(),
-                                  names, all_addresses)
+                                  names,
+                                  self.manager_ips,
+                                  public_ips,
+                                  private_ips)
         self.load_balancer.save()
 
     @locked
     def reload_loadbalancer(self):
         self.load_balancer.clear()
         for service in self.services.values():
-            addresses = []
+            public_ips = []
+            private_ips = []
             names = []
             for service_name in self.key_to_services.get(service.key(), []):
                 names.append(service_name)
-                addresses += self.active_ips(service_name)
+                if self.services[service_name].config.public():
+                    public_ips += self.active_ips(service_name)
+                else:
+                    private_ips += self.active_ips(service_name)
+
             self.load_balancer.change(service.service_url(),
                                       service.config.port(),
-                                      names, addresses)
+                                      names,
+                                      self.manager_ips,
+                                      public_ips,
+                                      private_ips)
         self.load_balancer.save()
 
     @locked
@@ -642,9 +664,6 @@ class ScaleManager(object):
             try:
                 # Reconnect to the Zookeeper servers.
                 self.serve()
-
-                # Kick the loadbalancer on startup.
-                self.reload_loadbalancer()
 
                 # Perform continuous health checks.
                 while self.running:

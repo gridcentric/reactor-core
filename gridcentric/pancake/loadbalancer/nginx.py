@@ -164,14 +164,19 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # Remove all tracked connections.
         self.tracked = {}
 
-    def change(self, url, port, names, addresses):
+    def change(self, url, port, names, manager_ips, public_ips, private_ips):
         # We use a simple hash of the URL as the file name for the
         # configuration file.
         uniq_id = hashlib.md5(url).hexdigest()
         conf_filename = "%s.conf" % uniq_id
 
+        # There are no privacy concerns here, so we can mix all public and
+        # private addresses. (But it doesn't make sense to include the IPs
+        # for the managers).
+        ips = public_ips + private_ips
+
         # Check for a removal.
-        if len(addresses) == 0:
+        if len(ips) == 0:
             # Remove the connection from our tracking list.
             if uniq_id in self.tracked:
                 del self.tracked[uniq_id]
@@ -208,7 +213,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
             netloc = "example.com"
 
         # Add the connection to our tracking list.
-        self.tracked[uniq_id] = (int(port), addresses)
+        self.tracked[uniq_id] = (int(port), ips)
 
         # Render our given template.
         conf = self.template.render(id=uniq_id,
@@ -218,7 +223,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
                                     scheme=scheme,
                                     port=port,
                                     listen=listen,
-                                    addresses=addresses)
+                                    ips=ips)
 
         # Write out the config file.
         config_file = file(os.path.join(self.site_path, conf_filename), 'wb')
@@ -244,12 +249,11 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # Grab the active connections.
         active_connections = connection_count()
 
-        for (port, addresses) in self.tracked.values():
-            for address in addresses:
-                active = active_connections.get((address, port), 0)
-                if not(address in records):
-                    records[address] = {}
-                records[address]["active"] = (1, active) if active > 0 else (0, 0)
-
+        for (port, ips) in self.tracked.values():
+            for ip in ips:
+                active = active_connections.get((ip, port), 0)
+                if not(ip in records):
+                    records[ip] = {}
+                records[ip]["active"] = (1, active) if active > 0 else (0, 0)
 
         return records

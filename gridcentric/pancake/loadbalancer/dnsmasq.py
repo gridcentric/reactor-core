@@ -28,18 +28,22 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
     def clear(self):
         self.mappings = {}
 
-    def change(self, url, port, names, addresses):
+    def change(self, url, port, names, manager_ips, public_ips, private_ips):
+        # If there are no public ips, we use the manager.
+        if len(public_ips) == 0:
+            public_ips = manager_ips
+
         # Save the mappings.
         for name in names:
-            self.mappings[name] = addresses
+            self.mappings[name] = public_ips
 
     def save(self):
         # Compute the address mapping.
-        addressmap = {}
-        for (name, addresses) in self.mappings.items():
-            for address in addresses:
-                if not(address in addressmap):
-                    addressmap[address] = []
+        ipmap = {}
+        for (name, ips) in self.mappings.items():
+            for ip in ips:
+                if not(ip in addressmap):
+                    ipmap[address] = []
                 addressmap[address].append(name)
 
         # Write out our hosts file.
