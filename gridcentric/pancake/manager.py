@@ -394,6 +394,10 @@ class ScaleManager(object):
         self.domain = domain
 
     @locked
+    def start_params(self):
+        return {}
+
+    @locked
     def marked_instances(self, service_name):
         """ Return a list of all the marked instances. """
         marked_instances = self.zk_conn.list_children(paths.marked_instances(service_name))

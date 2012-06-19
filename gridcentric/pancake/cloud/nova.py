@@ -37,18 +37,18 @@ class BaseNovaConnector(cloud_connection.CloudConnection):
         self.deleted_instance_ids = instance_ids_still_deleting
         return sorted(non_deleted_instances, key=lambda x: x.get('created', ""))
 
-    def _start_instance(self):
+    def _start_instance(self, params={}):
         """
         Starts a new instance. This is implemented by the subclasses.
         """
         pass
 
-    def start_instance(self):
+    def start_instance(self, params={}):
         """
         Starts a new instance in the cloud using the service
         """
         try:
-            self._start_instance()
+            self._start_instance(params=params)
         except HTTPException, e:
             traceback.print_exc()
             logging.error("Error starting instance: %s" % str(e))
@@ -113,7 +113,9 @@ class NovaConnector(BaseNovaConnector):
 
         return raw_instances
 
-    def _start_instance(self):
+    def _start_instance(self, params={}):
+        # TODO: We can pass in the pancake parameter here via 
+        # CloudStart or some other standard support mechanism.
         self._novaclient().create(self.config['instance_name'],
                                   self.config['image_id'],
                                   self.config['flavor_id'],
@@ -148,8 +150,8 @@ class NovaVmsConnector(BaseNovaConnector):
         """
         return self._novaclient().list_launched_instances(self.config['instance_id'])
 
-    def _start_instance(self):
-        self._novaclient().launch_instance(self.config['instance_id'])
+    def _start_instance(self, params={}):
+        self._novaclient().launch_instance(self.config['instance_id'], params=params)
 
     def _delete_instance(self, instance_id):
         self._novaclient().delete_instance(instance_id)
