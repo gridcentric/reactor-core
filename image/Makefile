@@ -32,7 +32,7 @@ ARGS := --rootsize=$(ROOTSIZE) \
 	--swapsize=$(SWAPSIZE) \
 	--hostname=$(HOSTNAME) \
 	--execscript=deploy \
-	--firstboot=$$PWD/boot \
+	--firstboot=$(CURDIR)/boot \
 	--domain=$(DOMAINNAME) \
 	--user=$(USERNAME) \
 	--name=$(USERNAME) \
@@ -49,15 +49,15 @@ clean:
 
 chroot-%: Makefile
 	@rm -rf $@
-	PATH=$$PWD:$$PATH ubuntu-vm-builder kvm $* \
-	    --destdir=$$PWD/dist-$* \
+	PATH=$(CURDIR):$$PATH ubuntu-vm-builder kvm $* \
+	    --destdir=$(CURDIR)/dist-$* \
 	    --only-chroot \
 	    --chroot-dir=$@ \
 	    $(ARGS)
 
 build-%: chroot-$(FLAVOR)
 	@rm -rf dist-$*
-	PATH=$$PWD:$$PATH ubuntu-vm-builder $* $(FLAVOR) \
-	    --destdir=$$PWD/dist-$* \
+	PATH=$(CURDIR):$$PATH ubuntu-vm-builder $* $(FLAVOR) \
+	    --destdir=$(CURDIR)/dist-$* \
 	    --existing-chroot=chroot-$(FLAVOR) \
 	    $(ARGS)
