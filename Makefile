@@ -3,12 +3,12 @@
 VERSION := $(shell date "+%Y%m%d.%H%M%S")
 
 all : clean
-	@VERSION=$(VERSION) python setup.py install --prefix=$$PWD/dist/usr --root=/
-	@cd $$PWD/dist/usr/lib/python* && [ -d site-packages ] && \
+	@VERSION=$(VERSION) python setup.py install --prefix=$(CURDIR)/dist/usr --root=/
+	@cd $(CURDIR)/dist/usr/lib/python* && [ -d site-packages ] && \
 	    mv site-packages dist-packages || true
-	@mkdir -p $$PWD/dist/etc/init
-	@install -m0644 etc/pancake.conf $$PWD/dist/etc/init
-	@cd $$PWD/dist && tar cvzf ../pancake-$(VERSION).tgz .
+	@mkdir -p $(CURDIR)/dist/etc/init
+	@install -m0644 etc/pancake.conf $(CURDIR)/dist/etc/init
+	@cd $(CURDIR)/dist && tar cvzf ../pancake-$(VERSION).tgz .
 .PHONY: all
 
 clean :
@@ -24,7 +24,7 @@ contrib/zookeeper-3.4.3 : contrib/zookeeper-3.4.3.tar.gz
 # Build the appropriate python bindings.
 image/contrib/python-zookeeper-3.4.3.tgz : contrib/zookeeper-3.4.3
 	@mkdir -p dist-zookeeper
-	@cd contrib/zookeeper-3.4.3/src/c; make install DESTDIR=$$PWD/../../../../dist-zookeeper/
+	@cd contrib/zookeeper-3.4.3/src/c; make install DESTDIR=$(CURDIR)/../../../../dist-zookeeper/
 	@cd contrib/zookeeper-3.4.3/src/contrib/zkpython; ant tar-bin
 	@cd dist-zookeeper; tar zxf ../contrib/zookeeper-3.4.3/build/contrib/zkpython/dist/*.tar.gz
 	@cd dist-zookeeper; mv usr/local/* usr; rm -rf usr/local
