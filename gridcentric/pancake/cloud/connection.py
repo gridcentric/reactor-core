@@ -29,7 +29,7 @@ class CloudConnection(object):
         """
         return []
 
-    def start_instance(self):
+    def start_instance(self, params={}):
         """
         Starts a new instance in the cloud using the service
         """

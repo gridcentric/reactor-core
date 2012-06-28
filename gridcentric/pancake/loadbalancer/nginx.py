@@ -132,10 +132,12 @@ class NginxLogWatcher(threading.Thread):
 
 class NginxLoadBalancerConnection(LoadBalancerConnection):
 
-    def __init__(self, config_path, site_path):
+    def __init__(self, config_path, site_path, sticky_sessions=False, keepalive=0):
         self.tracked = {}
         self.config_path = config_path
         self.site_path = site_path
+        self.sticky_sessions = sticky_sessions
+        self.keepalive = keepalive
         template_file = os.path.join(os.path.dirname(__file__), 'nginx.template')
         self.template = Template(filename=template_file)
         self.log_reader = NginxLogWatcher("/var/log/nginx/access.log")
@@ -215,6 +217,13 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # Add the connection to our tracking list.
         self.tracked[uniq_id] = (int(port), ips)
 
+        # Compute any extra bits for the template.
+        extra = ''
+        if self.sticky_sessions:
+            extra += '    sticky;\n'
+        if self.keepalive:
+            extra += '    keepalive %d single;\n' % self.keepalive
+
         # Render our given template.
         conf = self.template.render(id=uniq_id,
                                     url=url,
@@ -223,7 +232,8 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
                                     scheme=scheme,
                                     port=port,
                                     listen=listen,
-                                    ips=ips)
+                                    ips=ips,
+                                    extra=extra)
 
         # Write out the config file.
         config_file = file(os.path.join(self.site_path, conf_filename), 'wb')

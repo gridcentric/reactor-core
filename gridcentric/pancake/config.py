@@ -50,6 +50,8 @@ loadbalancer=nginx,dnsmasq
 [loadbalancer:nginx]
 config_path=/etc/nginx/conf.d
 site_path=/etc/nginx/sites-enabled
+sticky_sessions=false
+keepalive=0
 
 [loadbalancer:dnsmasq]
 config_path=/etc/dnsmasq.d

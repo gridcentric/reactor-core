@@ -42,13 +42,13 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
         ipmap = {}
         for (name, ips) in self.mappings.items():
             for ip in ips:
-                if not(ip in addressmap):
-                    ipmap[address] = []
-                addressmap[address].append(name)
+                if not(ip in ipmap):
+                    ipmap[ip] = []
+                ipmap[ip].append(name)
 
         # Write out our hosts file.
         hosts = file(self.hosts_path, 'wb')
-        for (address, names) in addressmap.items():
+        for (address, names) in ipmap.items():
             hosts.write("%s %s\n" % (address, " ".join(set(names))))
         hosts.close()
 

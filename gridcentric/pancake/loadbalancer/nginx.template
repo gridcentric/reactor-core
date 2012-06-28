@@ -2,6 +2,7 @@ upstream ${id} {
     % for ip in ips:
     server ${ip}:${port};
     % endfor
+${extra}
 }
  
 server {

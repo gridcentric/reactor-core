@@ -6,8 +6,13 @@ def get_connection(name, config, scale_manager):
     if name == "nginx":
         config_path = config.get("config_path", "/etc/nginx/conf.d")
         site_path = config.get("site_path", "/etc/nginx/sites-enabled")
+        sticky_sessions = config.get("sticky_sessions", "false").lower() == "true"
+        try:
+            keepalive = int(config.get("keepalive", '0'))
+        except:
+            keepalive = 0
         from gridcentric.pancake.loadbalancer.nginx import NginxLoadBalancerConnection
-        return NginxLoadBalancerConnection(config_path, site_path)
+        return NginxLoadBalancerConnection(config_path, site_path, sticky_sessions, keepalive)
 
     elif name == "dnsmasq":
         config_path = config.get("config_path", "/etc/dnsmasq.d")

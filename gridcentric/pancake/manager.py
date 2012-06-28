@@ -138,6 +138,7 @@ class ScaleManager(object):
     @locked
     def manager_config_change(self, value):
         self.manager_register(initial=False)
+        self.reload_loadbalancer()
 
     @locked
     def manager_register(self, initial=False):
@@ -357,8 +358,8 @@ class ScaleManager(object):
                 else:
                     private_ips += self.active_ips(service_name)
 
-        logging.info("Updating loadbalancer for url %s with addresses %s" %
-                     (service.service_url(), all_addresses))
+        logging.info("Updating loadbalancer for url %s with public=%s, private=%s" %
+                     (service.service_url(), public_ips, private_ips))
         self.load_balancer.change(service.service_url(),
                                   service.config.port(),
                                   names,
