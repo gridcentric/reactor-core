@@ -1,0 +1,7 @@
+Package: pancake-agent
+Section: extra
+Version: VERSION
+Architecture: all
+Maintainer: Gridcentric Inc. <support@gridcentric.com>
+Description: Pancake in-guest agent.
+Depends: vms-agent
