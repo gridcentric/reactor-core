@@ -187,7 +187,7 @@ class Service(object):
         logging.info(("Launching new instance for server %s " +
                      "(reason: %s)") %
                      (self.name, reason))
-        self.cloud_conn.start_instance()
+        self.cloud_conn.start_instance(params=self.scale_manager.start_params())
 
     def service_url(self):
         return self.config.url()

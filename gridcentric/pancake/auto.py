@@ -73,6 +73,10 @@ class AutoScaleManager(ScaleManager):
         self.api_service = None # The implicit API service.
 
     @locked
+    def start_params(self):
+        return {"pancake" : "api.%s" % self.domain}
+
+    @locked
     def serve(self):
         ScaleManager.serve(self)
 
