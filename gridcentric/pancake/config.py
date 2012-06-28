@@ -108,6 +108,7 @@ authurl=http://localhost:8774/v1.1/
 user=admin
 apikey=admin
 project=admin
+target=0
 
 [cloud:nova]
 image_id=0

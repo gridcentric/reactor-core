@@ -151,7 +151,8 @@ class NovaVmsConnector(BaseNovaConnector):
         return self._novaclient().list_launched_instances(self.config['instance_id'])
 
     def _start_instance(self, params={}):
-        self._novaclient().launch_instance(self.config['instance_id'], params=params)
+        launch_params = { 'target' : self.config['target'], 'guest' : params }
+        self._novaclient().launch_instance(self.config['instance_id'], params=launch_params)
 
     def _delete_instance(self, instance_id):
         self._novaclient().delete_instance(instance_id)

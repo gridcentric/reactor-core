@@ -395,6 +395,11 @@ class ScaleManager(object):
 
     @locked
     def start_params(self):
+        # FIXME: If the user is running the Pancake server manually, then
+        # there is no real way to pass in a valid set of start parameters
+        # here. Since the Pancake agent now depends on this information
+        # (assuming you're using the default pancake agent) there really
+        # needs to be a way to provide this information.
         return {}
 
     @locked
