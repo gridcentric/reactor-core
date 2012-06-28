@@ -7,8 +7,12 @@ testenv/
 smoke-tests/*.log
 *.egg-info/
 image/contrib/python-zookeeper-3.4.3.tgz
+image/contrib/nginx-1.2.1.tgz
 image/dist-*
 image/chroot-*
 image/local
 contrib/zookeeper-3.4.3
+contrib/nginx-1.2.1
+contrib/nginx-sticky-module-1.0
 zookeeper-*/
+dist-*/
