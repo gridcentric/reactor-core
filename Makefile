@@ -99,8 +99,8 @@ deb: $(DEBBUILD)
 
 # Build an agent rpm.
 rpm: $(RPMBUILD)
-	@rpmbuild -bb --buildroot $(PWD)/$(RPMBUILD)/BUILDROOT \
-	    --define="%_topdir $(PWD)/$(RPMBUILD)" \
+	@rpmbuild -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
+	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \
 	    --define="%version $(VERSION)" \
 	    packagers/rpm/pancake-agent.spec
 	@find $(RPMBUILD) -name \*.rpm -exec mv {} . \;
