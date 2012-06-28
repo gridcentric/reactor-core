@@ -1,0 +1,30 @@
+#!/usr/bin/env python
+
+import sys
+import httplib
+import time
+import socket
+
+sys.path.append('/etc/gridcentric/common')
+import common
+
+# Post to a Pancake URL if given.
+data = common.parse_params()
+if "pancake" in data and data["pancake"]:
+    rest_time = 0.01 # Start at 10ms.
+
+    while True:
+        try:
+            conn = httplib.HTTPConnection(data["pancake"])
+            conn.request("POST", "/gridcentric/pancake/register", "", {})
+            resp = conn.getresponse()
+            if resp.status == 200:
+                break
+        except socket.error:
+            pass
+
+        # If we were not successful, do an exponential backoff,
+        # but keep retrying every minute until we are successful.
+        time.sleep(rest_time)
+        if rest_time < 60.0:
+            rest_time = (rest_time * 1.5)
