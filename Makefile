@@ -9,6 +9,10 @@ dist: clean
 	@VERSION=$(VERSION) python setup.py bdist -u 0 -g 0
 .PHONY: dist
 
+install: clean
+	@VERSION=$(VERSION) python setup.py install
+.PHONY: install
+
 clean:
 	@rm -rf dist build pancake.egg-info
 	@find . -name \*.pyc -exec rm -f {} \;
