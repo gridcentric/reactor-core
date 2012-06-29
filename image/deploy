@@ -23,6 +23,12 @@ for src in contrib local; do
             tar zxvf $file
         done
     fi
+    if ls $ORIG_PWD/$src/*.tar.gz >/dev/null 2>&1; then
+        for file in $ORIG_PWD/$src/*.tar.gz; do
+            echo "Unrolling $src tarball `basename $file` ..."
+            tar zxvf $file
+        done
+    fi
 done
 
 # Run all given scripts.

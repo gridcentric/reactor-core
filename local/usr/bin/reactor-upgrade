@@ -2,8 +2,8 @@
 
 function usage() {
     echo "usage: $0 <old-api-servers ...> -- <new-api-servers ...> -- <scale-servers ...>"
-    echo "The usage of this script is the same as pancake-setup."
-    echo "In order to run this script, pancake-setup must be in your PATH."
+    echo "The usage of this script is the same as reactor-setup."
+    echo "In order to run this script, reactor-setup must be in your PATH."
 }
 
 # Check commands.
@@ -40,11 +40,11 @@ all_servers="$old_servers $new_servers"
 full_cluster="$old_servers"
 for server in $new_servers; do
     full_cluster="$full_cluster $server"
-    pancake-setup $full_cluster -- $all_servers
+    reactor-setup $full_cluster -- $all_servers
 done
 
 # Point all the scale servers to the new set.
-pancake-setup $new_servers -- $scale_servers
+reactor-setup $new_servers -- $scale_servers
 
 # Wait for the cluster to settle.
 echo "Waiting for cluster to settle (60 seconds)..."
@@ -59,8 +59,8 @@ for old_server in $old_servers; do
         fi
     done
     full_cluster="$new_cluster"
-    pancake-setup $full_cluster -- $full_cluster
-    pancake-setup $old_server -- $old_server
+    reactor-setup $full_cluster -- $full_cluster
+    reactor-setup $old_server -- $old_server
     echo "Waiting for cluster to settle (30 seconds)..."
     sleep 30
 done
