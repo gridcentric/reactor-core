@@ -111,16 +111,20 @@ contrib/cx_Freeze-4.2.3:
 	@cd contrib/cx_Freeze-4.2.3 && python setup.py build
 
 demo: contrib/cx_Freeze-4.2.3
+ifeq ($(PANCAKE_PATH),)
+	@echo "You must define PANCAKE_PATH to call demo." && false
+else
 	@make -C demo
 	@mkdir -p tmp-cxfreeze
 	@cd contrib/cx_Freeze-4.2.3 && python setup.py install --root=$(CURDIR)/tmp-cxfreeze
 	LD_LIBRARY_PATH=tmp-cxfreeze/usr/local/lib/ \
-	 PYTHONPATH=`ls -1d tmp-cxfreeze/usr/local/lib/python*/dist-packages/` \
+	 PYTHONPATH=$(PANCAKE_PATH):`ls -1d tmp-cxfreeze/usr/local/lib/python*/dist-packages/` \
 	 tmp-cxfreeze/usr/local/bin/cxfreeze demo/reactor-viz \
 	 --target-dir reactor-demo-$(VERSION)
 	@rm -rf tmp-cxfreeze
 	@fakeroot tar czvf reactor-demo-$(VERSION).tgz reactor-demo-$(VERSION)
 	@rm -rf reactor-demo reactor-demo-$(VERSION)
+endif
 .PHONY: demo
 
 clean:
