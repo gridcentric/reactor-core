@@ -18,7 +18,7 @@ interval = 1.0
 factor = 10.0
 
 def usage():
-    print "usage: pancake-demo < -h|--help | [options] command >"
+    print "usage: reactor-demo < -h|--help | [options] command >"
     print "This tool requires 'gource' to be installed."
     print ""
     print "Optional arguments:"
@@ -33,6 +33,7 @@ def usage():
     print "   -f, --factor=          The active scaling factor."
     print ""
     print "   -i, --interval=        The update interval (in seconds)."
+    print ""
 
 opts, args = getopt.getopt(sys.argv[1:], 
         "ha:p:df:i:", ["help","api_server=","password=","dryrun","factor=","interval="])
@@ -116,17 +117,17 @@ def make_name(service, name):
         return "%s" % name
 
 def add_entry(output, service, name, node_type):
-    output.write("%d|pancake|A|%s|%s\n" % \
+    output.write("%d|reactor|A|%s|%s\n" % \
         (0, make_name(service, name), COLOR_MAP[node_type]))
     output.flush()
 
 def delete_entry(output, service, name, node_type):
-    output.write("%d|pancake|D|%s|%s\n" % \
+    output.write("%d|reactor|D|%s|%s\n" % \
         (0, make_name(service, name), COLOR_MAP[node_type]))
     output.flush()
 
 def change_entry(output, service, name, node_type):
-    output.write("%d|pancake|M|%s|%s\n" % \
+    output.write("%d|reactor|M|%s|%s\n" % \
         (0, make_name(service, name), COLOR_MAP[node_type]))
     output.flush()
 
@@ -191,6 +192,10 @@ def generate_log(output, managers, services, users):
     managers_cache = managers
     services_cache = services
 
+# Load our image data.
+import image
+image_dir = image.load()
+
 if dryrun:
     # Open stdout.
     output = sys.stdout
@@ -202,8 +207,8 @@ else:
          "--user-scale", "0.5",
          "--max-user-speed", "20",
          "--hide", "date",
-         "--user-image-dir", os.path.dirname(__file__),
-         "--default-user-image", os.path.join(os.path.dirname(__file__), "user.png"),
+         "--user-image-dir", image_dir,
+         "--default-user-image", os.path.join(image_dir, "user.png"),
          "--highlight-dirs",
          "--font-size", "14",
          "--file-idle-time", "0",

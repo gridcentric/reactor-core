@@ -1,7 +1,7 @@
-Package: pancake-agent
+Package: reactor-agent
 Section: extra
 Version: VERSION
 Architecture: all
 Maintainer: Gridcentric Inc. <support@gridcentric.com>
-Description: Pancake in-guest agent.
+Description: Reactor in-guest agent.
 Depends: vms-agent

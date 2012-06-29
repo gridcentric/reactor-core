@@ -1,18 +1,11 @@
 syntax: glob
-*.pyc
-build/
-dist
-pancake-*.*.tgz
-testenv/
-smoke-tests/*.log
-*.egg-info/
-image/contrib/python-zookeeper-3.4.3.tgz
-image/contrib/nginx-1.2.1.tgz
+image/contrib/*
+image/local/*
 image/dist-*
 image/chroot-*
-image/local
 contrib/zookeeper-3.4.3
 contrib/nginx-1.2.1
 contrib/nginx-sticky-module-1.0
-zookeeper-*/
-dist-*/
+contrib/cx_Freeze-4.2.3
+tmp-cxfreeze/
+reactor-demo/

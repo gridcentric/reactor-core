@@ -1,5 +1,5 @@
-Name: pancake-agent
-Summary: Pancake agent script.
+Name: reactor-agent
+Summary: Reactor agent script.
 Version: %{version}
 Release: 1
 Group: System
@@ -17,7 +17,7 @@ AutoProv: no
 %define __os_install_post %{nil}
 
 %description
-GridCentric in-guest agent for Virtual Memory Streaming VMs.
+Reactor in-guest agent for Virtual Memory Streaming VMs.
 
 %install
 rm -rf $RPM_BUILD_ROOT
@@ -25,7 +25,7 @@ install -d $RPM_BUILD_ROOT
 rsync -rav --delete ../../agent/* $RPM_BUILD_ROOT
 
 %files
-/etc/gridcentric/clone.d/90_pancake
+/etc/gridcentric/clone.d/90_reactor
 
 %changelog
 * Tue Jun 28 2012 Adin Scannell <adin@scannell.ca>

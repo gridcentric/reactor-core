@@ -1,47 +1,46 @@
 #!/usr/bin/make -f
 
 VERSION := $(shell date "+%Y%m%d.%H%M%S")
+PANCAKE_PATH :=
 
 RPMBUILD := rpmbuild
 DEBBUILD := debbuild
 
 INSTALL_DIR := install -d -m0755 -p
 
-all: clean
-	@VERSION=$(VERSION) python setup.py install --prefix=$(CURDIR)/dist/usr --root=/
-	@cd $(CURDIR)/dist/usr/lib/python* && [ -d site-packages ] && \
-	    mv site-packages dist-packages || true
-	@mkdir -p $(CURDIR)/dist/etc/init
-	@install -m0644 etc/pancake.conf $(CURDIR)/dist/etc/init
-	@cd $(CURDIR)/dist && tar cvzf ../pancake-$(VERSION).tgz .
-.PHONY: all
+default:
+	@echo "Nothing to be done."
+.PHONY: default
 
-clean:
-	@make -C image clean
-	@rm -rf dist build pancake.* pancake-*.tgz
-	@rm -rf $(RPMBUILD) $(DEBBUILD) *.rpm *.deb
-.PHONY: clean
+prep:
+ifeq ($(PANCAKE_PATH),)
+	@echo "You must define PANCAKE_PATH to call prep." && false
+else
+	@mkdir -p image/local
+	@cp -a $(PANCAKE_PATH)/dist/* image/local
+endif
+.PHONY: prep
 
 # Install the latest package (for python bindings).
 contrib/zookeeper-3.4.3: contrib/zookeeper-3.4.3.tar.gz
-	@cd contrib; tar xzf zookeeper-3.4.3.tar.gz
-	@cd contrib/zookeeper-3.4.3/src/c; autoreconf -if && ./configure
+	@cd contrib && tar xzf zookeeper-3.4.3.tar.gz
+	@cd contrib/zookeeper-3.4.3/src/c && autoreconf -if && ./configure
 
 # Build the appropriate python bindings.
 image/contrib/python-zookeeper-3.4.3.tgz: contrib/zookeeper-3.4.3
 	@mkdir -p dist-zookeeper
-	@cd contrib/zookeeper-3.4.3/src/c; make install DESTDIR=$$PWD/../../../../dist-zookeeper/
-	@cd contrib/zookeeper-3.4.3/src/contrib/zkpython; ant tar-bin
-	@cd dist-zookeeper; tar zxf ../contrib/zookeeper-3.4.3/build/contrib/zkpython/dist/*.tar.gz
-	@cd dist-zookeeper; mv usr/local/* usr; rm -rf usr/local
-	@cd dist-zookeeper; fakeroot tar zcvf ../$@ .
+	@cd contrib/zookeeper-3.4.3/src/c && make install DESTDIR=$$PWD/../../../../dist-zookeeper/
+	@cd contrib/zookeeper-3.4.3/src/contrib/zkpython && ant tar-bin
+	@cd dist-zookeeper && tar zxf ../contrib/zookeeper-3.4.3/build/contrib/zkpython/dist/*.tar.gz
+	@cd dist-zookeeper && mv usr/local/* usr && rm -rf usr/local
+	@cd dist-zookeeper && fakeroot tar zcvf ../$@ .
 	@rm -rf dist-zookeeper
 
 # Install the last stable nginx.
 contrib/nginx-1.2.1: contrib/nginx-1.2.1.tar.gz
-	@cd contrib; tar xzf nginx-1.2.1.tar.gz
-	@cd contrib; tar xzf nginx-sticky-module-1.0.tar.gz
-	@cd contrib/nginx-1.2.1; ./configure \
+	@cd contrib && tar xzf nginx-1.2.1.tar.gz
+	@cd contrib && tar xzf nginx-sticky-module-1.0.tar.gz
+	@cd contrib/nginx-1.2.1 && ./configure \
 	    --add-module=../nginx-sticky-module-1.0/ \
 	    --prefix=/usr \
 	    --conf-path=/etc/nginx/nginx.conf \
@@ -53,27 +52,23 @@ contrib/nginx-1.2.1: contrib/nginx-1.2.1.tar.gz
 # Build the appropriate nginx packages.
 image/contrib/nginx-1.2.1.tgz: contrib/nginx-1.2.1
 	@mkdir -p dist-nginx
-	@cd contrib/nginx-1.2.1; $(MAKE) install DESTDIR=$$PWD/../../dist-nginx/
+	@cd contrib/nginx-1.2.1 && $(MAKE) install DESTDIR=$$PWD/../../dist-nginx/
 	@rm -rf dist-nginx/usr/html
 	@mkdir -p dist-nginx/usr/local/nginx/client_body_temp
-	@cd dist-nginx; fakeroot tar zcvf ../$@ .
+	@cd dist-nginx && fakeroot tar zcvf ../$@ .
 	@rm -rf dist-nginx
 
-# Build the development environment by installing all of the dependent packages.
-# Check the README for a list of packages that will be installed.
-env:
-	sudo apt-get -y install nginx
-	sudo apt-get -y install python-mako
-	sudo apt-get -y install python-zookeeper
-	sudo apt-get -y install python-novaclient
-	sudo apt-get -y install python-netifaces
-	sudo apt-get -y install python-pyramid || sudo easy-install pyramid 
-.PHONY: env
+# Build the local overlays.
+image/local:
+	@mkdir -p image/local
+image/local/local.tgz: image/local
+	@rm -rf image/local/local.tgz
+	@cd local && fakeroot tar cvzf ../image/local/local.tgz .
 
 # Build a virtual machine image for the given hypervisor.
-image-%: all image/contrib/python-zookeeper-3.4.3.tgz image/contrib/nginx-1.2.1.tgz
-	@mkdir -p image/local
-	@cp pancake-$(VERSION).tgz image/local
+image-%: image/local/local.tgz \
+	 image/contrib/python-zookeeper-3.4.3.tgz \
+	 image/contrib/nginx-1.2.1.tgz
 	@sudo make -C image build-$*
 
 $(RPMBUILD):
@@ -92,11 +87,11 @@ $(DEBBUILD):
 
 # Build an agent deb.
 deb: $(DEBBUILD)
-	@$(INSTALL_DIR) $(DEBBUILD)/pancake-agent
-	@rsync -ruav --delete packagers/deb/pancake-agent/ $(DEBBUILD)/pancake-agent
-	@rsync -ruav agent/ $(DEBBUILD)/pancake-agent
-	@sed -i "s/\(^Version:\).*/\1 $(VERSION)/" $(DEBBUILD)/pancake-agent/DEBIAN/control
-	@fakeroot dpkg -b $(DEBBUILD)/pancake-agent .
+	@$(INSTALL_DIR) $(DEBBUILD)/reactor-agent
+	@rsync -ruav --delete packagers/deb/reactor-agent/ $(DEBBUILD)/reactor-agent
+	@rsync -ruav agent/ $(DEBBUILD)/reactor-agent
+	@sed -i "s/\(^Version:\).*/\1 $(VERSION)/" $(DEBBUILD)/reactor-agent/DEBIAN/control
+	@fakeroot dpkg -b $(DEBBUILD)/reactor-agent .
 .PHONY: deb
 
 # Build an agent rpm.
@@ -104,9 +99,33 @@ rpm: $(RPMBUILD)
 	@rpmbuild -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
 	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \
 	    --define="%version $(VERSION)" \
-	    packagers/rpm/pancake-agent.spec
+	    packagers/rpm/reactor-agent.spec
 	@find $(RPMBUILD) -name \*.rpm -exec mv {} . \;
 .PHONY: rpm
 
 packages: deb rpm
 .PHONY: packages
+
+contrib/cx_Freeze-4.2.3:
+	@cd contrib && tar xzf cx_Freeze-4.2.3.tar.gz
+	@cd contrib/cx_Freeze-4.2.3 && python setup.py build
+
+demo: contrib/cx_Freeze-4.2.3
+	@make -C demo
+	@mkdir -p tmp-cxfreeze
+	@cd contrib/cx_Freeze-4.2.3 && python setup.py install --root=$(CURDIR)/tmp-cxfreeze
+	LD_LIBRARY_PATH=tmp-cxfreeze/usr/local/lib/ \
+	 PYTHONPATH=`ls -1d tmp-cxfreeze/usr/local/lib/python*/dist-packages/` \
+	 tmp-cxfreeze/usr/local/bin/cxfreeze demo/reactor-viz \
+	 --target-dir reactor-demo-$(VERSION)
+	@rm -rf tmp-cxfreeze
+	@fakeroot tar czvf reactor-demo-$(VERSION).tgz reactor-demo-$(VERSION)
+	@rm -rf reactor-demo reactor-demo-$(VERSION)
+.PHONY: demo
+
+clean:
+	@sudo make -C image clean
+	@make -C demo clean
+	@rm -rf $(RPMBUILD) $(DEBBUILD) *.rpm *.deb
+	@rm -rf tmp-* reactor-demo-*
+.PHONY: clean

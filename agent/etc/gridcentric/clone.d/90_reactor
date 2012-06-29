@@ -8,15 +8,15 @@ import socket
 sys.path.append('/etc/gridcentric/common')
 import common
 
-# Post to a Pancake URL if given.
+# Post to a reactor URL if given.
 data = common.parse_params()
-if "pancake" in data and data["pancake"]:
+if "reactor" in data and data["reactor"]:
     rest_time = 0.01 # Start at 10ms.
 
     while True:
         try:
-            conn = httplib.HTTPConnection(data["pancake"])
-            conn.request("POST", "/gridcentric/pancake/register", "", {})
+            conn = httplib.HTTPConnection(data["reactor"])
+            conn.request("POST", "/gridcentric/reactor/register", "", {})
             resp = conn.getresponse()
             if resp.status == 200:
                 break
