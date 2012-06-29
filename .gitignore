@@ -3,9 +3,10 @@ image/contrib/*
 image/local/*
 image/dist-*
 image/chroot-*
+demo/image_data.py
 contrib/zookeeper-3.4.3
 contrib/nginx-1.2.1
 contrib/nginx-sticky-module-1.0
 contrib/cx_Freeze-4.2.3
 tmp-cxfreeze/
-reactor-demo/
+reactor-demo-*
