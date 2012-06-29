@@ -33,7 +33,7 @@ def default_zk_servers():
         return ["localhost"]
 
 def usage():
-    print "usage: pancake < -h|--help | [options] command >"
+    print "usage: %s < -h|--help | [options] command >" % sys.argv[0]
     print ""
     print "Optional arguments:"
     print "   -h, --help             Display this help message"
@@ -83,7 +83,7 @@ def usage():
     print ""
     print "    passwd <password>     Updates the API's password."
     print ""
-    print "    domain [domain]       Get or set the Pancake domain."
+    print "    domain [domain]       Get or set the domain."
     print ""
     print "    runserver             Run the scale manager server."
     print ""
