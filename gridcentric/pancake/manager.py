@@ -58,13 +58,6 @@ class ScaleManager(object):
         # Register ourselves.
         self.manager_register(initial=True)
 
-        # Create the loadbalancer connections.
-        self.load_balancer = lb_connection.LoadBalancers()
-        for name in self.config.loadbalancer_names():
-            self.load_balancer.append(\
-                lb_connection.get_connection(\
-                    name, self.config.loadbalancer_config(name), self))
-
         # Read the domain.
         self.reload_domain(self.zk_conn.watch_contents(\
                                 paths.domain(),
@@ -190,6 +183,16 @@ class ScaleManager(object):
         # If we're not doing initial setup, refresh services.
         for service in self.services.values():
             self.manager_select(service)
+
+        # Create the loadbalancer connections.
+        # NOTE: Any old loadbalancer object should be cleaned
+        # up automatically (i.e. the objects should implement
+        # fairly sensible __del__ methods when necessary).
+        self.load_balancer = lb_connection.LoadBalancers()
+        for name in self.config.loadbalancer_names():
+            self.load_balancer.append(\
+                lb_connection.get_connection(\
+                    name, self.config.loadbalancer_config(name), self))
 
     @locked
     def manager_change(self, managers):
