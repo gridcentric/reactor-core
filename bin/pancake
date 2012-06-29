@@ -89,9 +89,6 @@ def usage():
     print ""
     print "    runapi                Runs the API server."
     print ""
-    print "    run                   Runs the API server, and either Zookeeper or the"
-    print "                          scale manager, depending on configured Zookeeper"
-    print "                          servers."
 
 opts, args = getopt.getopt(sys.argv[1:], 
                             "ha:p:z:dl:u", 
