@@ -89,8 +89,11 @@ class ZookeeperConnection(object):
 
         for path_part in path.split("/")[1:-1]:
             partial_path = partial_path + "/" + path_part
-            if zookeeper.exists(self.handle, partial_path) == None:
-                zookeeper.create(self.handle, partial_path, '', [self.acl], 0)
+            if not(zookeeper.exists(self.handle, partial_path)):
+                try:
+                    zookeeper.create(self.handle, partial_path, '', [self.acl], 0)
+                except zookeeper.NodeExistsException:
+                    pass
 
         exists = zookeeper.exists(self.handle, path)
 
@@ -98,14 +101,22 @@ class ZookeeperConnection(object):
         # otherwise they could be associated with previous connections that
         # have not yet timed out.
         if ephemeral and exists:
-            zookeeper.delete(self.handle, path)
+            try:
+                zookeeper.delete(self.handle, path)
+            except zookeeper.NoNodeException:
+                pass
             exists = False
 
         if exists:
             zookeeper.set(self.handle, path, contents)
         else:
             flags = (ephemeral and zookeeper.EPHEMERAL or 0)
-            zookeeper.create(self.handle, path, contents, [self.acl], flags)
+            try:
+                zookeeper.create(self.handle, path, contents, [self.acl], flags)
+            except zookeeper.NodeExistsException:
+                # Woah, something happened between the top and here.
+                # We just restart and retry the whole routine.
+                self.write(path, contents, ephemeral=ephemeral)
 
     @wrap_exceptions
     def read(self, path, default=None):
@@ -136,8 +147,14 @@ class ZookeeperConnection(object):
         if zookeeper.exists(self.handle, path):
             path_children = zookeeper.get_children(self.handle, path)
             for child in path_children:
-                self.delete(path + "/" + child)
-            zookeeper.delete(self.handle, path)
+                try:
+                    self.delete(path + "/" + child)
+                except zookeeper.NoNodeException:
+                    pass
+            try:
+                zookeeper.delete(self.handle, path)
+            except zookeeper.NoNodeException:
+                pass
 
     @wrap_exceptions
     def watch_contents(self, path, fn, default_value=""):
@@ -146,7 +163,8 @@ class ZookeeperConnection(object):
 
         self.cond.acquire()
         try:
-            self.watches[path] = [fn] + self.watches.get(path, [])
+            if not(fn in self.watches.get(path, [])):
+                self.watches[path] = self.watches.get(path, []) + [fn]
             value, timeinfo = zookeeper.get(self.handle, path, self.zookeeper_watch)
         finally:
             self.cond.release()
@@ -159,7 +177,8 @@ class ZookeeperConnection(object):
             self.write(path, default_value)
 
         try:
-            self.watches[path] = [fn] + self.watches.get(path, [])
+            if not(fn in self.watches.get(path, [])):
+                self.watches[path] = self.watches.get(path, []) + [fn]
             rval = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
         finally:
             self.cond.release()
@@ -178,6 +197,12 @@ class ZookeeperConnection(object):
                     result, _ = zookeeper.get(self.handle, path, self.zookeeper_watch)
                 if result != None:
                     for fn in fns:
-                        fn(result)
+                        # Don't allow an individual watch firing an exception to
+                        # prevent all other watches from being fired. Just log an
+                        # error message and moved on to the next callback.
+                        try:
+                            fn(result)
+                        except:
+                            logging.exception("Error executing watch for %s." % path)
         finally:
             self.cond.release()
