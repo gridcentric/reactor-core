@@ -15,25 +15,36 @@ ZookeeperException = zookeeper.ZooKeeperException
 
 def connect(servers):
     cond = threading.Condition()
+    connected = [False]
 
     # We attempt a connection for 10 seconds here. This is a long timeout
     # for servicing a web request, so hopefully it is successful.
     def connect_watcher(zh, event, state, path):
         logging.debug("CONNECT WATCHER: event=%s, state=%s, path=%s" % (event, state, path))
-        cond.acquire()
-        if state == zookeeper.CONNECTED_STATE:
-            # We only want to notify the main thread once the state has been connected.
-            cond.notify()
-        cond.release()
+        try:
+            cond.acquire()
+            if state == zookeeper.CONNECTED_STATE:
+                # We only want to notify the main thread once the state has been
+                # connected. We store the connected variable in an odd way because
+                # of the way variables are bound in the local scope for functions.
+                connected[0] = True
+                cond.notify()
+        finally:
+            cond.release()
 
     cond.acquire()
     try:
         # We default to port 2181 if no port is provided as part of the host specification.
         server_list = ",".join(map(lambda x: (x.find(":") > 0 and x) or "%s:2181" % x, servers))
         handle = zookeeper.init(server_list, connect_watcher, 10000)
-        cond.wait(10.0)
+        cond.wait(60.0)
     finally:
+        # Save whether we were successful or not.
+        is_connected = connected[0]
         cond.release()
+
+    if not(is_connected):
+        raise ZookeeperException("Unable to connect.")
 
     return handle
 
