@@ -54,6 +54,8 @@ contrib/nginx-1.2.1: contrib/nginx-1.2.1.tar.gz
 image/contrib/nginx-1.2.1.tgz: contrib/nginx-1.2.1
 	@mkdir -p dist-nginx
 	@cd contrib/nginx-1.2.1; $(MAKE) install DESTDIR=$$PWD/../../dist-nginx/
+	@rm -rf dist-nginx/usr/html
+	@mkdir -p dist-nginx/usr/local/nginx/client_body_temp
 	@cd dist-nginx; fakeroot tar zcvf ../$@ .
 	@rm -rf dist-nginx
 
