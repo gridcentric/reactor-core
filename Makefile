@@ -6,7 +6,7 @@ default: dist
 .PHONY: default
 
 dist: clean
-	@VERSION=$(VERSION) python setup.py bdist -u 0 -g 0
+	@VERSION=$(VERSION) python setup.py bdist --owner root --group root
 .PHONY: dist
 
 install: clean
