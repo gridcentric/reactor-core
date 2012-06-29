@@ -26,14 +26,14 @@ class PancakeApiClient(httplib2.Http):
         """
         Returns a list of all the services currently being managed by the pancake.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/services', 'GET')
+        resp, body = self._authenticated_request('/v1.0/services', 'GET')
         return body.get('services', [])
 
     def manage_service(self, service_name, config):
         """
         Manage the service using the given configuration.
         """
-        self._authenticated_request('/gridcentric/pancake/services/%s' % (service_name),
+        self._authenticated_request('/v1.0/services/%s' % (service_name),
                                     'POST',
                                     body={'config':config})
 
@@ -41,13 +41,13 @@ class PancakeApiClient(httplib2.Http):
         """
         Unmanage the service.
         """
-        self._authenticated_request('/gridcentric/pancake/services/%s' % (service_name), 'DELETE')
+        self._authenticated_request('/v1.0/services/%s' % (service_name), 'DELETE')
 
     def get_service_config(self, service_name):
         """
         Return the service's configuration.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/services/%s' %
+        resp, body = self._authenticated_request('/v1.0/services/%s' %
                                                  service_name, 'GET')
         return body.get('config', "")
 
@@ -55,21 +55,21 @@ class PancakeApiClient(httplib2.Http):
         """
         Returns a list of all configured managers.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/managers', 'GET')
+        resp, body = self._authenticated_request('/v1.0/managers', 'GET')
         return body.get('managers_configured', [])
 
     def list_managers_active(self):
         """
         Returns a list of all active managers.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/managers', 'GET')
+        resp, body = self._authenticated_request('/v1.0/managers', 'GET')
         return body.get('managers_active', [])
 
     def update_manager(self, manager, config):
         """
         Update the manager with the given configuration.
         """
-        self._authenticated_request('/gridcentric/pancake/managers/%s' %
+        self._authenticated_request('/v1.0/managers/%s' %
                                     (manager or 'default'), 'POST',
                                     body={'config':config})
 
@@ -77,7 +77,7 @@ class PancakeApiClient(httplib2.Http):
         """
         Return the manager's configuration.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/managers/%s' %
+        resp, body = self._authenticated_request('/v1.0/managers/%s' %
                                                  (manager or 'default'), 'GET')
         return body.get('config', "")
 
@@ -86,7 +86,7 @@ class PancakeApiClient(httplib2.Http):
         Returns a list of the ip addresses (both dynamically confirmed and manually configured) for
         this service.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/services/%s/ips' %
+        resp, body = self._authenticated_request('/v1.0/services/%s/ips' %
                                                  service_name, 'GET')
         return body.get('ip_addresses', [])
 
@@ -94,7 +94,7 @@ class PancakeApiClient(httplib2.Http):
         """
         Return available live service info.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/services/%s/info' %
+        resp, body = self._authenticated_request('/v1.0/services/%s/info' %
                                                  service_name, 'GET')
         return body
 
@@ -102,28 +102,28 @@ class PancakeApiClient(httplib2.Http):
         """
         Set the custom service metrics.
         """
-        self._authenticated_request('/gridcentric/pancake/services/%s/metrics' %
+        self._authenticated_request('/v1.0/services/%s/metrics' %
                                     service_name, 'POST', body=metrics)
 
     def update_api_key(self, api_key):
         """
         Changes the API key in the system.
         """
-        self._authenticated_request('/gridcentric/pancake/auth_key',
+        self._authenticated_request('/v1.0/auth_key',
                                     'POST', body={'auth_key':api_key})
 
     def get_domain(self):
         """
         Gets the current pancake domain.
         """
-        resp, body = self._authenticated_request('/gridcentric/pancake/domain', 'GET')
+        resp, body = self._authenticated_request('/v1.0/domain', 'GET')
         return body.get("domain", '')
 
     def set_domain(self, domain):
         """
         Sets the current pancake domain.
         """
-        self._authenticated_request('/gridcentric/pancake/domain',
+        self._authenticated_request('/v1.0/domain',
                                     'POST', body={'domain':domain})
 
     def _authenticated_request(self, url, method, **kwargs):

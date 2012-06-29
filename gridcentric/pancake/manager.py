@@ -133,6 +133,9 @@ class ScaleManager(object):
         self.manager_register(initial=False)
         self.reload_loadbalancer()
 
+    def default_config(self):
+        return ''
+
     @locked
     def manager_register(self, initial=False):
         # Figure out our global IPs.
@@ -140,7 +143,7 @@ class ScaleManager(object):
         logging.info("Manager %s has key %s." % (str(global_ips), self.uuid))
 
         # Reload our global config.
-        self.config = ManagerConfig("")
+        self.config = ManagerConfig(self.default_config())
         if initial:
             global_config = self.zk_conn.watch_contents(paths.config(),
                                                         self.manager_config_change)
@@ -399,11 +402,10 @@ class ScaleManager(object):
 
     @locked
     def start_params(self):
-        # FIXME: If the user is running the Pancake server manually, then
-        # there is no real way to pass in a valid set of start parameters
-        # here. Since the Pancake agent now depends on this information
-        # (assuming you're using the default pancake agent) there really
-        # needs to be a way to provide this information.
+        # FIXME: If the user is running the Pancake server manually, then there
+        # is no real way to pass in a valid set of start parameters here. This
+        # should be extracted and implemented in a more flexible way at some
+        # point down the road.
         return {}
 
     @locked

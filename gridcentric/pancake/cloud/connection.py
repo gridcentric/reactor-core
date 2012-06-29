@@ -4,11 +4,11 @@ The generic cloud connection interface.
 
 def get_connection(cloud_type, cloud_config):
     if cloud_type == 'nova-vms':
-        import gridcentric.pancake.cloud.nova as nova_cloud
+        import gridcentric.pancake.cloud.nova.connection as nova_cloud
         return nova_cloud.NovaVmsConnector(cloud_config)
 
     elif cloud_type == 'nova':
-        import gridcentric.pancake.cloud.nova as nova_cloud
+        import gridcentric.pancake.cloud.nova.connection as nova_cloud
         return nova_cloud.NovaConnector(cloud_config)
 
     elif cloud_type == 'none':

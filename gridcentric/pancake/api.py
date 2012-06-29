@@ -81,52 +81,52 @@ class PancakeApi:
         self.config.add_route('version', '/')
         self.config.add_view(self.version, route_name='version')
 
-        self.config.add_route('auth-key', '/gridcentric/pancake/auth_key')
+        self.config.add_route('auth-key', '/v1.0/auth_key')
         self.config.add_view(self.set_auth_key, route_name='auth-key')
 
-        self.config.add_route('domain-action', '/gridcentric/pancake/domain')
+        self.config.add_route('domain-action', '/v1.0/domain')
         self.config.add_view(self.handle_domain_action, route_name='domain-action')
 
-        self.config.add_route('register', '/gridcentric/pancake/register')
+        self.config.add_route('register', '/v1.0/register')
         self.config.add_view(self.register_ip_address, route_name='register')
 
-        self.config.add_route('manager-action', '/gridcentric/pancake/managers/{manager}')
+        self.config.add_route('manager-action', '/v1.0/managers/{manager}')
         self.config.add_view(self.handle_manager_action, route_name='manager-action')
 
-        self.config.add_route('manager-list', '/gridcentric/pancake/managers')
+        self.config.add_route('manager-list', '/v1.0/managers')
         self.config.add_view(self.list_managers, route_name='manager-list')
 
-        self.config.add_route('service-action', '/gridcentric/pancake/services/{service_name}')
+        self.config.add_route('service-action', '/v1.0/services/{service_name}')
         self.config.add_view(self.handle_service_action, route_name='service-action')
 
-        self.config.add_route('service-list', '/gridcentric/pancake/services')
+        self.config.add_route('service-list', '/v1.0/services')
         self.config.add_view(self.list_services, route_name='service-list')
 
         self.config.add_route('service-ip-list',
-            '/gridcentric/pancake/services/{service_name}/ips')
+            '/v1.0/services/{service_name}/ips')
         self.config.add_route('service-ip-list-implicit',
-            '/gridcentric/pancake/service/ips')
+            '/v1.0/service/ips')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list')
         self.config.add_view(self.list_service_ips, route_name='service-ip-list-implicit')
 
         self.config.add_route('metric-action',
-            '/gridcentric/pancake/services/{service_name}/metrics')
+            '/v1.0/services/{service_name}/metrics')
         self.config.add_route('metric-action-implicit',
-            '/gridcentric/pancake/service/metrics')
+            '/v1.0/service/metrics')
         self.config.add_view(self.handle_metric_action, route_name='metric-action')
         self.config.add_view(self.handle_metric_action, route_name='metric-action-implicit')
 
         self.config.add_route('metric-ip-action',
-            '/gridcentric/pancake/services/{service_name}/metrics/{service_ip}')
+            '/v1.0/services/{service_name}/metrics/{service_ip}')
         self.config.add_route('metric-ip-action-implicit',
-            '/gridcentric/pancake/service/metrics/{service_ip}')
+            '/v1.0/service/metrics/{service_ip}')
         self.config.add_view(self.handle_metric_action, route_name='metric-ip-action')
         self.config.add_view(self.handle_metric_action, route_name='metric-ip-action-implicit')
 
         self.config.add_route('service-info-action',
-            '/gridcentric/pancake/services/{service_name}/info')
+            '/v1.0/services/{service_name}/info')
         self.config.add_route('service-info-action-implicit',
-            '/gridcentric/pancake/service/info')
+            '/v1.0/service/info')
         self.config.add_view(self.handle_info_action, route_name='service-info-action')
         self.config.add_view(self.handle_info_action, route_name='service-info-action-implicit')
 

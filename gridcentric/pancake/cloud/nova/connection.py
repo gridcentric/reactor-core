@@ -2,7 +2,7 @@ import logging
 import traceback
 from httplib import HTTPException
 
-from gridcentric.nova.client.client import NovaClient as GridcentricNovaClient
+from gridcentric.pancake.cloud.nova.client.client import NovaClient as GridcentricNovaClient
 from novaclient.v1_1.client import Client as NovaClient
 
 import gridcentric.pancake.cloud.connection as cloud_connection

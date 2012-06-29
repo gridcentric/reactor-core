@@ -272,15 +272,6 @@ try:
         api = PancakeApi(zk_servers)
         serve(api.get_wsgi_app(), host='0.0.0.0')
 
-    elif command == "run":
-
-        from paste.httpserver import serve
-        from gridcentric.pancake.auto import PancakeAutoApi
-
-        log.configure(loglevel, logfile)
-        api = PancakeAutoApi(zk_servers)
-        serve(api.get_wsgi_app(), host='0.0.0.0')
-
     else:
         usage()
         sys.exit(1)

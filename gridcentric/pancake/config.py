@@ -45,7 +45,7 @@ health_check=5
 unregistered_wait=20
 decommissioned_wait=5
 keys=64
-loadbalancer=nginx,dnsmasq
+loadbalancer=
 
 [loadbalancer:nginx]
 config_path=/etc/nginx/conf.d
