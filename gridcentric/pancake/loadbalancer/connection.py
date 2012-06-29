@@ -20,7 +20,7 @@ def get_connection(name, config, scale_manager):
         from gridcentric.pancake.loadbalancer.dnsmasq import DnsmasqLoadBalancerConnection
         return DnsmasqLoadBalancerConnection(config_path, hosts_path, scale_manager)
 
-    elif name == "none":
+    elif name == "none" or name == "":
         return LoadBalancerConnection()
 
     else:
