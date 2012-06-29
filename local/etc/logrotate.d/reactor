@@ -1,0 +1,10 @@
+/var/log/reactor.log {
+    daily
+    missingok
+    rotate 52
+    compress
+    delaycompress
+    notifempty
+    create 0640 root root
+    sharedscripts
+}

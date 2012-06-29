@@ -3,9 +3,9 @@
 FLAVOR     := oneiric
 ROOTSIZE   := 4096
 SWAPSIZE   := 1024
-HOSTNAME   := pancake
+HOSTNAME   := reactor
 DOMAINNAME := gridcentric.com
-USERNAME   := pancake
+USERNAME   := reactor
 PASSWORD   := p4nc4k3gr1d
 
 # NOTE: The python zookeeper bindings are installed separately
