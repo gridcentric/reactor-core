@@ -51,11 +51,11 @@ contrib/nginx-1.2.1: contrib/nginx-1.2.1.tar.gz
 	    --http-log-path=/var/log/nginx/access.log
 
 # Build the appropriate nginx packages.
-image/contrib/nginx-1.2.1.tgz:
+image/contrib/nginx-1.2.1.tgz: contrib/nginx-1.2.1
 	@mkdir -p dist-nginx
 	@cd contrib/nginx-1.2.1; $(MAKE) install DESTDIR=$$PWD/../../dist-nginx/
 	@cd dist-nginx; fakeroot tar zcvf ../$@ .
-	#@rm -rf dist-nginx
+	@rm -rf dist-nginx
 
 # Build the development environment by installing all of the dependent packages.
 # Check the README for a list of packages that will be installed.
@@ -69,7 +69,7 @@ env:
 .PHONY: env
 
 # Build a virtual machine image for the given hypervisor.
-image-%: all image/contrib/python-zookeeper-3.4.3.tgz
+image-%: all image/contrib/python-zookeeper-3.4.3.tgz image/contrib/nginx-1.2.1.tgz
 	@mkdir -p image/local
 	@cp pancake-$(VERSION).tgz image/local
 	@sudo make -C image build-$*
