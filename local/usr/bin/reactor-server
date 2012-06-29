@@ -198,6 +198,8 @@ def main():
     try:
         zk_servers = zk_config.read_config()
     except:
+        zk_servers = []
+    if len(zk_servers) == 0:
         zk_servers = ["localhost"]
     app = PancakeAutoApi(zk_servers)
     serve(app.get_wsgi_app(), host='0.0.0.0')
