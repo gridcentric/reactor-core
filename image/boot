@@ -8,4 +8,4 @@ passwd -d reactor
 # For whatever reason, the service doesn't work on the first start.
 # It's still unclear why, but the VM ends up messing with the network
 # configuration -- so we avoid the situation by rebooting.
-reboot
+(sleep 30; reboot) &
