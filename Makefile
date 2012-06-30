@@ -22,12 +22,12 @@ endif
 .PHONY: prep
 
 # Install the latest package (for python bindings).
-contrib/zookeeper-3.4.3: contrib/zookeeper-3.4.3.tar.gz
+contrib/zookeeper-3.4.3: contrib/zookeeper-3.4.3.tar.gz Makefile
 	@cd contrib && tar xzf zookeeper-3.4.3.tar.gz
 	@cd contrib/zookeeper-3.4.3/src/c && autoreconf -if && ./configure
 
 # Build the appropriate python bindings.
-image/contrib/python-zookeeper-3.4.3.tgz: contrib/zookeeper-3.4.3
+image/contrib/python-zookeeper-3.4.3.tgz: contrib/zookeeper-3.4.3 Makefile
 	@mkdir -p dist-zookeeper
 	@cd contrib/zookeeper-3.4.3/src/c && make install DESTDIR=$$PWD/../../../../dist-zookeeper/
 	@cd contrib/zookeeper-3.4.3/src/contrib/zkpython && ant tar-bin
@@ -37,7 +37,7 @@ image/contrib/python-zookeeper-3.4.3.tgz: contrib/zookeeper-3.4.3
 	@rm -rf dist-zookeeper
 
 # Install the last stable nginx.
-contrib/nginx-1.2.1: contrib/nginx-1.2.1.tar.gz
+contrib/nginx-1.2.1: contrib/nginx-1.2.1.tar.gz Makefile
 	@cd contrib && tar xzf nginx-1.2.1.tar.gz
 	@cd contrib && tar xzf nginx-sticky-module-1.0.tar.gz
 	@cd contrib/nginx-1.2.1 && ./configure \
@@ -51,7 +51,7 @@ contrib/nginx-1.2.1: contrib/nginx-1.2.1.tar.gz
 	    --http-log-path=/var/log/nginx/access.log
 
 # Build the appropriate nginx packages.
-image/contrib/nginx-1.2.1.tgz: contrib/nginx-1.2.1
+image/contrib/nginx-1.2.1.tgz: contrib/nginx-1.2.1 Makefile
 	@mkdir -p dist-nginx
 	@cd contrib/nginx-1.2.1 && $(MAKE) install DESTDIR=$$PWD/../../dist-nginx/
 	@rm -rf dist-nginx/usr/html
@@ -61,9 +61,9 @@ image/contrib/nginx-1.2.1.tgz: contrib/nginx-1.2.1
 	@rm -rf dist-nginx
 
 # Build the local overlays.
-image/local:
+image/local: Makefile
 	@mkdir -p image/local
-image/local/local.tgz: image/local
+image/local/local.tgz: $(shell find local -type f -o -type d) Makefile
 	@rm -rf image/local/local.tgz
 	@cd local && fakeroot tar cvzf ../image/local/local.tgz .
 
@@ -108,7 +108,7 @@ rpm: $(RPMBUILD)
 packages: deb rpm
 .PHONY: packages
 
-contrib/cx_Freeze-4.2.3:
+contrib/cx_Freeze-4.2.3: contrib/cx_Freeze-4.2.3.tar.gz Makefile
 	@cd contrib && tar xzf cx_Freeze-4.2.3.tar.gz
 	@cd contrib/cx_Freeze-4.2.3 && python setup.py build
 
