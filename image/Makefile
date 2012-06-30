@@ -25,6 +25,7 @@ PACKAGES += python-pyramid
 PACKAGES += python-netifaces
 PACKAGES += dnsmasq
 PACKAGES += graphviz
+PACKAGES += curl
 
 PACKAGE_CMDLINE := $(PACKAGES:%=--addpkg=%)
 
