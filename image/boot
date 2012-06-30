@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Remove the reactor password.
-# This will prevent interactive logins unless this script is somehow disabled
-# on first boot, we rely on key injection.
+# This will prevent interactive logins unless this script is somehow
+# disabled on first boot, we rely on key injection.
 passwd -d reactor
 
 # For whatever reason, the service doesn't work on the first start.
-# We go into the background here and wait sixty before performing
-# a restart. That generally kicks things into order.
-(sleep 60; service reactor restart || service reactor start) &
+# It's still unclear why, but the VM ends up messing with the network
+# configuration -- so we avoid the situation by rebooting.
+reboot

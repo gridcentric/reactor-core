@@ -42,6 +42,7 @@ contrib/nginx-1.2.1: contrib/nginx-1.2.1.tar.gz
 	@cd contrib && tar xzf nginx-sticky-module-1.0.tar.gz
 	@cd contrib/nginx-1.2.1 && ./configure \
 	    --add-module=../nginx-sticky-module-1.0/ \
+	    --with-http_ssl_module \
 	    --prefix=/usr \
 	    --conf-path=/etc/nginx/nginx.conf \
 	    --pid-path=/var/run/nginx.pid \
