@@ -16,7 +16,7 @@ if "reactor" in data and data["reactor"]:
     while True:
         try:
             conn = httplib.HTTPConnection(data["reactor"])
-            conn.request("POST", "/gridcentric/reactor/register", "", {})
+            conn.request("POST", "/v1.0/register", "", {})
             resp = conn.getresponse()
             if resp.status == 200:
                 break

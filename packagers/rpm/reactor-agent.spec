@@ -25,6 +25,7 @@ install -d $RPM_BUILD_ROOT
 rsync -rav --delete ../../agent/* $RPM_BUILD_ROOT
 
 %files
+/etc/gridcentric/boot.d/90_reactor
 /etc/gridcentric/clone.d/90_reactor
 
 %changelog
