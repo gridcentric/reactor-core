@@ -61,14 +61,20 @@ def connected(request_handler):
     """
     A decorator that ensures we are connected to the Zookeeper server.
     """
-    def fn(*args, **kwargs):
+    def try_once(*args, **kwargs):
+        self = args[0]
         try:
-            self = args[0]
             self.ensure_connected()
             return request_handler(*args, **kwargs)
         except ZookeeperException:
             # Disconnect (next request will reconnect).
             self.disconnect()
+            return None
+    def fn(*args, **kwargs):
+        response = try_once(*args, **kwargs)
+        if not(response):
+            response = try_once(*args, **kwargs)
+        return response
     return fn
 
 class PancakeApi:
