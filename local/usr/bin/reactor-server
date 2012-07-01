@@ -145,8 +145,11 @@ class PancakeAutoApi(PancakeApi):
             api_servers = json.loads(request.body)['api_servers']
             logging.info("Updating API Servers.")
             self.reconnect(api_servers)
-
-        return Response()
+            return Response()
+        elif request.method == 'GET':
+            return Response(body=json.dumps({ "api_servers" : self.zk_servers }))
+        else:
+            return Response(status=403)
 
     def start_manager(self, zk_servers):
         zk_servers.sort()
