@@ -12,7 +12,8 @@ from gridcentric.pancake.zooclient import PancakeClient
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
 
 def get_auth_key(request):
-    return request.headers.get('X-Auth-Key', None)
+    return request.headers.get('X-Auth-Key', None) or \
+           request.params.get('auth_key', None)
 
 def authorized_admin_only(request_handler):
     """
