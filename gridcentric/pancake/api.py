@@ -360,7 +360,7 @@ class PancakeApi:
         return response
 
     @connected
-    @authorized
+    @authorized_admin_only
     def handle_service_action(self, context, request):
         """
         This handles a general service action:
