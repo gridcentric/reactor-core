@@ -384,21 +384,19 @@ class PancakeApi:
                 response = Response(body=json.dumps({'config' : str(service_config)}))
             else:
                 response = Response(status=404, body="%s not found" % service_name)
-        else:
-            auth_key = get_auth_key(request)
-            if self._authorize_admin_access(context, request, auth_key):
-                # Deleting or updating a service config can only be done by an admin user.
-                if request.method == "DELETE":
-                    logging.info("Unmanaging service %s" % (service_name))
-                    self.client.unmanage_service(service_name)
 
-                elif request.method == "POST":
-                    service_config = json.loads(request.body)
-                    logging.info("Managing or updating service %s" % service_name)
-                    self.client.update_service(service_name, service_config.get('config', ""))
-            else:
-                # Return an unauthorized response.
-                return Response(status=401, body="unauthorized")
+        elif request.method == "DELETE":
+            logging.info("Unmanaging service %s" % (service_name))
+            self.client.unmanage_service(service_name)
+
+        elif request.method == "POST":
+            service_config = json.loads(request.body)
+            logging.info("Managing or updating service %s" % service_name)
+            self.client.update_service(service_name, service_config.get('config', ''))
+
+        else:
+            # Return an unauthorized response.
+            return Response(status=401, body="unauthorized")
 
         return response
 
