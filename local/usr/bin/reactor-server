@@ -129,7 +129,7 @@ class PancakeAutoApi(PancakeApi):
         self.manager_running = False
         PancakeApi.__init__(self, zk_servers)
 
-        self.config.add_route('api-servers', '/v1.0/api_servers')
+        self.config.add_route('api-servers', '/reactor/api_servers')
         self.config.add_view(self.set_api_servers, route_name='api-servers')
 
         # Check the service.
