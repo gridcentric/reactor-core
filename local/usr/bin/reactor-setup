@@ -54,6 +54,7 @@ done
 for server in $scale_servers; do
     echo "Setting up $server..."
     curl -X POST \
+        -H "Content-type: application/json" \
         -d "{ \"api_servers\" : [$api_server_spec] }" \
         $api_auth_spec \
         http://$server:8080/reactor/api_servers
