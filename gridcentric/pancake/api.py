@@ -12,7 +12,8 @@ from gridcentric.pancake.zooclient import PancakeClient
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
 
 def get_auth_key(request):
-    return request.headers.get('X-Auth-Key', None)
+    return request.headers.get('X-Auth-Key', None) or \
+           request.params.get('auth_key', None)
 
 def authorized_admin_only(request_handler):
     """
@@ -61,14 +62,20 @@ def connected(request_handler):
     """
     A decorator that ensures we are connected to the Zookeeper server.
     """
-    def fn(*args, **kwargs):
+    def try_once(*args, **kwargs):
+        self = args[0]
         try:
-            self = args[0]
             self.ensure_connected()
             return request_handler(*args, **kwargs)
         except ZookeeperException:
             # Disconnect (next request will reconnect).
             self.disconnect()
+            return None
+    def fn(*args, **kwargs):
+        response = try_once(*args, **kwargs)
+        if not(response):
+            response = try_once(*args, **kwargs)
+        return response
     return fn
 
 class PancakeApi:
@@ -220,8 +227,11 @@ class PancakeApi:
         return False
 
     def _create_admin_auth_token(self, auth_key):
-        salt = 'gridcentricpancake'
-        return hashlib.sha1("%s%s" % (salt, auth_key)).hexdigest()
+        if auth_key:
+            salt = 'gridcentricpancake'
+            return hashlib.sha1("%s%s" % (salt, auth_key)).hexdigest()
+        else:
+            return None
 
     def _create_service_auth_token(self, auth_key, auth_salt, algo):
         if auth_salt == None:
@@ -353,7 +363,7 @@ class PancakeApi:
         return response
 
     @connected
-    @authorized
+    @authorized_admin_only
     def handle_service_action(self, context, request):
         """
         This handles a general service action:
@@ -374,21 +384,19 @@ class PancakeApi:
                 response = Response(body=json.dumps({'config' : str(service_config)}))
             else:
                 response = Response(status=404, body="%s not found" % service_name)
-        else:
-            auth_key = get_auth_key(request)
-            if self._authorize_admin_access(context, request, auth_key):
-                # Deleting or updating a service config can only be done by an admin user.
-                if request.method == "DELETE":
-                    logging.info("Unmanaging service %s" % (service_name))
-                    self.client.unmanage_service(service_name)
 
-                elif request.method == "POST":
-                    service_config = json.loads(request.body)
-                    logging.info("Managing or updating service %s" % service_name)
-                    self.client.update_service(service_name, service_config.get('config', ""))
-            else:
-                # Return an unauthorized response.
-                return Response(status=401, body="unauthorized")
+        elif request.method == "DELETE":
+            logging.info("Unmanaging service %s" % (service_name))
+            self.client.unmanage_service(service_name)
+
+        elif request.method == "POST":
+            service_config = json.loads(request.body)
+            logging.info("Managing or updating service %s" % service_name)
+            self.client.update_service(service_name, service_config.get('config', ''))
+
+        else:
+            # Return an unauthorized response.
+            return Response(status=401, body="unauthorized")
 
         return response
 
