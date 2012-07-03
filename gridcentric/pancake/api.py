@@ -227,8 +227,11 @@ class PancakeApi:
         return False
 
     def _create_admin_auth_token(self, auth_key):
-        salt = 'gridcentricpancake'
-        return hashlib.sha1("%s%s" % (salt, auth_key)).hexdigest()
+        if auth_key:
+            salt = 'gridcentricpancake'
+            return hashlib.sha1("%s%s" % (salt, auth_key)).hexdigest()
+        else:
+            return None
 
     def _create_service_auth_token(self, auth_key, auth_salt, algo):
         if auth_salt == None:

@@ -81,7 +81,7 @@ def usage():
     print ""
     print "    show-manager [ip]     Show the current configuration for the manager."
     print ""
-    print "    passwd <password>     Updates the API's password."
+    print "    passwd [password]     Updates the API's password."
     print ""
     print "    domain [domain]       Get or set the domain."
     print ""
@@ -240,7 +240,11 @@ try:
         api_client.set_service_metrics(service_name, json.loads(new_metrics))
 
     elif command == "passwd":
-        new_password = get_arg(1)
+        if len(args) > 1:
+            new_password = get_arg(1)
+        else:
+            new_password = None
+
         api_client = get_api_client()
         api_client.update_api_key(new_password)
 
