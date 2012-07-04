@@ -4,7 +4,9 @@ import socket
 import threading
 import logging
 import json
+import os
 
+from mako.template import Template
 from pyramid.response import Response
 from paste.httpserver import serve
 
@@ -14,6 +16,7 @@ from gridcentric.pancake.manager import ScaleManager
 from gridcentric.pancake.manager import locked
 
 from gridcentric.pancake.config import ServiceConfig
+from gridcentric.pancake.api import get_auth_key
 from gridcentric.pancake.api import PancakeApi
 from gridcentric.pancake.api import connected
 from gridcentric.pancake.api import authorized
@@ -132,8 +135,33 @@ class PancakeAutoApi(PancakeApi):
         self.config.add_route('api-servers', '/reactor/api_servers')
         self.config.add_view(self.set_api_servers, route_name='api-servers')
 
+        self.config.add_route('admin-b1', '/reactor/admin')
+        self.config.add_route('admin-b2', '/reactor/admin/')
+        self.config.add_route('admin', '/reactor/admin/{page_name}')
+        self.config.add_view(self.admin, route_name='admin-b1')
+        self.config.add_view(self.admin, route_name='admin-b2')
+        self.config.add_view(self.admin, route_name='admin')
+
         # Check the service.
         self.check_service(zk_servers)
+
+    @connected
+    def admin(self, context, request):
+        """
+        Render a page from the admin directory and write it back.
+        """
+        if request.method == 'GET':
+            page_name = request.matchdict.get('page_name', 'index.html')
+            filename = os.path.join(os.path.dirname(__file__), "../share/reactor/admin/", page_name)
+            template = Template(filename=filename)
+            auth_key = get_auth_key(request)
+            kwargs = {}
+            kwargs.update(request.params.items())
+            kwargs["auth_key"] = auth_key
+            page_data = template.render(**kwargs)
+            return Response(body=page_data)
+        else:
+            return Response(status=403)
 
     @connected
     @authorized_admin_only

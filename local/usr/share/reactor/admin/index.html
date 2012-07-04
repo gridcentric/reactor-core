@@ -1,0 +1,121 @@
+<!DOCTYPE HTML>
+<html dir="ltr" lang="en-US">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+
+<title>Reactor Administration</title>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+<link href="http://cdn.kendostatic.com/2012.1.322/styles/kendo.common.min.css" rel="stylesheet"/>
+<link href="http://cdn.kendostatic.com/2012.1.322/styles/kendo.default.min.css" rel="stylesheet"/>
+<script src="http://cdn.kendostatic.com/2012.1.322/js/kendo.all.min.js"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/flot/0.7/jquery.flot.min.js"></script>
+
+<style type="text/css">
+    body {
+        font-family: helvetica, arial, sans-serif;
+        font-size: 10pt;
+        margin: 0;
+    }
+    h1 {
+        font-size: 14pt;
+        margin-left: 20px;
+    }
+    .wrapper {
+        margin: auto;
+        padding: 3px;
+    }
+    p {
+        margin: 10px;
+    }
+    form {
+        text-align: center;
+        margin: 5px;
+    }
+    input {
+        margin: 3px;
+    }
+    select {
+        margin: 3px;
+    }
+    span {
+        text-align: left;
+    }
+    #content {
+        position: relative;
+        width: 450px;
+        top: 100px;
+
+        background: #e3e3e3;
+
+        border-width: 1px;
+        border-style: solid;
+        border-color: #c5c5c5;
+    }
+    #tabs {
+    }
+</style>
+
+<script type="text/javascript">
+    // This function is useful for generating unique identifiers
+    // for div and elements that are added to the page dynamically.
+    // (Generally once the divs are added, we track the elements
+    // in a javascript array -- so determinism is not so important).
+    function randomId() {
+        var chars = 'abcdefghiklmnopqrstuvwxyz'.split('');
+        var str = '';
+        for( var i = 0; i < 8; i++ ) {
+            str += chars[Math.floor(Math.random() * chars.length)];
+        }
+        return str;
+    }
+
+    // This object is used to store the global windows created
+    // as per above. It is initialized here so that it doesn't
+    // get reset over-and-over again.
+    var windows = {};
+
+    $(document).ready(function() {
+        $('#tabs').kendoTabStrip({
+            dataTextField: "text",
+            dataUrlField: "url",
+            dataContentUrlField: "contentUrl",
+            dataSource:
+            [
+            {
+                text: "Services",
+                contentUrl: "/reactor/admin/objects.html?auth_key=${auth_key}&object_type=service&object_field=services",
+            },
+            {
+                text: "Managers",
+                contentUrl: "/reactor/admin/objects.html?auth_key=${auth_key}&object_type=manager&object_field=managers_configured",
+            },
+            {
+                text: "Config",
+                contentUrl: "/reactor/admin/config.html?auth_key=${auth_key}",
+            }
+            ]
+        });
+    });
+</script>
+
+</head>
+
+<body>
+<div class="wrapper" id="content">
+    <h1>Reactor Administration Panel</h1>
+    <div id="tabs">
+        <ul><li class="k-state-active">About</li></ul>
+        <div>
+            <p>Gridcentric Reactor is a virtual appliance for load balancing
+            and managing scalable web services.</p>
+
+            <p>For more information, visit
+            <a href="http://www.gridcentric.com">www.gridcentric.com</a>.</p>
+        </div>
+
+    </div>
+</div>
+</body>
+
+</html>

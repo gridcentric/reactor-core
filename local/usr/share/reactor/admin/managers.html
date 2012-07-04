@@ -1,0 +1,83 @@
+<script type="text/javascript">
+    var managerList = new kendo.data.DataSource({
+        transport: {
+            read: {
+                url: "/v1.0/managers?auth_key=${auth_key}",
+                dataType: "json",
+            }
+        },
+        schema: {
+            data: function(data) {
+                return data["managers_configured"]
+            }
+        }
+    });
+
+    $("#managerAutoComplete").kendoAutoComplete({
+        dataSource: managerList,
+    });
+    $("#managerDropdown").kendoDropDownList({
+        dataSource: managerList,
+    });
+
+    function managerOpen(manager) {
+        var managerDiv = $("#managerBox-" + manager);
+        $("#managerContent").append(" \
+                <div id='managerBox-" + manager + "' style='padding: 0;'> \
+                <ul id='managerBoxContent-" + manager + "'> \
+                </ul></div>");
+        $("#managerBoxContent-" + manager).kendoPanelBar({
+            expandMode: "single",
+            dataSource: [
+            {
+                text: "View",
+                contentUrl: \
+                "/reactor/admin/manager-view.html?auth_key=${auth_key}&manager=" + manager,
+                expanded: true,
+            },
+            {
+                text: "Edit",
+                contentUrl: \
+                "/reactor/admin/manager-edit.html?auth_key=${auth_key}&manager=" + manager,
+            }]
+        });
+        $("#managerBox-" + manager).kendoWindow({
+            actions: ["Refresh", "Maximize", "Minimize", "Close"],
+            draggable: true,
+            height: "300px",
+            modal: false,
+            resizable: true,
+            title: manager,
+            width: "500px",
+        });
+    }
+
+    $("#managerText").submit(function(e) {
+        e.preventDefault();
+        var manager = document.forms["managerText"].elements[0].value;
+        managerOpen(manager);
+    });
+    $("#managerList").submit(function(e) {
+        e.preventDefault();
+        var manager = document.forms["managerList"].elements[0].value;
+        managerOpen(manager);
+    });
+</script>
+
+<div id="managerSelector">
+<form id="managerText">
+    <input id="managerAutoComplete"/>
+    <input type="submit" value="Show">
+</form>
+<form id="managerList">
+    <select id="managerDropdown">
+    </select>
+    <input type="submit" value="Show">
+</form>
+</div>
+
+<div id="managerContent">
+</div>
+
+</form>
+</div>
