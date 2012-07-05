@@ -22,7 +22,6 @@ from gridcentric.pancake.api import authorized_admin_only
 import gridcentric.pancake.ips as ips
 import gridcentric.pancake.zookeeper.config as zk_config
 import gridcentric.pancake.zookeeper.paths as paths
-import gridcentric.pancake.zooclient as zooclient
 
 class APIService(Service):
     def __init__(self, scale_manager):
@@ -55,8 +54,7 @@ class APIService(Service):
             def auth_info(self):
                 return None
             def static_ips(self):
-                client = zooclient.PancakeClient(self.scale_manager.zk_servers)
-                return client.get_managers_active()
+                return self.scale_manager.zk_conn.list_children(paths.manager_ips())
             def cloud_type(self):
                 return "none"
             def cloud_config(self):
