@@ -73,9 +73,17 @@ class ZookeeperConnection(object):
         self.handle = connect(servers)
 
     def __del__(self):
+        self.close()
+
+    def close(self):
         self.cond.acquire()
+        # Forget current watches, otherwise it's easy for
+        # circular references to keep this object around.
+        self.watches = {}
         try:
-            zookeeper.close(self.handle)
+            if self.handle:
+                zookeeper.close(self.handle)
+                self.handle = None
         except:
             logging.warn("Error closing Zookeeper handle.")
         finally:

@@ -31,13 +31,14 @@ def locked(fn):
 class ScaleManager(object):
 
     def __init__(self, zk_servers):
-        self.running = False
         self.zk_servers = zk_servers
-        self.config = ManagerConfig("")
-        self.cond = threading.Condition()
+        self.zk_conn    = None
+        self.running    = False
+        self.config     = ManagerConfig("")
+        self.cond       = threading.Condition()
 
-        self.uuid = str(uuid.uuid4()) # Manager uuid (generated).
-        self.domain = ""              # Pancake domain.
+        self.uuid   = str(uuid.uuid4()) # Manager uuid (generated).
+        self.domain = ""                # Pancake domain.
 
         self.services = {}        # Service map (name -> service)
         self.key_to_services = {} # Service map (key() -> [services...])
@@ -53,6 +54,8 @@ class ScaleManager(object):
     @locked
     def serve(self):
         # Create a Zookeeper connection.
+        if self.zk_conn:
+            self.zk_conn.close()
         self.zk_conn = ZookeeperConnection(self.zk_servers)
 
         # Register ourselves.

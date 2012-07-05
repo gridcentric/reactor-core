@@ -143,6 +143,8 @@ class PancakeApi:
         self.client = PancakeClient(zk_servers)
 
     def disconnect(self):
+        if self.client:
+            self.client.close()
         self.client = None
 
     def ensure_connected(self):
