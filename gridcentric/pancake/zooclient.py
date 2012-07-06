@@ -10,6 +10,9 @@ class PancakeClient(object):
         self.zk_conn = ZookeeperConnection(zk_servers)
 
     def __del__(self):
+        self.close()
+
+    def close(self):
         self.zk_conn.close()
 
     def list_managed_services(self):
