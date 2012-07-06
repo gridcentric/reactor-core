@@ -115,7 +115,7 @@ class ServiceCriteria(object):
         return self.values[0]
 
     def metric_key(self):
-        return self.key
+        return self.key.strip()
 
     def _parse(self, criteria_str):
         """
