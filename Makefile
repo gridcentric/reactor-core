@@ -29,6 +29,7 @@ contrib/zookeeper-3.4.3: contrib/zookeeper-3.4.3.tar.gz Makefile
 # Build the appropriate python bindings.
 image/contrib/python-zookeeper-3.4.3.tgz: contrib/zookeeper-3.4.3 Makefile
 	@mkdir -p dist-zookeeper
+	@mkdir -p image/contrib
 	@cd contrib/zookeeper-3.4.3/src/c && make install DESTDIR=$$PWD/../../../../dist-zookeeper/
 	@cd contrib/zookeeper-3.4.3/src/contrib/zkpython && ant tar-bin
 	@cd dist-zookeeper && tar zxf ../contrib/zookeeper-3.4.3/build/contrib/zkpython/dist/*.tar.gz
@@ -53,6 +54,7 @@ contrib/nginx-1.2.1: contrib/nginx-1.2.1.tar.gz Makefile
 # Build the appropriate nginx packages.
 image/contrib/nginx-1.2.1.tgz: contrib/nginx-1.2.1 Makefile
 	@mkdir -p dist-nginx
+	@mkdir -p image/contrib
 	@cd contrib/nginx-1.2.1 && $(MAKE) install DESTDIR=$$PWD/../../dist-nginx/
 	@rm -rf dist-nginx/usr/html
 	@rm -rf dist-nginx/etc/
