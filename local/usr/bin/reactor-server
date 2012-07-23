@@ -8,6 +8,8 @@ import json
 from pyramid.response import Response
 from paste.httpserver import serve
 
+from gridcentric.pancake import log
+
 from gridcentric.pancake.service import Service
 
 from gridcentric.pancake.manager import ScaleManager
@@ -196,6 +198,7 @@ class PancakeAutoApi(PancakeApi):
         PancakeApi.reconnect(self, zk_servers)
 
 def main():
+    log.configure(logging.DEBUG, "/var/log/reactor.log")
     try:
         zk_servers = zk_config.read_config()
     except:
