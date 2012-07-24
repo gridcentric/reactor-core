@@ -1,7 +1,8 @@
 /var/log/reactor.log {
     daily
     missingok
-    rotate 52
+    rotate 10
+    size 50M
     compress
     delaycompress
     notifempty
