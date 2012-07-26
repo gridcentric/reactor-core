@@ -77,19 +77,27 @@ def calculate_ideal_uniform(service_spec, metric_averages, num_instances):
             c = ServiceCriteria(criteria)
             logging.debug("Service criteria found: (%s, %s, %s)" % \
                     (c.metric_key(), c.lower_bound(), c.upper_bound()))
+
             avg = metric_averages.get(c.metric_key(), 0)
             (metric_min, metric_max) = \
-                    calculate_server_range(avg * num_instances, c.lower_bound(), c.upper_bound())
+                    calculate_server_range(avg * num_instances,
+                                           c.lower_bound(), c.upper_bound())
             logging.debug("Ideal instances for metric %s: %s" % \
                     (c.metric_key(), (metric_min, metric_max)))
+
             if ideal_instances == (-1, -1):
                 # First time through the loop so we just set it to the first ideal values.
                 ideal_instances = (metric_min, metric_max)
+
             else:
                 # We find the intersection of ideal servers between the
-                # existing metrics and this one.
-                ideal_instances = (max(ideal_instances[0], metric_min), \
-                                   min(ideal_instances[1], metric_max))
+                # existing metrics and this one. If the intersections are
+                # completely disjoint, we disregard the later section.
+                new_min = max(ideal_instances[0], metric_min)
+                new_max = min(ideal_instances[1], metric_max)
+                if new_min <= new_max:
+                    ideal_instances = (new_min, new_max)
+
             logging.debug("Returning ideal instances [%s,%s]" % (ideal_instances))
 
     return ideal_instances
