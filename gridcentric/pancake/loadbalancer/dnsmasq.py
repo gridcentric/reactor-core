@@ -28,7 +28,7 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
     def clear(self):
         self.mappings = {}
 
-    def change(self, url, port, names, manager_ips, public_ips, private_ips):
+    def change(self, endpoint, port, names, manager_ips, public_ips, private_ips):
         # If there are no public ips, we use the manager.
         if len(public_ips) == 0:
             public_ips = manager_ips

@@ -89,7 +89,7 @@ class ServiceConfig(Config):
     def __init__(self, config_str):
         super(ServiceConfig, self).__init__(StringIO("""
 [service]
-url=http://example.com
+endpoint=http://example.com
 static_instances=
 port=
 auth_hash=
@@ -102,7 +102,8 @@ public=false
 min_instances=1
 max_instances=1
 metrics=
-source=
+endpoint=
+ramp_limit=5
 
 [cloud:nova-vms]
 instance_id=0
@@ -125,8 +126,8 @@ project=admin
 """))
         self._load(config_str)
 
-    def url(self):
-        return self._get("service", "url")
+    def endpoint(self):
+        return self._get("service", "endpoint")
 
     def port(self):
         return self._get("service", "port")
@@ -146,8 +147,11 @@ project=admin
     def metrics(self):
         return self._get("scaling", "metrics").split(",")
 
-    def source(self):
-        return self._get("scaling", "source")
+    def ramp_limit(self):
+        return int(self._get("scaling", "ramp_limit") or 5)
+
+    def source_endpoint(self):
+        return self._get("scaling", "endpoint")
 
     def cloud_type(self):
         return self._get("service", "cloud")

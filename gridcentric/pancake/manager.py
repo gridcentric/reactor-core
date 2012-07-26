@@ -12,6 +12,7 @@ from StringIO import StringIO
 from gridcentric.pancake.config import ManagerConfig
 from gridcentric.pancake.config import ServiceConfig
 from gridcentric.pancake.service import Service
+from gridcentric.pancake.service import compute_key
 import gridcentric.pancake.loadbalancer.connection as lb_connection
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
@@ -367,10 +368,10 @@ class ScaleManager(object):
                 else:
                     private_ips += self.active_ips(service_name)
 
-        logging.info("Updating loadbalancer for url %s with public=%s, private=%s" %
-                     (service.service_url(), public_ips, private_ips))
-        self.load_balancer.change(service.service_url(),
-                                  service.config.port(),
+        logging.info("Updating loadbalancer for %s with public=%s, private=%s" %
+                     (service.service_endpoint(), public_ips, private_ips))
+        self.load_balancer.change(service.service_endpoint(),
+                                  service.service_port(),
                                   names,
                                   self.manager_ips,
                                   public_ips,
@@ -391,8 +392,8 @@ class ScaleManager(object):
                 else:
                     private_ips += self.active_ips(service_name)
 
-            self.load_balancer.change(service.service_url(),
-                                      service.config.port(),
+            self.load_balancer.change(service.service_endpoint(),
+                                      service.serivce_port(),
                                       names,
                                       self.manager_ips,
                                       public_ips,
@@ -590,13 +591,9 @@ class ScaleManager(object):
         # This, like many other things, is specified here by the name
         # of the service we are inheriting metrics for. If not given,
         # we default to the current service.
-        source = service.config.source()
-        if source:
-            source_service = self.services.get(source, None)
-            if source_service:
-                metrics = service_metrics.get(source_service.key(), [])
-            else:
-                metrics = []
+        endpoint = service.source_endpoint()
+        if endpoint:
+            metrics = service_metrics.get(compute_key(endpoint), [])
         else:
             metrics = service_metrics.get(service.key(), [])
 

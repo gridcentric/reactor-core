@@ -9,6 +9,9 @@ from gridcentric.pancake.config import ServiceConfig
 
 import gridcentric.pancake.metrics.calculator as metric_calculator
 
+def compute_key(endpoint):
+    return hashlib.md5(endpoint).hexdigest()
+
 class Service(object):
 
     def __init__(self, name, service_config, scale_manager):
@@ -20,7 +23,7 @@ class Service(object):
         self.cloud_conn = cloud_connection.get_connection(self.cloud, self.config.cloud_config())
 
     def key(self):
-        return hashlib.md5(self.config.url()).hexdigest()
+        return compute_key(self.config.endpoint())
 
     def manage(self):
         # Load the configuration and configure the service.
@@ -106,26 +109,33 @@ class Service(object):
         logging.debug("Target number of instances for service %s determined to be %s (current: %s)"
                       % (self.name, target, num_instances))
 
+        # Perform only 'ramp' actions per iterations.
+        action_count = 0
+        ramp_limit = self.config.ramp_limit()
+
         # Launch instances until we reach the min setting value.
-        while num_instances < target:
+        while num_instances < target and action_count < ramp_limit:
             self._launch_instance("bringing instance total up to target %s" % target)
             num_instances += 1
+            action_count += 1
 
         # Delete instances until we reach the max setting value.
-        instances_to_delete = instances[target:]
-        instances = instances[:target]
+        instances_to_delete = []
+        while target < num_instances and action_count < ramp_limit:
+            instances_to_delete.append(instances.pop())
+            action_count += 1
 
         self.decommission_instances(instances_to_delete,
             "bringing instance total down to target %s" % target)
 
     def update_config(self, config_str):
         # Check if our configuration is about to change.
-        old_url = self.config.url()
+        old_endpoint = self.config.endpoint()
         old_static_addresses = self.config.static_ips()
         old_port = self.config.port()
         old_cloud_config = self.config.cloud_config()
         new_config = ServiceConfig(config_str)
-        new_url = new_config.url()
+        new_endpoint = new_config.endpoint()
         new_static_addresses = new_config.static_ips()
         new_port = new_config.port()
         new_cloud_config = new_config.cloud_config()
@@ -189,8 +199,14 @@ class Service(object):
                      (self.name, reason))
         self.cloud_conn.start_instance(params=self.scale_manager.start_params())
 
-    def service_url(self):
-        return self.config.url()
+    def service_endpoint(self):
+        return self.config.endpoint()
+
+    def service_port(self):
+        return self.config.port()
+
+    def source_endpoint(self):
+        return self.config.source_endpoint()
 
     def static_addresses(self):
         return self.config.static_ips()
