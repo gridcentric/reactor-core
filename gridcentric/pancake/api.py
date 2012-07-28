@@ -6,7 +6,7 @@ import traceback
 from pyramid.config import Configurator
 from pyramid.response import Response
 
-from gridcentric.pancake.config import ServiceConfig
+from gridcentric.pancake.config import EndpointConfig
 from gridcentric.pancake.config import ManagerConfig
 from gridcentric.pancake.zooclient import PancakeClient
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
@@ -45,7 +45,7 @@ def authorized(request_handler):
         auth_key = get_auth_key(request)
         try:
             if self._authorize_ip_access(context, request) or \
-                self._authorize_service_access(context, request, auth_key) or \
+                self._authorize_endpoint_access(context, request, auth_key) or \
                 self._authorize_admin_access(context, request, auth_key):
                 return request_handler(self, context, request)
             else:
@@ -103,39 +103,39 @@ class PancakeApi:
         self.config.add_route('manager-list', '/v1.0/managers')
         self.config.add_view(self.list_managers, route_name='manager-list')
 
-        self.config.add_route('service-action', '/v1.0/services/{service_name}')
-        self.config.add_view(self.handle_service_action, route_name='service-action')
+        self.config.add_route('endpoint-action', '/v1.0/endpoints/{endpoint_name}')
+        self.config.add_view(self.handle_endpoint_action, route_name='endpoint-action')
 
-        self.config.add_route('service-list', '/v1.0/services')
-        self.config.add_view(self.list_services, route_name='service-list')
+        self.config.add_route('endpoint-list', '/v1.0/endpoints')
+        self.config.add_view(self.list_endpoints, route_name='endpoint-list')
 
-        self.config.add_route('service-ip-list',
-            '/v1.0/services/{service_name}/ips')
-        self.config.add_route('service-ip-list-implicit',
-            '/v1.0/service/ips')
-        self.config.add_view(self.list_service_ips, route_name='service-ip-list')
-        self.config.add_view(self.list_service_ips, route_name='service-ip-list-implicit')
+        self.config.add_route('endpoint-ip-list',
+            '/v1.0/endpoints/{endpoint_name}/ips')
+        self.config.add_route('endpoint-ip-list-implicit',
+            '/v1.0/endpoint/ips')
+        self.config.add_view(self.list_endpoint_ips, route_name='endpoint-ip-list')
+        self.config.add_view(self.list_endpoint_ips, route_name='endpoint-ip-list-implicit')
 
         self.config.add_route('metric-action',
-            '/v1.0/services/{service_name}/metrics')
+            '/v1.0/endpoints/{endpoint_name}/metrics')
         self.config.add_route('metric-action-implicit',
-            '/v1.0/service/metrics')
+            '/v1.0/endpoint/metrics')
         self.config.add_view(self.handle_metric_action, route_name='metric-action')
         self.config.add_view(self.handle_metric_action, route_name='metric-action-implicit')
 
         self.config.add_route('metric-ip-action',
-            '/v1.0/services/{service_name}/metrics/{service_ip}')
+            '/v1.0/endpoints/{endpoint_name}/metrics/{endpoint_ip}')
         self.config.add_route('metric-ip-action-implicit',
-            '/v1.0/service/metrics/{service_ip}')
+            '/v1.0/endpoint/metrics/{endpoint_ip}')
         self.config.add_view(self.handle_metric_action, route_name='metric-ip-action')
         self.config.add_view(self.handle_metric_action, route_name='metric-ip-action-implicit')
 
-        self.config.add_route('service-info-action',
-            '/v1.0/services/{service_name}/info')
-        self.config.add_route('service-info-action-implicit',
-            '/v1.0/service/info')
-        self.config.add_view(self.handle_info_action, route_name='service-info-action')
-        self.config.add_view(self.handle_info_action, route_name='service-info-action-implicit')
+        self.config.add_route('endpoint-info-action',
+            '/v1.0/endpoints/{endpoint_name}/info')
+        self.config.add_route('endpoint-info-action-implicit',
+            '/v1.0/endpoint/info')
+        self.config.add_view(self.handle_info_action, route_name='endpoint-info-action')
+        self.config.add_view(self.handle_info_action, route_name='endpoint-info-action-implicit')
 
     def reconnect(self, zk_servers):
         self.disconnect()
@@ -169,19 +169,19 @@ class PancakeApi:
             return True
 
     @connected
-    def _authorize_service_access(self, context, request, auth_key):
-        service_name = request.matchdict.get('service_name', None)
+    def _authorize_endpoint_access(self, context, request, auth_key):
+        endpoint_name = request.matchdict.get('endpoint_name', None)
 
-        if service_name != None:
-            service_config = ServiceConfig(\
-                self.client.get_service_config(service_name))
+        if endpoint_name != None:
+            endpoint_config = EndpointConfig(\
+                self.client.get_endpoint_config(endpoint_name))
 
             auth_hash, auth_salt, auth_algo = \
-                service_config.get_service_auth()
+                endpoint_config.get_endpoint_auth()
 
             if auth_hash != None and auth_hash != "":
                 if auth_key != None:
-                    auth_token = self._create_service_auth_token(\
+                    auth_token = self._create_endpoint_auth_token(\
                         auth_key, auth_salt, auth_algo)
                     return auth_hash == auth_token
                 else:
@@ -214,17 +214,17 @@ class PancakeApi:
         if matched_route != None:
             if matched_route.name.endswith("-implicit"):
                 # We can only do ip authorizing on implicit routes. Essentially
-                # we will update the request to confine it to the service with
+                # we will update the request to confine it to the endpoint with
                 # this address.
                 request_ip = self._extract_remote_ip(context, request)
-                service_name = self.client.get_ip_address_service(request_ip)
-                if service_name != None:
-                    # Authorize this request and set the service_name.
-                    request.matchdict['service_name'] = service_name
-                    request.matchdict['service_ip'] = request_ip
+                endpoint_name = self.client.get_ip_address_endpoint(request_ip)
+                if endpoint_name != None:
+                    # Authorize this request and set the endpoint_name.
+                    request.matchdict['endpoint_name'] = endpoint_name
+                    request.matchdict['endpoint_ip'] = request_ip
                     return True
                 else:
-                    raise Exception("Must query from service ip.")
+                    raise Exception("Must query from endpoint ip.")
 
         return False
 
@@ -235,7 +235,7 @@ class PancakeApi:
         else:
             return None
 
-    def _create_service_auth_token(self, auth_key, auth_salt, algo):
+    def _create_endpoint_auth_token(self, auth_key, auth_salt, algo):
         if auth_salt == None:
             auth_salt = ""
 
@@ -248,7 +248,7 @@ class PancakeApi:
                 hash = hashlib.new(algo, salted)
                 return hash.hexdigest()
             except:
-                logging.warn("Failed to authenticate against service %s "
+                logging.warn("Failed to authenticate against endpoint %s "
                              "because algorithm type is not supported.")
                 return ""
 
@@ -341,6 +341,14 @@ class PancakeApi:
             else:
                 self.client.update_manager_config(manager, manager_config.get('config', ""))
 
+        elif request.method == "DELETE":
+            config = self.client.get_manager_config(manager)
+            if config != None:
+                self.client.remove_manager_config(manager)
+                response = Response()
+            else:
+                response = Response(status=404, body="%s not found" % manager)
+
         else:
             response = Response(status=403)
 
@@ -366,35 +374,35 @@ class PancakeApi:
 
     @connected
     @authorized_admin_only
-    def handle_service_action(self, context, request):
+    def handle_endpoint_action(self, context, request):
         """
-        This handles a general service action:
-        GET - Returns the service config in the Response body
-        POST - Either manages or updates the service with a new config in the request body
-        DELETE - Unmanages the service.
+        This handles a general endpoint action:
+        GET - Returns the endpoint config in the Response body
+        POST - Either manages or updates the endpoint with a new config in the request body
+        DELETE - Unmanages the endpoint.
         """
-        service_name = request.matchdict['service_name']
+        endpoint_name = request.matchdict['endpoint_name']
         response = Response()
 
         if request.method == "GET":
-            logging.info("Retrieving service %s configuration" % service_name)
+            logging.info("Retrieving endpoint %s configuration" % endpoint_name)
 
-            config = self.client.get_service_config(service_name)
+            config = self.client.get_endpoint_config(endpoint_name)
 
             if config != None:
-                service_config = ServiceConfig(self.client.get_service_config(service_name))
-                response = Response(body=json.dumps({'config' : str(service_config)}))
+                endpoint_config = EndpointConfig(self.client.get_endpoint_config(endpoint_name))
+                response = Response(body=json.dumps({'config' : str(endpoint_config)}))
             else:
-                response = Response(status=404, body="%s not found" % service_name)
+                response = Response(status=404, body="%s not found" % endpoint_name)
 
         elif request.method == "DELETE":
-            logging.info("Unmanaging service %s" % (service_name))
-            self.client.unmanage_service(service_name)
+            logging.info("Unmanaging endpoint %s" % (endpoint_name))
+            self.client.unmanage_endpoint(endpoint_name)
 
         elif request.method == "POST":
-            service_config = json.loads(request.body)
-            logging.info("Managing or updating service %s" % service_name)
-            self.client.update_service(service_name, service_config.get('config', ''))
+            endpoint_config = json.loads(request.body)
+            logging.info("Managing or updating endpoint %s" % endpoint_name)
+            self.client.update_endpoint(endpoint_name, endpoint_config.get('config', ''))
 
         else:
             # Return an unauthorized response.
@@ -406,18 +414,18 @@ class PancakeApi:
     @authorized
     def handle_info_action(self, context, request):
         """
-        This handles a service info request:
-        GET - Returns the current service info
+        This handles a endpoint info request:
+        GET - Returns the current endpoint info
         """
-        service_name = request.matchdict['service_name']
-        service_ip = request.matchdict.get('service_ip', None)
+        endpoint_name = request.matchdict['endpoint_name']
+        endpoint_ip = request.matchdict.get('endpoint_ip', None)
         response = Response()
 
         if request.method == "GET":
-            logging.info("Retrieving info for service %s" % service_name)
-            metrics = self.client.get_service_metrics(service_name)
-            connections = self.client.get_service_connections(service_name)
-            manager = self.client.get_service_manager(service_name)
+            logging.info("Retrieving info for endpoint %s" % endpoint_name)
+            metrics = self.client.get_endpoint_metrics(endpoint_name)
+            connections = self.client.get_endpoint_connections(endpoint_name)
+            manager = self.client.get_endpoint_manager(endpoint_name)
 
             if metrics or connections or manager:
                 value = { \
@@ -427,7 +435,7 @@ class PancakeApi:
                     }
                 response = Response(body=json.dumps(value))
             else:
-                response = Response(status=404, body="%s not found" % service_name)
+                response = Response(status=404, body="%s not found" % endpoint_name)
 
         else:
             response = Response(status=403)
@@ -441,14 +449,14 @@ class PancakeApi:
         This handles a general metric action:
         POST - Updates the metric info.
         """
-        service_name = request.matchdict['service_name']
-        service_ip = request.matchdict.get('service_ip', None)
+        endpoint_name = request.matchdict['endpoint_name']
+        endpoint_ip = request.matchdict.get('endpoint_ip', None)
         response = Response()
 
         if request.method == "POST":
             metrics = json.loads(request.body)
-            logging.info("Updating metrics for service %s" % service_name)
-            self.client.set_service_metrics(service_name, metrics, service_ip)
+            logging.info("Updating metrics for endpoint %s" % endpoint_name)
+            self.client.set_endpoint_metrics(endpoint_name, metrics, endpoint_ip)
 
         else:
             response = Response(status=403)
@@ -457,12 +465,12 @@ class PancakeApi:
 
     @connected
     @authorized
-    def list_service_ips(self, context, request):
-        service_name = request.matchdict['service_name']
+    def list_endpoint_ips(self, context, request):
+        endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
             response = Response(body=json.dumps({'ip_addresses': \
-                self.client.get_service_ip_addresses(service_name)}))
+                self.client.get_endpoint_ip_addresses(endpoint_name)}))
         else:
             response = Response(status=403)
 
@@ -470,13 +478,13 @@ class PancakeApi:
 
     @connected
     @authorized_admin_only
-    def list_services(self, context, request):
+    def list_endpoints(self, context, request):
         """
-        Returns a list of services currently being managed.
+        Returns a list of endpoints currently being managed.
         """
         if request.method == "GET":
-            services = self.client.list_managed_services()
-            response = Response(body=json.dumps({'services':services}))
+            endpoints = self.client.list_managed_endpoints()
+            response = Response(body=json.dumps({'endpoints':endpoints}))
         else:
             response = Response(status=403)
 

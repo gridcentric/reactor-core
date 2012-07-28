@@ -8,169 +8,124 @@ from gridcentric.pancake.exceptions import ConfigFileNotFound
 
 class Config(object):
 
-    def __init__(self, defaultcfg=None):
-        self.defaultcfg = defaultcfg
-        self.config = None
+    def __init__(self, config_str=''):
+        self.default = ConfigParser.SafeConfigParser()
+        self.config  = ConfigParser.SafeConfigParser()
+        self._load(config_str)
+        self.clean = True
 
-    def _get(self, section, key):
+    def _get(self, section, key, default):
+        # Set the default value.
+        if not(self.default.has_section(section)):
+            self.default.add_section(section)
+        self.default.set(section, key, default)
+
+        # Get the real value.
         if self.config.has_option(section, key):
             return self.config.get(section, key)
         else:
-            return None
+            return default
+
+    def _set(self, section, key, value):
+        if not(self.config.has_section(section)):
+            self.config.add_section(section)
+
+        # Check for a same value.
+        if self.config.has_option(section, key) and \
+            self.config.get(section, key) == value:
+            return
+        else:
+            self.config.set(section, key, value)
+            self.clean = False
+
+    def _is_clean(self):
+        return self.clean
 
     def _load(self, config_str):
-        self.config = ConfigParser.SafeConfigParser()
-        if self.defaultcfg != None:
-            self.config.readfp(self.defaultcfg)
         if config_str != None:
             self.config.readfp(StringIO(config_str))
 
     def reload(self, config_str):
-        if self.config == None:
-            self._load(config_str)
-        else:
-            self.config.readfp(StringIO(config_str))
+        self.config.readfp(StringIO(config_str))
 
     def __str__(self):
         config_value = StringIO()
+        self.default.write(config_value)
         self.config.write(config_value)
         return config_value.getvalue()
 
+class ConfigView(object):
+
+    def __init__(self, config, section):
+        self.config  = config
+        self.section = section
+
+    def get(self, key, default):
+        return self.config._get(self.section, key, default)
+
 class ManagerConfig(Config):
 
-    def __init__(self, config_str):
-        super(ManagerConfig, self).__init__(StringIO("""
-[manager]
-health_check=5
-unregistered_wait=20
-decommissioned_wait=5
-keys=64
-loadbalancer=
-
-[loadbalancer:nginx]
-config_path=/etc/nginx/conf.d
-site_path=/etc/nginx/sites-enabled
-sticky_sessions=false
-keepalive=0
-
-[loadbalancer:dnsmasq]
-config_path=/etc/dnsmasq.d
-hosts_path=/etc/hosts.pancake
-"""))
-        self._load(config_str)
-
     def loadbalancer_names(self):
-        """
-        The name of the loadbalancer.
-        """
-        return self._get("manager", "loadbalancer").split(",")
+        """ The name of the loadbalancer. """
+        return self._get("manager", "loadbalancer", "").split(",")
 
     def loadbalancer_config(self, name):
-        """
-        The set of keys required to configure the loadbalancer.
-        """
-        result = {}
-        if self.config.has_section("loadbalancer:%s" % name):
-            result.update(self.config.items("loadbalancer:%s" % name))
-        return result
+        """ The set of keys required to configure the loadbalancer. """
+        return ConfigView(self, "loadbalancer:%s" % name)
 
     def mark_maximum(self, label):
         if label in ['unregistered', 'decommissioned']:
-            return int(self._get("manager", "%s_wait" % (label)))
+            return int(self._get("manager", "%s_wait" % (label), "20"))
 
     def keys(self):
-        return int(self._get("manager", "keys"))
+        return int(self._get("manager", "keys", "64"))
 
     def health_check(self):
-        return float(self._get("manager", "health_check"))
+        return float(self._get("manager", "health_check", "5"))
 
-class ServiceConfig(Config):
+class EndpointConfig(Config):
 
-    def __init__(self, config_str):
-        super(ServiceConfig, self).__init__(StringIO("""
-[service]
-endpoint=http://example.com
-static_instances=
-port=
-auth_hash=
-auth_salt=
-auth_algo=sha1
-cloud=none
-public=false
-
-[scaling]
-min_instances=1
-max_instances=1
-metrics=
-endpoint=
-ramp_limit=5
-
-[cloud:nova-vms]
-instance_id=0
-authurl=http://localhost:8774/v1.1/
-user=admin
-apikey=admin
-project=admin
-target=0
-
-[cloud:nova]
-image_id=0
-flavor_id=1
-key_name=
-instance_name=
-security_groups=
-authurl=http://localhost:8774/v1.1/
-user=admin
-apikey=admin
-project=admin
-"""))
-        self._load(config_str)
-
-    def endpoint(self):
-        return self._get("service", "endpoint")
+    def url(self):
+        return self._get("endpoint", "url", '')
 
     def port(self):
-        return self._get("service", "port")
+        return int(self._get("endpoint", "port", "80"))
 
     def public(self):
-        return self._get("service", "public") == "true"
+        return self._get("endpoint", "public", "true") == "true"
 
     def instance_id(self):
-        return str(self._get("nova", "instance_id"))
+        return str(self._get("nova", "instance_id", "0"))
 
     def min_instances(self):
-        return int(self._get("scaling", "min_instances") or 1)
+        return int(self._get("scaling", "min_instances", "1"))
 
     def max_instances(self):
-        return int(self._get("scaling", "max_instances") or 1)
+        return int(self._get("scaling", "max_instances", "1"))
 
-    def metrics(self):
-        return self._get("scaling", "metrics").split(",")
+    def rules(self):
+        return self._get("scaling", "rules", "").split(",")
 
     def ramp_limit(self):
-        return int(self._get("scaling", "ramp_limit") or 5)
+        return int(self._get("scaling", "ramp_limit", "5"))
 
-    def source_endpoint(self):
-        return self._get("scaling", "endpoint")
+    def source_url(self):
+        return self._get("scaling", "url", "")
 
     def cloud_type(self):
-        return self._get("service", "cloud")
+        return self._get("endpoint", "cloud", "none")
 
     def cloud_config(self):
-        cloud_name = self.cloud_type()
-        cloud_config = {}
-        if self.config.has_section("cloud:%s" % cloud_name):
-            cloud_config.update(self.config.items("cloud:%s" % cloud_name))
-        return cloud_config
+        return ConfigView(self, "cloud:%s" % self.cloud_type())
 
-    def get_service_auth(self):
-        return (self._get("service", "auth_hash"),
-                self._get("service", "auth_salt"),
-                self._get("service", "auth_algo"))
+    def get_endpoint_auth(self):
+        return (self._get("endpoint", "auth_hash", ""),
+                self._get("endpoint", "auth_salt", ""),
+                self._get("endpoint", "auth_algo", ""))
 
     def static_ips(self):
         """ Returns a list of static ips associated with the configured static instances. """
-        static_instances = self._get("service", "static_instances").split(",")
+        static_instances = self._get("endpoint", "static_instances", "").split(",")
 
         # (dscannell) The static instances can be specified either as IP
         # addresses or hostname.  If its an IP address then we are done. If its
@@ -181,6 +136,7 @@ project=admin
                 if static_instance != '':
                     ip_addresses += [socket.gethostbyname(static_instance)]
             except:
-                logging.warn("Failed to determine the ip address for the static instance %s." %
-                             static_instance)
+                logging.warn("Failed to determine the ip address "
+                             "for the static instance %s." % static_instance)
+
         return ip_addresses

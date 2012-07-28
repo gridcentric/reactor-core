@@ -4,19 +4,21 @@ The generic load balancer interface.
 
 def get_connection(name, config, scale_manager):
     if name == "nginx":
-        config_path = config.get("config_path", "/etc/nginx/conf.d")
-        site_path = config.get("site_path", "/etc/nginx/sites-enabled")
+        config_path     = config.get("config_path", "/etc/nginx/conf.d")
+        site_path       = config.get("site_path", "/etc/nginx/sites-enabled")
         sticky_sessions = config.get("sticky_sessions", "false").lower() == "true"
         try:
             keepalive = int(config.get("keepalive", '0'))
         except:
             keepalive = 0
+
         from gridcentric.pancake.loadbalancer.nginx import NginxLoadBalancerConnection
         return NginxLoadBalancerConnection(config_path, site_path, sticky_sessions, keepalive)
 
     elif name == "dnsmasq":
         config_path = config.get("config_path", "/etc/dnsmasq.d")
-        hosts_path = config.get("hosts_path", "/etc/hosts.pancake")
+        hosts_path  = config.get("hosts_path", "/etc/hosts.pancake")
+
         from gridcentric.pancake.loadbalancer.dnsmasq import DnsmasqLoadBalancerConnection
         return DnsmasqLoadBalancerConnection(config_path, hosts_path, scale_manager)
 
@@ -29,7 +31,7 @@ def get_connection(name, config, scale_manager):
 class LoadBalancerConnection(object):
     def clear(self):
         pass
-    def change(self, endpoint, port, names, manager_ips, public_ips, private_ips):
+    def change(self, url, port, names, manager_ips, public_ips, private_ips):
         pass
     def save(self):
         pass
@@ -41,9 +43,9 @@ class LoadBalancers(list):
     def clear(self):
         for lb in self:
             lb.clear()
-    def change(self, endpoint, port, names, manager_ips, public_ips, private_ips):
+    def change(self, url, port, names, manager_ips, public_ips, private_ips):
         for lb in self:
-            lb.change(endpoint, port, names, manager_ips, public_ips, private_ips)
+            lb.change(url, port, names, manager_ips, public_ips, private_ips)
     def save(self):
         for lb in self:
             lb.save()

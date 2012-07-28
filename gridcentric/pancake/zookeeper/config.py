@@ -94,3 +94,9 @@ def check_config(new_servers):
         if is_running():
             ensure_stopped()
             ensure_started()
+
+def iptables_clear():
+    pass
+
+def iptables_allow(ip):
+    pass

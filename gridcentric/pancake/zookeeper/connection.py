@@ -176,12 +176,14 @@ class ZookeeperConnection(object):
                 pass
 
     @wrap_exceptions
-    def watch_contents(self, path, fn, default_value=""):
+    def watch_contents(self, path, fn, default_value="", clean=False):
         if not zookeeper.exists(self.handle, path):
             self.write(path, default_value)
 
         self.cond.acquire()
         try:
+            if clean:
+                self.watches[path] = []
             if not(fn in self.watches.get(path, [])):
                 self.watches[path] = self.watches.get(path, []) + [fn]
             value, timeinfo = zookeeper.get(self.handle, path, self.zookeeper_watch)
@@ -190,12 +192,14 @@ class ZookeeperConnection(object):
         return value
 
     @wrap_exceptions
-    def watch_children(self, path, fn, default_value=""):
+    def watch_children(self, path, fn, default_value="", clean=False):
         self.cond.acquire()
         if not zookeeper.exists(self.handle, path):
             self.write(path, default_value)
 
         try:
+            if clean:
+                self.watches[path] = []
             if not(fn in self.watches.get(path, [])):
                 self.watches[path] = self.watches.get(path, []) + [fn]
             rval = zookeeper.get_children(self.handle, path, self.zookeeper_watch)

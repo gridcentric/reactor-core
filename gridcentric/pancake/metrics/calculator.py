@@ -1,6 +1,6 @@
 """
-This module is used to calculate the ideal number of instances a service requires given
-all the gather metrics and the scaling spec of the service.
+This module is used to calculate the ideal number of instances a endpoint requires given
+all the gather metrics and the scaling spec of the endpoint.
 """
 
 import logging
@@ -55,35 +55,39 @@ def calculate_server_range(total, lower, upper):
 
     return r
 
-def calculate_ideal_uniform(service_spec, metric_averages, num_instances):
+def calculate_ideal_uniform(endpoint_spec, metric_averages, num_instances):
     """
-    Returns the ideal number of instances these service spec should have as a tuple that
+    Returns the ideal number of instances these endpoint spec should have as a tuple that
     defines the range (min_servers, max_servers).
-    
-    service_spec: A list of criteria that define that define the ideal range for a metric.
+
+    endpoint_spec: A list of criteria that define that define the ideal range for a metric.
                 e.g. ['20<=rate<=50','100<=response<800']
                 (The hits per second should be between 20 - 50 for each instance
                  and the response rate should be between 100ms - 800ms.)
-    
+
     metrics_averages: A set of metrics computed with calculate_weighted_averages
-    
+
     num_instances: The number of instances that produced these metrics
     """
 
     logging.debug("Metric totals: %s" % (metric_averages))
     ideal_instances = (-1, -1)
-    for criteria in service_spec:
+    for criteria in endpoint_spec:
         if criteria != '':
-            c = ServiceCriteria(criteria)
-            logging.debug("Service criteria found: (%s, %s, %s)" % \
+            c = EndpointCriteria(criteria)
+            logging.debug("Endpoint criteria found: (%s, %s, %s)" % \
                     (c.metric_key(), c.lower_bound(), c.upper_bound()))
 
-            avg = metric_averages.get(c.metric_key(), 0)
-            (metric_min, metric_max) = \
+            if c.metric_key() == 'instances':
+                (metric_min, metric_max) = (c.lower_bound(), c.upper_bound)
+            else:
+                avg = metric_averages.get(c.metric_key(), 0)
+                (metric_min, metric_max) = \
                     calculate_server_range(avg * num_instances,
                                            c.lower_bound(), c.upper_bound())
+
             logging.debug("Ideal instances for metric %s: %s" % \
-                    (c.metric_key(), (metric_min, metric_max)))
+                          (c.metric_key(), (metric_min, metric_max)))
 
             if ideal_instances == (-1, -1):
                 # First time through the loop so we just set it to the first ideal values.
@@ -102,7 +106,7 @@ def calculate_ideal_uniform(service_spec, metric_averages, num_instances):
 
     return ideal_instances
 
-class ServiceCriteria(object):
+class EndpointCriteria(object):
 
     def __init__(self, criteria_str):
         self.values = []

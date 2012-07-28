@@ -166,10 +166,10 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # Remove all tracked connections.
         self.tracked = {}
 
-    def change(self, endpoint, port, names, manager_ips, public_ips, private_ips):
+    def change(self, url, port, names, manager_ips, public_ips, private_ips):
         # We use a simple hash of the URL as the file name for the
         # configuration file.
-        uniq_id = hashlib.md5(endpoint).hexdigest()
+        uniq_id = hashlib.md5(url).hexdigest()
         conf_filename = "%s.conf" % uniq_id
 
         # There are no privacy concerns here, so we can mix all public and
@@ -190,7 +190,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
             return
 
         # Parse the url because we need to know the netloc.
-        (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(endpoint)
+        (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(url)
 
         # Check that this is a URL we should be managing.
         if not(scheme == "http") and not(scheme == "https"):
@@ -230,7 +230,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
 
         # Render our given template.
         conf = self.template.render(id=uniq_id,
-                                    url=endpoint,
+                                    url=url,
                                     netloc=netloc,
                                     path=path,
                                     scheme=scheme,

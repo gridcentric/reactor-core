@@ -5,40 +5,53 @@ import traceback
 import socket
 
 import gridcentric.pancake.cloud.connection as cloud_connection
-from gridcentric.pancake.config import ServiceConfig
+from gridcentric.pancake.config import EndpointConfig
 
 import gridcentric.pancake.metrics.calculator as metric_calculator
 
-def compute_key(endpoint):
-    return hashlib.md5(endpoint).hexdigest()
+def compute_key(url):
+    return hashlib.md5(url).hexdigest()
 
-class Service(object):
+class Endpoint(object):
 
-    def __init__(self, name, service_config, scale_manager):
+    def __init__(self, name, endpoint_config, scale_manager):
         self.name = name
-        self.config = service_config
+        self.config = endpoint_config
         self.scale_manager = scale_manager
         self.cloud = self.config.cloud_type()
         self.decommissioned_instances = []
         self.cloud_conn = cloud_connection.get_connection(self.cloud, self.config.cloud_config())
 
     def key(self):
-        return compute_key(self.config.endpoint())
+        return compute_key(self.url())
+
+    def url(self):
+        return self.config.url() or "none://%s" % self.name
+
+    def port(self):
+        return self.config.port()
+
+    def source_key(self):
+        source_url = self.config.source_url()
+        if source_url:
+            return compute_key(source_url)
+        else:
+            return None
 
     def manage(self):
-        # Load the configuration and configure the service.
-        logging.info("Managing service %s" % (self.name))
+        # Load the configuration and configure the endpoint.
+        logging.info("Managing endpoint %s" % (self.name))
         self.decommissioned_instances = self.scale_manager.decommissioned_instances(self.name)
 
     def unmanage(self):
         # Do nothing.
-        logging.info("Unmanaging service %s" % (self.name))
+        logging.info("Unmanaging endpoint %s" % (self.name))
 
     def update(self, reconfigure=True, metrics={}):
         try:
             self._update(reconfigure, metrics)
         except:
-            logging.error("Error updating service %s: %s" % \
+            logging.error("Error updating endpoint %s: %s" % \
                 (self.name, traceback.format_exc()))
 
     def _determine_target_instances_range(self, metrics, num_instances):
@@ -50,8 +63,8 @@ class Service(object):
         # Evaluate the metrics on these instances and get the ideal bounds on the number
         # of servers that should exist.
         ideal_min, ideal_max = metric_calculator.calculate_ideal_uniform(\
-                self.config.metrics(), metrics, num_instances)
-        logging.debug("Metrics for service %s: ideal_servers=%s (%s)" % \
+                self.config.rules(), metrics, num_instances)
+        logging.debug("Metrics for endpoint %s: ideal_servers=%s (%s)" % \
                 (self.name, (ideal_min, ideal_max), metrics))
 
         if ideal_max < ideal_min:
@@ -60,8 +73,8 @@ class Service(object):
             if metrics != []:
                 # Only log the warning if there were values for the metrics provided. In other words
                 # only if the metrics could have made a difference.
-                logging.warn("The metrics defined for service %s have resulted in a "
-                             "conflicting result. (service metrics: %s)"
+                logging.warn("The metrics defined for endpoint %s have resulted in a "
+                             "conflicting result. (endpoint metrics: %s)"
                              % (self.name, self.config.metrics()))
             return (ideal_min, ideal_max)
 
@@ -106,7 +119,7 @@ class Service(object):
             # midpoint in the target range.
             target = (target_min + target_max) / 2
 
-        logging.debug("Target number of instances for service %s determined to be %s (current: %s)"
+        logging.debug("Target number of instances for endpoint %s determined to be %s (current: %s)"
                       % (self.name, target, num_instances))
 
         # Perform only 'ramp' actions per iterations.
@@ -130,19 +143,20 @@ class Service(object):
 
     def update_config(self, config_str):
         # Check if our configuration is about to change.
-        old_endpoint = self.config.endpoint()
+        old_url = self.config.url()
         old_static_addresses = self.config.static_ips()
         old_port = self.config.port()
         old_cloud_config = self.config.cloud_config()
-        new_config = ServiceConfig(config_str)
-        new_endpoint = new_config.endpoint()
+
+        new_config = EndpointConfig(config_str)
+        new_url = new_config.url()
         new_static_addresses = new_config.static_ips()
         new_port = new_config.port()
         new_cloud_config = new_config.cloud_config()
 
         # Remove all old instances from loadbalancer.
         if old_url != new_url:
-            self.scale_manager.remove_service(self.name)
+            self.scale_manager.remove_endpoint(self.name)
 
         # Reload the configuration.
         self.config.reload(config_str)
@@ -152,9 +166,9 @@ class Service(object):
             self.cloud_conn = cloud_connection.get_connection(self.config.cloud_type(),
                                                               self.config.cloud_config())
 
-        # Do a referesh (to capture the new service).
+        # Do a referesh (to capture the new endpoint).
         if old_url != new_url:
-            self.scale_manager.add_service(self)
+            self.scale_manager.add_endpoint(self)
         elif old_static_addresses != new_static_addresses or \
              old_port != new_port:
             self._update_loadbalancer()
@@ -199,15 +213,6 @@ class Service(object):
                      (self.name, reason))
         self.cloud_conn.start_instance(params=self.scale_manager.start_params())
 
-    def service_endpoint(self):
-        return self.config.endpoint()
-
-    def service_port(self):
-        return self.config.port()
-
-    def source_endpoint(self):
-        return self.config.source_endpoint()
-
     def static_addresses(self):
         return self.config.static_ips()
 
@@ -228,7 +233,7 @@ class Service(object):
         try:
             return self.extract_addresses_from(self.instances())
         except:
-            logging.error("Error querying service %s addresses: %s" % \
+            logging.error("Error querying endpoint %s addresses: %s" % \
                 (self.name, traceback.format_exc()))
             return []
 
@@ -296,7 +301,7 @@ class Service(object):
             # There are orphaned ip addresses. We need to drop them and then
             # update the load balancer because there is no actual instance
             # backing them.
-            logging.info("Dropping ip addresses %s for service %s because they do not have"
+            logging.info("Dropping ip addresses %s for endpoint %s because they do not have"
                          "backing instances." % (orphaned_confirmed_ips, self.name))
             for orphaned_address in orphaned_confirmed_ips:
                 self.scale_manager.drop_ip(self.name, orphaned_address)

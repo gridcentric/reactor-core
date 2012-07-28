@@ -22,33 +22,33 @@ class PancakeApiClient(httplib2.Http):
         resp, body = self._authenticated_request('/', 'GET')
         return body.get('version', None)
 
-    def list_managed_services(self):
+    def list_managed_endpoints(self):
         """
-        Returns a list of all the services currently being managed by the pancake.
+        Returns a list of all the endpoints currently being managed by the pancake.
         """
-        resp, body = self._authenticated_request('/v1.0/services', 'GET')
-        return body.get('services', [])
+        resp, body = self._authenticated_request('/v1.0/endpoints', 'GET')
+        return body.get('endpoints', [])
 
-    def manage_service(self, service_name, config):
+    def manage_endpoint(self, endpoint_name, config):
         """
-        Manage the service using the given configuration.
+        Manage the endpoint using the given configuration.
         """
-        self._authenticated_request('/v1.0/services/%s' % (service_name),
+        self._authenticated_request('/v1.0/endpoints/%s' % (endpoint_name),
                                     'POST',
                                     body={'config':config})
 
-    def unmanage_service(self, service_name):
+    def unmanage_endpoint(self, endpoint_name):
         """
-        Unmanage the service.
+        Unmanage the endpoint.
         """
-        self._authenticated_request('/v1.0/services/%s' % (service_name), 'DELETE')
+        self._authenticated_request('/v1.0/endpoints/%s' % (endpoint_name), 'DELETE')
 
-    def get_service_config(self, service_name):
+    def get_endpoint_config(self, endpoint_name):
         """
-        Return the service's configuration.
+        Return the endpoint's configuration.
         """
-        resp, body = self._authenticated_request('/v1.0/services/%s' %
-                                                 service_name, 'GET')
+        resp, body = self._authenticated_request('/v1.0/endpoints/%s' %
+                                                 endpoint_name, 'GET')
         return body.get('config', "")
 
     def list_managers_configured(self):
@@ -81,29 +81,36 @@ class PancakeApiClient(httplib2.Http):
                                                  (manager or 'default'), 'GET')
         return body.get('config', "")
 
-    def list_service_ips(self, service_name):
+    def remove_manager_config(self, manager):
+        """
+        Remove the given manager's configuration.
+        """
+        resp, body = self._authenticated_request('/v1.0/managers/%s' % manager,
+                                                 'DELETE')
+
+    def list_endpoint_ips(self, endpoint_name):
         """
         Returns a list of the ip addresses (both dynamically confirmed and manually configured) for
-        this service.
+        this endpoint.
         """
-        resp, body = self._authenticated_request('/v1.0/services/%s/ips' %
-                                                 service_name, 'GET')
+        resp, body = self._authenticated_request('/v1.0/endpoints/%s/ips' %
+                                                 endpoint_name, 'GET')
         return body.get('ip_addresses', [])
 
-    def get_service_info(self, service_name):
+    def get_endpoint_info(self, endpoint_name):
         """
-        Return available live service info.
+        Return available live endpoint info.
         """
-        resp, body = self._authenticated_request('/v1.0/services/%s/info' %
-                                                 service_name, 'GET')
+        resp, body = self._authenticated_request('/v1.0/endpoints/%s/info' %
+                                                 endpoint_name, 'GET')
         return body
 
-    def set_service_metrics(self, service_name, metrics):
+    def set_endpoint_metrics(self, endpoint_name, metrics):
         """
-        Set the custom service metrics.
+        Set the custom endpoint metrics.
         """
-        self._authenticated_request('/v1.0/services/%s/metrics' %
-                                    service_name, 'POST', body=metrics)
+        self._authenticated_request('/v1.0/endpoints/%s/metrics' %
+                                    endpoint_name, 'POST', body=metrics)
 
     def update_api_key(self, api_key):
         """

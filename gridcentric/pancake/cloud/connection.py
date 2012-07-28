@@ -24,14 +24,14 @@ class CloudConnection(object):
 
     def list_instances(self):
         """
-        Lists the instances related to a service. Note that this list should be 
+        Lists the instances related to a endpoint. Note that this list should be 
         returned in order of oldest instance to youngest.
         """
         return []
 
     def start_instance(self, params={}):
         """
-        Starts a new instance in the cloud using the service
+        Starts a new instance in the cloud using the endpoint
         """
         pass
 

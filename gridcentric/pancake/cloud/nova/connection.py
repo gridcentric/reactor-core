@@ -15,14 +15,14 @@ class BaseNovaConnector(cloud_connection.CloudConnection):
 
     def _list_instances(self):
         """ 
-        Returns a  list of instances from the service. This is implemented by the
+        Returns a  list of instances from the endpoint. This is implemented by the
         subclasses
         """
         return []
 
     def list_instances(self):
         """
-        Lists the instances related to a service. The identifier is used to 
+        Lists the instances related to a endpoint. The identifier is used to 
         identify the related instances in the respective clouds.
         """
         instances = self._list_instances()
@@ -45,7 +45,7 @@ class BaseNovaConnector(cloud_connection.CloudConnection):
 
     def start_instance(self, params={}):
         """
-        Starts a new instance in the cloud using the service
+        Starts a new instance in the cloud using the endpoint
         """
         try:
             self._start_instance(params=params)
@@ -86,10 +86,10 @@ class NovaConnector(BaseNovaConnector):
 
     def _novaclient(self):
         try:
-            novaclient = NovaClient(self.config['user'],
-                                    self.config['apikey'],
-                                    self.config['project'],
-                                    self.config['authurl'])
+            novaclient = NovaClient(self.config.get('user', 'admin'),
+                                    self.config.get('apikey', 'admin'),
+                                    self.config.get('project', 'admin'),
+                                    self.config.get('authurl', 'http://localhost:8774/v1.1/')
             return novaclient.servers
         except Exception, e:
             traceback.print_exc()
@@ -97,11 +97,11 @@ class NovaConnector(BaseNovaConnector):
 
     def _list_instances(self):
         """ 
-        Returns a  list of instances from the service.
+        Returns a  list of instances from the endpoint.
         """
-        search_opts = {'name': self.config['instance_name'],
-                       'flavor': self.config['flavor_id'],
-                       'image': self.config['image_id']}
+        search_opts = {'name':   self.config.get('instance_name', 'name'),
+                       'flavor': self.config.get('flavor_id', '1'),
+                       'image':  self.config.get('image_id', '0')}
 
         instances = self._novaclient().list(search_opts=search_opts)
 
@@ -116,11 +116,11 @@ class NovaConnector(BaseNovaConnector):
     def _start_instance(self, params={}):
         # TODO: We can pass in the pancake parameter here via 
         # CloudStart or some other standard support mechanism.
-        self._novaclient().create(self.config['instance_name'],
-                                  self.config['image_id'],
-                                  self.config['flavor_id'],
-                                  security_groups=self.config['security_groups'].split(","),
-                                  key_name=self.config['key_name'] or None)
+        self._novaclient().create(self.config.get('instance_name', 'name'),
+                                  self.config.get('image_id', '0'),
+                                  self.config.get('flavor_id', '1'),
+                                  security_groups=self.config.get('security_groups', '').split(","),
+                                  key_name=self.config.get('key_name', '') or None)
 
     def _delete_instance(self, instance_id):
         self._novaclient()._delete("/servers/%s" % (instance_id))
@@ -134,11 +134,11 @@ class NovaVmsConnector(BaseNovaConnector):
 
     def _novaclient(self):
         try:
-            novaclient = GridcentricNovaClient(self.config['authurl'],
-                                    self.config['user'],
-                                    self.config['apikey'],
-                                    self.config['project'],
-                                    'v1.1')
+        novaclient = GridcentricNovaClient(self.config.get('authurl', 'http://localhost:8774/v1.1/'),
+                                           self.config.get('user', 'admin'),
+                                           self.config.get('apikey', 'admin'),
+                                           self.config.get('project', 'admin'),
+                                           'v1.1')
             return novaclient
         except Exception, e:
             traceback.print_exc()
@@ -146,13 +146,13 @@ class NovaVmsConnector(BaseNovaConnector):
 
     def _list_instances(self):
         """ 
-        Returns a  list of instances from the service.
+        Returns a list of instances from the endpoint.
         """
-        return self._novaclient().list_launched_instances(self.config['instance_id'])
+        return self._novaclient().list_launched_instances(self.config.get('instance_id', '0'))
 
     def _start_instance(self, params={}):
-        launch_params = { 'target' : self.config['target'], 'guest' : params }
-        self._novaclient().launch_instance(self.config['instance_id'], params=launch_params)
+        launch_params = { 'target' : self.config.get('target', '0'), 'guest' : params }
+        self._novaclient().launch_instance(self.config.get('instance_id', '0'), params=launch_params)
 
     def _delete_instance(self, instance_id):
         self._novaclient().delete_instance(instance_id)

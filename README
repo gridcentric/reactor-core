@@ -17,7 +17,7 @@ which registers with Pancake when cloning occurs, something like:
 
 Once this is done and the instance is running your demo app, bless the instance.
 
-3. Modify the example service.conf. In particular update the nova/instance_id
+3. Modify the example endpoint.conf. In particular update the nova/instance_id
 to point to the newly created instance.
 
 4. Run the scale manager server
@@ -26,10 +26,10 @@ $ sudo bin/pancake -z localhost:2181 runserver
 5. Run the scale manager API that allows communication with the scale manager.
 $ bin/pancake -z localhost:2181 runapi
 
-6. Create a new service to autoscale, using the example service.conf.
-$ bin/pancake manage testscale < example/service.conf
+6. Create a new endpoint to autoscale, using the example endpoint.conf.
+$ bin/pancake manage testscale < example/endpoint.conf
 
-7. The scale manager will now manage the service, and launch new instances up
+7. The scale manager will now manage the endpoint, and launch new instances up
 to the specified minimum number of instances. The load balancer configuration
 will also be modified once the in-guest agent has registered with the manager
 so that we know the IP is up and running.
@@ -58,7 +58,7 @@ python-netifaces
 ==Project Contents==
 
 bin
-    Contains scripts that are used to start and configure the Pancake service / API.
+    Contains scripts that are used to start and configure the Pancake endpoint / API.
 
 gridcentric
     The top-level python package.
