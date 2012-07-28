@@ -2,9 +2,11 @@
 
 function usage() {
     echo "usage: $0 <api-servers ...> [-- <servers-to-configure ...>]"
-    echo "Both <api-servers> and <scale-servers> should be comma-separated lists of hosts."
+    echo "Both <api-servers> and <scale-servers> should be space-separated lists of hosts."
     echo "To specify an authentication key, set the environment variable REACTOR_AUTH_KEY."
     echo "For example: REACTOR_AUTH_KEY=example $0 192.168.1.10 -- 192.168.1.10 192.168.1.11"
+    echo "To use an SSH connection to configure servers specific a keyfile."
+    echo "For example: SSH_KEY=keyfile.id_rsa $0 192.168.1.10 -- 192.168.1.10 192.168.1.11"
 }
 
 # Check commands.
@@ -31,7 +33,7 @@ for arg; do
     fi
 done
 
-# Configure the API servers if nothing specified.
+# Configure the localhost.
 if [ "$in_scale" == "n" ]; then
     scale_servers="$api_servers"
 fi
@@ -53,10 +55,20 @@ done
 # Contact all the given servers, starting with the API servers.
 for server in $scale_servers; do
     echo "Setting up $server..."
-    curl -X POST \
-        -H "Content-type: application/json" \
-        -d "{ \"api_servers\" : [$api_server_spec] }" \
+    if [ "x$SSH_KEY" == "x" ]; then
+        REMOTE_COMMAND="sh -c"
+        target="$server"
+    else
+        # We disable known host warnings, since they are almost guaranteed to be first-time.
+        SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+        REMOTE_COMMAND="ssh -i $SSH_KEY $SSH_OPTS $server"
+        target="localhost"
+    fi
+
+    $REMOTE_COMMAND "curl -X POST \
+        -H 'Content-type: application/json' \
+        -d '{ \"api_servers\" : [$api_server_spec] }' \
         $api_auth_spec \
-        http://$server:8080/reactor/api_servers
+        http://$target:8080/reactor/api_servers"
     sleep 1
 done

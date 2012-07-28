@@ -68,9 +68,13 @@ image/local: Makefile
 image/local/local.tgz: $(shell find local -type f -o -type d) Makefile
 	@rm -rf image/local/local.tgz
 	@cd local && fakeroot tar cvzf ../image/local/local.tgz .
+image/local/reactor.tgz: Makefile
+	@python setup.py cd contrib/cx_Freeze-4.2.3 && python setup.py build
+	@
 
 # Build a virtual machine image for the given hypervisor.
 image-%: image/local/local.tgz \
+	 image/local/reactor.tgz \
 	 image/contrib/python-zookeeper-3.4.3.tgz \
 	 image/contrib/nginx-1.2.1.tgz
 	@sudo make -C image build-$*
@@ -114,26 +118,29 @@ contrib/cx_Freeze-4.2.3: contrib/cx_Freeze-4.2.3.tar.gz Makefile
 	@cd contrib && tar xzf cx_Freeze-4.2.3.tar.gz
 	@cd contrib/cx_Freeze-4.2.3 && python setup.py build
 
-demo: contrib/cx_Freeze-4.2.3
+freeze-%: contrib/cx_Freeze-4.2.3
 ifeq ($(PANCAKE_PATH),)
-	@echo "You must define PANCAKE_PATH to call demo." && false
+	@echo "You must define PANCAKE_PATH to call $@." && false
 else
-	@make -C demo
 	@mkdir -p tmp-cxfreeze
-	@cd contrib/cx_Freeze-4.2.3 && python setup.py install --root=$(CURDIR)/tmp-cxfreeze
-	LD_LIBRARY_PATH=tmp-cxfreeze/usr/local/lib/ \
-	 PYTHONPATH=$(PANCAKE_PATH):`ls -1d tmp-cxfreeze/usr/local/lib/python*/dist-packages/` \
-	 tmp-cxfreeze/usr/local/bin/cxfreeze demo/reactor-viz \
-	 --target-dir reactor-demo-$(VERSION)
+	@cd contrib/cx_Freeze-4.2.3 && \
+	    python setup.py install --root=$(CURDIR)/tmp-cxfreeze
+	@LD_LIBRARY_PATH=tmp-cxfreeze/usr/local/lib/ \
+	PYTHONPATH=$(PANCAKE_PATH):`ls -1d tmp-cxfreeze/usr/local/lib/python*/dist-packages/` \
+	 tmp-cxfreeze/usr/local/bin/cxfreeze $(shell find $* -type f -a -executable) \
+	 --target-dir $*-$(VERSION)
 	@rm -rf tmp-cxfreeze
-	@fakeroot tar czvf reactor-demo-$(VERSION).tgz reactor-demo-$(VERSION)
-	@rm -rf reactor-demo reactor-demo-$(VERSION)
+	@fakeroot tar czvf $*-$(VERSION).tgz $*-$(VERSION)
+	@rm -rf $*-$(VERSION)
 endif
+demo:
+	@make -C demo
+	@make freeze-demo
 .PHONY: demo
 
 clean:
 	@sudo make -C image clean
 	@make -C demo clean
 	@rm -rf $(RPMBUILD) $(DEBBUILD) *.rpm *.deb
-	@rm -rf tmp-* reactor-demo-*
+	@rm -rf tmp-* demo-* reactor-*
 .PHONY: clean

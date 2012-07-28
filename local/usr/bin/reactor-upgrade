@@ -4,6 +4,8 @@ function usage() {
     echo "usage: $0 <old-api-servers ...> -- <new-api-servers ...> -- <scale-servers ...>"
     echo "The usage of this script is the same as reactor-setup."
     echo "In order to run this script, reactor-setup must be in your PATH."
+    echo "Additionally, all new API servers and scale servers should have"
+    echo "a configuration in your current Reactor cluster."
 }
 
 # Check commands.
