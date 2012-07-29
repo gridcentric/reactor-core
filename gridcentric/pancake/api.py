@@ -273,7 +273,7 @@ class PancakeApi:
         """
         response = Response()
 
-        if request.method == "POST":
+        if request.method == "POST" or request.method == "PUT":
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
             self.client.set_auth_hash(self._create_admin_auth_token(auth_key))
@@ -296,7 +296,7 @@ class PancakeApi:
             domain = self.client.domain()
             response = Response(body=json.dumps({'domain':domain}))
 
-        elif request.method == "POST":
+        elif request.method == "POST" or request.method == "PUT":
             domain = json.loads(request.body)['domain']
             logging.info("Updating Domain.")
             self.client.set_domain(domain)
@@ -332,7 +332,7 @@ class PancakeApi:
             else:
                 response = Response(status=404, body="%s not found" % manager)
 
-        elif request.method == "POST":
+        elif request.method == "POST" or request.method == "PUT":
             manager_config = json.loads(request.body)
             logging.info("Updating manager %s" % manager)
 
@@ -399,7 +399,7 @@ class PancakeApi:
             logging.info("Unmanaging endpoint %s" % (endpoint_name))
             self.client.unmanage_endpoint(endpoint_name)
 
-        elif request.method == "POST":
+        elif request.method == "POST" or request.method == "PUT":
             endpoint_config = json.loads(request.body)
             logging.info("Managing or updating endpoint %s" % endpoint_name)
             self.client.update_endpoint(endpoint_name, endpoint_config.get('config', ''))
@@ -453,7 +453,7 @@ class PancakeApi:
         endpoint_ip = request.matchdict.get('endpoint_ip', None)
         response = Response()
 
-        if request.method == "POST":
+        if request.method == "POST" or request.method == "PUT":
             metrics = json.loads(request.body)
             logging.info("Updating metrics for endpoint %s" % endpoint_name)
             self.client.set_endpoint_metrics(endpoint_name, metrics, endpoint_ip)
@@ -495,7 +495,7 @@ class PancakeApi:
         """
         Publish a new IP from an instance.
         """
-        if request.method == "POST":
+        if request.method == "POST" or request.method == "PUT":
             ip_address = self._extract_remote_ip(context, request)
             logging.info("New IP address %s has been recieved." % (ip_address))
             self.client.record_new_ipaddress(ip_address)
