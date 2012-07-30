@@ -56,7 +56,7 @@ def usage():
     print "    ips <endpoint>         Displays all of the IP addresses associated with"
     print "                           the endpoint."
     print ""
-    print "    state <endpoint>       Display the current endpoint info."
+    print "    state <endpoint> [action] See or update the endpoint state."
     print ""
     print "    get-metrics <endpoint> Get custom endpoint metrics."
     print ""
