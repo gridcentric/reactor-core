@@ -1,6 +1,6 @@
 #!/usr/bin/env python 
 
-from gridcentric.pancake.config import EndpointConfig
+from gridcentric.pancake.endpoint import EndpointConfig
 from gridcentric.pancake.endpoint import Endpoint
 import gridcentric.pancake.zookeeper.paths as paths
 
@@ -21,6 +21,7 @@ class APIEndpoint(Endpoint):
         api_config._set("endpoint", "url", url)
         api_config._set("endpoint", "port", "8080")
         api_config._set("scaling", "url", url)
+        api_config._set("endpoint", "enabled", "true")
 
         # Update the static IPs in the configuration.
         addresses = self.scale_manager.zk_conn.list_children(paths.manager_ips())

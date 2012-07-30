@@ -142,5 +142,5 @@ clean:
 	@sudo make -C image clean
 	@make -C demo clean
 	@rm -rf $(RPMBUILD) $(DEBBUILD) *.rpm *.deb
-	@rm -rf tmp-* demo-* reactor-* build/ dist/
+	@rm -rf tmp-* demo-* reactor-* build/ dist/ *.egg-info
 .PHONY: clean

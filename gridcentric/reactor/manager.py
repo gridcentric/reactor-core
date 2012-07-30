@@ -2,7 +2,7 @@
 
 import logging
 
-from gridcentric.pancake.config import ManagerConfig
+from gridcentric.pancake.manager import ManagerConfig
 from gridcentric.pancake.manager import ScaleManager
 from gridcentric.pancake.manager import locked
 import gridcentric.pancake.zookeeper.paths as paths
