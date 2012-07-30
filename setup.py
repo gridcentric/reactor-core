@@ -9,7 +9,6 @@ setup(
     packages=[
         'gridcentric',
         'gridcentric.reactor',
-        'gridcentric.reactor.zookeeper'
     ],
     description='Reactor virtual appliance server.',
     entry_points={
