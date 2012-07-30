@@ -13,7 +13,6 @@ from ConfigParser import SafeConfigParser
 
 from gridcentric.pancake.apiclient import PancakeApiClient
 from gridcentric.pancake import log
-import gridcentric.pancake.zookeeper.config as config
 
 api_server = "http://localhost:8080"
 zk_servers = []
@@ -21,16 +20,6 @@ password = None
 debug = False
 logfile = None
 update = False
-
-def default_zk_servers():
-    try:
-        servers = config.read_config()
-    except:
-        servers = []
-    if len(servers) > 0:
-        return servers
-    else:
-        return ["localhost"]
 
 def usage():
     print "usage: %s < -h|--help | [options] command >" % sys.argv[0]
@@ -44,8 +33,7 @@ def usage():
     print ""
     print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option"
     print "                          multiple times to specific multiple instances. Only"
-    print "                          necessary for run commands."
-    print "                          The default set is: %s" % ",".join(default_zk_servers())
+    print "                          necessary for run commands. The default is localhost."
     print ""
     print "   -d, --debug            Enables debugging log and full stack trace errors."
     print ""
@@ -114,7 +102,7 @@ for o, a in opts:
         update = True
 
 if len(zk_servers) == 0:
-    zk_servers = default_zk_servers()
+    zk_servers = ["localhost"]
 
 loglevel = logging.INFO
 if debug:
