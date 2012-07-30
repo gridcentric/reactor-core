@@ -2,6 +2,7 @@ import hashlib
 import logging
 import traceback
 import socket
+import sys
 
 from gridcentric.pancake.config import Config
 from gridcentric.pancake.config import ConfigView
@@ -10,6 +11,23 @@ import gridcentric.pancake.metrics.calculator as metric_calculator
 
 def compute_key(url):
     return hashlib.md5(url).hexdigest()
+
+class State:
+    running = "RUNNING"
+    stopped = "STOPPED"
+    paused  = "PAUSED"
+    default = stopped
+
+    @staticmethod
+    def from_action(current, action):
+        if action.upper() == "START":
+            return State.running
+        elif action.upper() == "STOP":
+            return State.stopped
+        elif action.upper() == "PAUSE":
+            return State.paused
+        else:
+            return current
 
 class EndpointConfig(Config):
 
@@ -23,7 +41,7 @@ class EndpointConfig(Config):
         return self._get("endpoint", "public", "true") == "true"
 
     def enabled(self):
-        return self._get("endpoint", "enabled", "false") == "true"
+        return self._get("endpoint", "enabled", "true") == "true"
 
     def min_instances(self):
         return int(self._get("scaling", "min_instances", "1"))
@@ -70,10 +88,12 @@ class EndpointConfig(Config):
 
 class Endpoint(object):
 
-    def __init__(self, name, endpoint_config, scale_manager):
+    def __init__(self, name, config_str, scale_manager):
         self.name = name
-        self.config = endpoint_config
+        self.config = EndpointConfig(config_str)
         self.scale_manager = scale_manager
+        self.state = State.default
+
         self.cloud = self.config.cloud_type()
         self.decommissioned_instances = []
         self.cloud_conn = cloud_connection.get_connection(
@@ -89,11 +109,11 @@ class Endpoint(object):
     def port(self):
         return self.config.port()
 
-    def enabled(self):
-        return self.config.enabled()
-
     def public(self):
         return self.config.public()
+
+    def enabled(self):
+        return self.config.enabled()
 
     def source_key(self):
         source_url = self.config.source_url()
@@ -165,30 +185,40 @@ class Endpoint(object):
         return (target_min, target_max)
 
     def _update(self, reconfigure, metrics):
+        if self.state == State.paused:
+            # Do nothing while paused, this will keep the current
+            # instances alive and continue to process requests.
+            return
+
         instances = self.instances()
         num_instances = len(instances)
         num_confirmed_instances = len(self.scale_manager.confirmed_ips(self.name))
+        ramp_limit = self.config.ramp_limit()
 
-        (target_min, target_max) = \
+        if self.state == State.running:
+            (target_min, target_max) = \
                 self._determine_target_instances_range(metrics, num_confirmed_instances)
 
-        if (num_instances >= target_min and num_instances <= target_max) \
-            or (target_min > target_max):
-            # Either the number of instances we currently have is within the
-            # ideal range or we have no information to base changing the number
-            # of instances. In either case we just keep the instances the same.
-            target = num_instances
-        else:
-            # we need to either scale up or scale down. Our target will be the
-            # midpoint in the target range.
-            target = (target_min + target_max) / 2
+            if (num_instances >= target_min and num_instances <= target_max) \
+                or (target_min > target_max):
+                # Either the number of instances we currently have is within the
+                # ideal range or we have no information to base changing the number
+                # of instances. In either case we just keep the instances the same.
+                target = num_instances
+            else:
+                # we need to either scale up or scale down. Our target will be the
+                # midpoint in the target range.
+                target = (target_min + target_max) / 2
+
+        elif self.state == State.stopped:
+            target = 0
+            ramp_limit = sys.maxint
 
         logging.debug("Target number of instances for endpoint %s determined to be %s (current: %s)"
                       % (self.name, target, num_instances))
 
         # Perform only 'ramp' actions per iterations.
         action_count = 0
-        ramp_limit = self.config.ramp_limit()
 
         # Launch instances until we reach the min setting value.
         while num_instances < target and action_count < ramp_limit:
@@ -204,6 +234,9 @@ class Endpoint(object):
 
         self.decommission_instances(instances_to_delete,
             "bringing instance total down to target %s" % target)
+
+    def update_action(self, action):
+        self.state = State.from_action(self.state, action)
 
     def update_config(self, config_str):
         # Check if our configuration is about to change.
@@ -259,8 +292,9 @@ class Endpoint(object):
             if not(str(instance['id']) in self.decommissioned_instances):
                 self.decommissioned_instances += [str(instance['id'])]
 
-        # update the load balancer. This can be done after decommissioning because these instances
-        # will stay alive as long as there is an active connection
+        # update the load balancer. This can be done after decommissioning
+        # because these instances will stay alive as long as there is an active
+        # connection.
         if len(instances) > 0:
             self._update_loadbalancer()
 
@@ -272,8 +306,8 @@ class Endpoint(object):
         try:
             self.decommissioned_instances.remove(instance_id)
         except:
-            # An exception is thrown if we are unable to remove it. This is fine because
-            # we are trying to remove it anyway.
+            # An exception is thrown if we are unable to remove it. This is
+            # fine because we are trying to remove it anyway.
             pass
 
     def _launch_instance(self, reason):

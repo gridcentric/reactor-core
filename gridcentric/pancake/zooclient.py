@@ -1,6 +1,7 @@
 import json
 
 from gridcentric.pancake.endpoint import EndpointConfig
+from gridcentric.pancake.endpoint import State
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 import gridcentric.pancake.zookeeper.paths as paths
 
@@ -55,7 +56,11 @@ class PancakeClient(object):
         if blob:
             return json.loads(blob)
         else:
-            return blob
+            blob = self.zk_conn.read(paths.endpoint_custom_metrics(endpoint_name))
+            if blob:
+                return json.loads(blob)
+            else:
+                return blob
 
     def get_endpoint_connections(self, endpoint_name):
         blob = self.zk_conn.read(paths.endpoint_live_connections(endpoint_name))
@@ -63,6 +68,12 @@ class PancakeClient(object):
             return json.loads(blob)
         else:
             return blob
+
+    def set_endpoint_action(self, endpoint_name, action):
+        self.zk_conn.write(paths.endpoint_action(endpoint_name), action)
+
+    def get_endpoint_state(self, endpoint_name):
+        return State.from_action(State.default, self.zk_conn.read(paths.endpoint_action(endpoint_name)))
 
     def get_endpoint_manager(self, endpoint_name):
         return self.zk_conn.read(paths.endpoint_manager(endpoint_name))

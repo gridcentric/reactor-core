@@ -90,18 +90,35 @@ class PancakeApiClient(httplib2.Http):
 
     def list_endpoint_ips(self, endpoint_name):
         """
-        Returns a list of the ip addresses (both dynamically confirmed and manually configured) for
-        this endpoint.
+        Returns a list of the ip addresses (both dynamically confirmed and
+        manually configured) for this endpoint.
         """
         resp, body = self._authenticated_request('/v1.0/endpoints/%s/ips' %
                                                  endpoint_name, 'GET')
         return body.get('ip_addresses', [])
 
-    def get_endpoint_info(self, endpoint_name):
+    def set_endpoint_action(self, endpoint_name, action):
+        """
+        Set the current endpoint action.
+        """
+        resp, body = self._authenticated_request('/v1.0/endpoints/%s/state' %
+                                                 endpoint_name, 'POST',
+                                                 body={ "action" : action })
+        return body
+
+    def get_endpoint_state(self, endpoint_name):
         """
         Return available live endpoint info.
         """
-        resp, body = self._authenticated_request('/v1.0/endpoints/%s/info' %
+        resp, body = self._authenticated_request('/v1.0/endpoints/%s/state' %
+                                                 endpoint_name, 'GET')
+        return body
+
+    def get_endpoint_metrics(self, endpoint_name):
+        """
+        Set the custom endpoint metrics.
+        """
+        resp, body = self._authenticated_request('/v1.0/endpoints/%s/metrics' %
                                                  endpoint_name, 'GET')
         return body
 

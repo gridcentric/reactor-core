@@ -61,13 +61,17 @@ def manager_active_connections(name):
 
 # The endpoints subtree. Basically anything related to a particular endpoint
 # should be rooted here.
-SERVICES = "%s/endpoint" % (ROOT)
+ENDPOINTS = "%s/endpoint" % (ROOT)
 def endpoints():
-    return SERVICES
+    return ENDPOINTS
 
 # The subtree for a particular endpoint.
 def endpoint(name):
-    return "%s/%s" % (SERVICES, name)
+    return "%s/%s" % (ENDPOINTS, name)
+
+# The action for an endpoint.
+def endpoint_action(name):
+    return "%s/action" % (endpoint(name))
 
 # The manager for this endpoint.
 def endpoint_manager(name):

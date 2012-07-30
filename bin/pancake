@@ -25,59 +25,61 @@ def usage():
     print "usage: %s < -h|--help | [options] command >" % sys.argv[0]
     print ""
     print "Optional arguments:"
-    print "   -h, --help             Display this help message"
+    print "   -h, --help              Display this help message"
     print ""
-    print "   -a, --api=             The API url (default is %s)." % api_server
+    print "   -a, --api=              The API url (default is %s)." % api_server
     print ""
-    print "   -p, --password=        The password used to connect to the API."
+    print "   -p, --password=         The password used to connect to the API."
     print ""
-    print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option"
-    print "                          multiple times to specific multiple instances. Only"
-    print "                          necessary for run commands. The default is localhost."
+    print "   -z, --zookeeper=        The host:port of a zookeeper instance. Use this option"
+    print "                           multiple times to specific multiple instances. Only"
+    print "                           necessary for run commands. The default is localhost."
     print ""
-    print "   -d, --debug            Enables debugging log and full stack trace errors."
+    print "   -d, --debug             Enables debugging log and full stack trace errors."
     print ""
-    print "   -l, --log=             Log to a file instead of stdout."
+    print "   -l, --log=              Log to a file instead of stdout."
     print ""
-    print "   -u, --update           Perform an incremental configuration update."
+    print "   -u, --update            Perform an incremental configuration update."
     print ""
     print "Commands:"
-    print "    version               Get the server API version."
+    print "    version                Get the server API version."
     print ""
-    print "    list                  List all the endpoints currently being managed."
+    print "    list                   List all the endpoints currently being managed."
     print ""
     print "    manage <endpoint>      Manage or update a serivce with the given name."
-    print "                          The endpoint configuration is read from stdin."
+    print "                           The endpoint configuration is read from stdin."
     print ""
     print "    unmanage <endpoint>    Unmanged the endpoint with the given name."
     print ""
     print "    show <endpoint>        Show the current configuration for the endpoint."
     print ""
     print "    ips <endpoint>         Displays all of the IP addresses associated with"
-    print "                          the endpoint."
+    print "                           the endpoint."
     print ""
-    print "    info <endpoint>        Display the current endpoint info."
+    print "    state <endpoint>       Display the current endpoint info."
     print ""
-    print "    metrics <endpoint>     Set custom endpoint metrics. The metrics are read"
-    print "                          as JSON { \"name\" : [weight, value] } from stdin."
+    print "    get-metrics <endpoint> Get custom endpoint metrics."
     print ""
-    print "    managers-configured   List all the configured managers."
+    print "    set-metrics <endpoint> Set custom endpoint metrics. The metrics are read"
+    print "                           as JSON { \"name\" : [weight, value] } from stdin."
     print ""
-    print "    managers-active       List all the active managers."
+    print "    managers-configured    List all the configured managers."
     print ""
-    print "    update-manager [ip]   Update the current configuration for the manager."
+    print "    managers-active        List all the active managers."
     print ""
-    print "    show-manager [ip]     Show the current configuration for the manager."
+    print "    update-manager [ip]    Update the current configuration for the manager."
     print ""
-    print "    forget-manager <ip>   Remove and forget the given manager."
+    print "    show-manager [ip]      Show the current configuration for the manager."
     print ""
-    print "    passwd [password]     Updates the API's password."
+    print "    forget-manager <ip>    Remove and forget the given manager."
     print ""
-    print "    domain [domain]       Get or set the domain."
+    print "    passwd [password]      Updates the API's password."
     print ""
-    print "    runserver             Run the scale manager server."
+    print "    domain [domain]        Get or set the domain."
     print ""
-    print "    runapi                Runs the API server."
+    print "    runserver              Run the scale manager server."
+    print ""
+    print "    runapi                 Runs the API server."
     print ""
 
 opts, args = getopt.getopt(sys.argv[1:], 
@@ -219,13 +221,23 @@ try:
         for ip in ip_addresses:
             print ip
 
-    elif command == "info":
+    elif command == "state":
+        api_client = get_api_client()
+        endpoint_name = get_arg(1)
+
+        if len(args) > 2:
+            action = get_arg(2)
+            api_client.set_endpoint_action(endpoint_name, action)
+        else:
+            print json.dumps(api_client.get_endpoint_state(endpoint_name))
+
+    elif command == "get-metrics":
         endpoint_name = get_arg(1)
         api_client = get_api_client()
-        info = api_client.get_endpoint_info(endpoint_name)
-        print json.dumps(info)
+        metrics = api_client.get_endpoint_metrics(endpoint_name)
+        print metrics
 
-    elif command == "metrics":
+    elif command == "set-metrics":
         new_metrics = ""
         for line in sys.stdin.readlines():
             new_metrics += line

@@ -98,7 +98,9 @@ class PancakeApi:
         self.config.add_view(self.register_ip_address, route_name='register')
 
         self.config.add_route('manager-action', '/v1.0/managers/{manager}')
+        self.config.add_route('manager-action-default', '/v1.0/config')
         self.config.add_view(self.handle_manager_action, route_name='manager-action')
+        self.config.add_view(self.handle_manager_action, route_name='manager-action-default')
 
         self.config.add_route('manager-list', '/v1.0/managers')
         self.config.add_view(self.list_managers, route_name='manager-list')
@@ -130,12 +132,12 @@ class PancakeApi:
         self.config.add_view(self.handle_metric_action, route_name='metric-ip-action')
         self.config.add_view(self.handle_metric_action, route_name='metric-ip-action-implicit')
 
-        self.config.add_route('endpoint-info-action',
-            '/v1.0/endpoints/{endpoint_name}/info')
-        self.config.add_route('endpoint-info-action-implicit',
-            '/v1.0/endpoint/info')
-        self.config.add_view(self.handle_info_action, route_name='endpoint-info-action')
-        self.config.add_view(self.handle_info_action, route_name='endpoint-info-action-implicit')
+        self.config.add_route('endpoint-state-action',
+            '/v1.0/endpoints/{endpoint_name}/state')
+        self.config.add_route('endpoint-state-action-implicit',
+            '/v1.0/endpoint/state')
+        self.config.add_view(self.handle_state_action, route_name='endpoint-state-action')
+        self.config.add_view(self.handle_state_action, route_name='endpoint-state-action-implicit')
 
     def reconnect(self, zk_servers):
         self.disconnect()
@@ -173,9 +175,11 @@ class PancakeApi:
         endpoint_name = request.matchdict.get('endpoint_name', None)
 
         if endpoint_name != None:
-            endpoint_config = EndpointConfig(\
-                self.client.get_endpoint_config(endpoint_name))
+            config = self.client.get_endpoint_config(endpoint_name)
+            if not(config):
+                return False
 
+            endpoint_config = EndpointConfig(config)
             auth_hash, auth_salt, auth_algo = \
                 endpoint_config.get_endpoint_auth()
 
@@ -315,7 +319,7 @@ class PancakeApi:
         POST/PUT - Updates the manager with a new config in the request body
         DELETE - Removes the management config.
         """
-        manager = request.matchdict['manager']
+        manager = request.matchdict.get('manager', 'default')
         response = Response()
 
         if request.method == "GET":
@@ -386,7 +390,6 @@ class PancakeApi:
 
         if request.method == "GET":
             logging.info("Retrieving endpoint %s configuration" % endpoint_name)
-
             config = self.client.get_endpoint_config(endpoint_name)
 
             if config != None:
@@ -412,7 +415,7 @@ class PancakeApi:
 
     @connected
     @authorized
-    def handle_info_action(self, context, request):
+    def handle_state_action(self, context, request):
         """
         This handles a endpoint info request:
         GET - Returns the current endpoint info
@@ -422,18 +425,30 @@ class PancakeApi:
         response = Response()
 
         if request.method == "GET":
-            logging.info("Retrieving info for endpoint %s" % endpoint_name)
-            metrics = self.client.get_endpoint_metrics(endpoint_name)
-            connections = self.client.get_endpoint_connections(endpoint_name)
-            manager = self.client.get_endpoint_manager(endpoint_name)
+            logging.info("Retrieving state for endpoint %s" % endpoint_name)
+            config = self.client.get_endpoint_config(endpoint_name)
+            state = self.client.get_endpoint_state(endpoint_name)
 
-            if metrics or connections or manager:
-                value = { \
-                    'metrics' : metrics or [],
+            if config != None:
+                connections = self.client.get_endpoint_connections(endpoint_name)
+                manager = self.client.get_endpoint_manager(endpoint_name)
+                value = {
+                    'state' : state,
                     'connections' : connections or [],
                     'manager' : manager or None,
-                    }
+                }
                 response = Response(body=json.dumps(value))
+            else:
+                response = Response(status=404, body="%s not found" % endpoint_name)
+
+        elif request.method == "POST" or request.method == "PUT":
+            logging.info("Posting state for endpoint %s" % endpoint_name)
+            state_action = json.loads(request.body)
+            config = self.client.get_endpoint_config(endpoint_name)
+
+            if config != None:
+                self.client.set_endpoint_action(endpoint_name, state_action.get('action', ''))
+                response = Response()
             else:
                 response = Response(status=404, body="%s not found" % endpoint_name)
 
@@ -447,13 +462,19 @@ class PancakeApi:
     def handle_metric_action(self, context, request):
         """
         This handles a general metric action:
+        GET - Get the metric info.
         POST/PUT - Updates the metric info.
         """
         endpoint_name = request.matchdict['endpoint_name']
         endpoint_ip = request.matchdict.get('endpoint_ip', None)
         response = Response()
 
-        if request.method == "POST" or request.method == "PUT":
+        if request.method == "GET":
+            logging.info("Retrieving metrics for endpoint %s" % endpoint_name)
+            metrics = self.client.get_endpoint_metrics(endpoint_name)
+            response = Response(body=json.dumps(metrics or {}))
+
+        elif request.method == "POST" or request.method == "PUT":
             metrics = json.loads(request.body)
             logging.info("Updating metrics for endpoint %s" % endpoint_name)
             self.client.set_endpoint_metrics(endpoint_name, metrics, endpoint_ip)

@@ -14,7 +14,21 @@ def calculate_weighted_averages(metrics):
     total_weights = {}
     for metric in metrics:
         for key, info in metric.iteritems():
-            (weight, value) = info
+            # Try to be generous with our parsing of metrics, but interpret
+            # each element as a float. If the user does not provide a weight we
+            # assign the element a weight of 1.0 as a default value.
+            try:
+                (weight, value) = info
+                weight = float(weight)
+                value  = float(value)
+            except TypeError:
+                try:
+                    (weight, value) = (1.0, float(info))
+                except:
+                    continue
+            except:
+                continue
+
             totals[key] = totals.get(key, 0) + weight * value
             total_weights[key] = total_weights.get(key, 0) + weight
     for key in totals:

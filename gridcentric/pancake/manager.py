@@ -13,6 +13,7 @@ from gridcentric.pancake.config import ConfigView
 
 from gridcentric.pancake.endpoint import EndpointConfig
 from gridcentric.pancake.endpoint import Endpoint
+from gridcentric.pancake.endpoint import State
 
 import gridcentric.pancake.loadbalancer.connection as lb_connection
 
@@ -258,16 +259,11 @@ class ScaleManager(object):
         logging.info("New endpoint %s found to be managed." % endpoint_name)
 
         # Create the object.
-        endpoint_path = paths.endpoint(endpoint_name)
-        endpoint_config = EndpointConfig(self.zk_conn.read(endpoint_path))
-        endpoint_config._defaults(str(self.config))
-        endpoint = Endpoint(endpoint_name, endpoint_config, self)
-        self.add_endpoint(endpoint,
-                          endpoint_path=endpoint_path,
-                          endpoint_config=endpoint_config)
+        endpoint = Endpoint(endpoint_name, str(self.config), self)
+        self.add_endpoint(endpoint)
 
     @locked
-    def add_endpoint(self, endpoint, endpoint_path=None, endpoint_config=''):
+    def add_endpoint(self, endpoint):
         self.endpoints[endpoint.name] = endpoint
         endpoint_key = endpoint.key()
 
@@ -276,18 +272,25 @@ class ScaleManager(object):
         if not(endpoint.name in self.key_to_endpoints[endpoint.key()]):
             self.key_to_endpoints[endpoint.key()].append(endpoint.name)
 
-        if endpoint_path:
-            def update_config(value):
-                endpoint.update_config(value)
-                if self.endpoint_owned(endpoint):
-                    endpoint.update()
+        def update_action(value):
+            endpoint.update_action(value)
+            if self.endpoint_owned(endpoint):
+                endpoint.update()
+        def update_config(value):
+            endpoint.update_config(value)
+            if self.endpoint_owned(endpoint):
+                endpoint.update()
 
-            # Watch the config for this endpoint.
-            logging.info("Watching endpoint %s." % (endpoint.name))
-            self.zk_conn.watch_contents(endpoint_path,
-                                        update_config,
-                                        str(endpoint_config),
-                                        clean=True)
+        # Watch the config for this endpoint.
+        logging.info("Watching endpoint %s." % (endpoint.name))
+        update_action(
+            self.zk_conn.watch_contents(paths.endpoint_action(endpoint.name),
+                                        update_action, '',
+                                        clean=True))
+        update_config(
+            self.zk_conn.watch_contents(paths.endpoint(endpoint.name),
+                                        update_config, '',
+                                        clean=True))
 
         # Select the manager for this endpoint.
         self.manager_select(endpoint)
@@ -377,7 +380,8 @@ class ScaleManager(object):
     def collect_endpoint_ips(self, endpoint, public_ips, private_ips):
         if not(endpoint.enabled()):
             return
-        elif not(endpoint.public()):
+
+        if not(endpoint.public()):
             public_ips.extend(self.active_ips(endpoint.name))
         else:
             private_ips.extend(self.active_ips(endpoint.name))
