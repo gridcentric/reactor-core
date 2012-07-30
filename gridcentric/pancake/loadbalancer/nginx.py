@@ -11,6 +11,7 @@ import logging
 
 from mako.template import Template
 
+from gridcentric.pancake.config import SubConfig
 from gridcentric.pancake.loadbalancer.connection import LoadBalancerConnection
 from gridcentric.pancake.loadbalancer.netstat import connection_count
 
@@ -130,14 +131,28 @@ class NginxLogWatcher(threading.Thread):
                 finally:
                     self.lock.release()
 
+class NginxLoadBalancerConfig(SubConfig):
+
+    def config_path(self):
+        return self._get("config_path", "/etc/nginx/conf.d")
+
+    def site_path(self):
+        return self._get("site_path", "/etc/nginx/sites-enabled")
+
+    def sticky_sessions(self):
+        return self._get("sticky_sessions", "false").lower() == "true"
+
+    def keepalive(self):
+        try:
+            return int(self._get("keepalive", '0'))
+        except:
+            return 0
+
 class NginxLoadBalancerConnection(LoadBalancerConnection):
 
-    def __init__(self, config_path, site_path, sticky_sessions=False, keepalive=0):
+    def __init__(self, config):
         self.tracked = {}
-        self.config_path = config_path
-        self.site_path = site_path
-        self.sticky_sessions = sticky_sessions
-        self.keepalive = keepalive
+        self.config = config
         template_file = os.path.join(os.path.dirname(__file__), 'nginx.template')
         self.template = Template(filename=template_file)
         self.log_reader = NginxLogWatcher("/var/log/nginx/access.log")
@@ -157,7 +172,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
 
     def clear(self):
         # Remove all sites configurations.
-        for conf in glob.glob(os.path.join(self.site_path, "*")):
+        for conf in glob.glob(os.path.join(self.config.site_path(), "*")):
             try:
                 os.remove(conf)
             except OSError:
@@ -167,6 +182,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         self.tracked = {}
 
     def change(self, url, port, names, manager_ips, public_ips, private_ips):
+
         # We use a simple hash of the URL as the file name for the
         # configuration file.
         uniq_id = hashlib.md5(url).hexdigest()
@@ -184,7 +200,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
                 del self.tracked[uniq_id]
 
             try:
-                os.remove(os.path.join(self.site_path, conf_filename))
+                os.remove(os.path.join(self.config.site_path(), conf_filename))
             except OSError:
                 logging.warn("Unable to remove file: %s" % conf_filename)
             return
@@ -223,10 +239,10 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
 
         # Compute any extra bits for the template.
         extra = ''
-        if self.sticky_sessions:
+        if self.config.sticky_sessions():
             extra += '    sticky;\n'
-        if self.keepalive:
-            extra += '    keepalive %d single;\n' % self.keepalive
+        if self.config.keepalive():
+            extra += '    keepalive %d single;\n' % self.config.keepalive()
 
         # Render our given template.
         conf = self.template.render(id=uniq_id,
@@ -240,7 +256,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
                                     extra=extra)
 
         # Write out the config file.
-        config_file = file(os.path.join(self.site_path, conf_filename), 'wb')
+        config_file = file(os.path.join(self.config.site_path(), conf_filename), 'wb')
         config_file.write(conf)
         config_file.flush()
         config_file.close()
@@ -248,7 +264,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
     def save(self):
         # Copy over our base configuration.
         shutil.copyfile(os.path.join(os.path.dirname(__file__), 'pancake.conf'),
-                        os.path.join(self.config_path, 'pancake.conf'))
+                        os.path.join(self.config.config_path(), 'pancake.conf'))
 
         # Send a signal to NginX to reload the configuration
         # (Note: we might need permission to do this!!)

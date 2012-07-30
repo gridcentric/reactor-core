@@ -1,16 +1,72 @@
 import hashlib
 import logging
-import os
 import traceback
 import socket
 
+from gridcentric.pancake.config import Config
+from gridcentric.pancake.config import ConfigView
 import gridcentric.pancake.cloud.connection as cloud_connection
-from gridcentric.pancake.config import EndpointConfig
-
 import gridcentric.pancake.metrics.calculator as metric_calculator
 
 def compute_key(url):
     return hashlib.md5(url).hexdigest()
+
+class EndpointConfig(Config):
+
+    def url(self):
+        return self._get("endpoint", "url", '')
+
+    def port(self):
+        return int(self._get("endpoint", "port", "80"))
+
+    def public(self):
+        return self._get("endpoint", "public", "true") == "true"
+
+    def enabled(self):
+        return self._get("endpoint", "enabled", "false") == "true"
+
+    def min_instances(self):
+        return int(self._get("scaling", "min_instances", "1"))
+
+    def max_instances(self):
+        return int(self._get("scaling", "max_instances", "1"))
+
+    def rules(self):
+        return self._get("scaling", "rules", "").split(",")
+
+    def ramp_limit(self):
+        return int(self._get("scaling", "ramp_limit", "5"))
+
+    def source_url(self):
+        return self._get("scaling", "url", "")
+
+    def cloud_type(self):
+        return self._get("endpoint", "cloud", "none")
+
+    def cloud_config(self):
+        return ConfigView(self, "cloud:%s" % self.cloud_type())
+
+    def get_endpoint_auth(self):
+        return (self._get("endpoint", "auth_hash", ""),
+                self._get("endpoint", "auth_salt", ""),
+                self._get("endpoint", "auth_algo", ""))
+
+    def static_ips(self):
+        """ Returns a list of static ips associated with the configured static instances. """
+        static_instances = self._get("endpoint", "static_instances", "").split(",")
+
+        # (dscannell) The static instances can be specified either as IP
+        # addresses or hostname.  If its an IP address then we are done. If its
+        # a hostname then we need to do a lookup to determine its IP address.
+        ip_addresses = []
+        for static_instance in static_instances:
+            try:
+                if static_instance != '':
+                    ip_addresses += [socket.gethostbyname(static_instance)]
+            except:
+                logging.warn("Failed to determine the ip address "
+                             "for the static instance %s." % static_instance)
+        return ip_addresses
 
 class Endpoint(object):
 
@@ -20,7 +76,9 @@ class Endpoint(object):
         self.scale_manager = scale_manager
         self.cloud = self.config.cloud_type()
         self.decommissioned_instances = []
-        self.cloud_conn = cloud_connection.get_connection(self.cloud, self.config.cloud_config())
+        self.cloud_conn = cloud_connection.get_connection(
+                            self.cloud,
+                            self.config.cloud_config())
 
     def key(self):
         return compute_key(self.url())

@@ -1,6 +1,6 @@
 import json
 
-from gridcentric.pancake.config import EndpointConfig
+from gridcentric.pancake.endpoint import EndpointConfig
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 import gridcentric.pancake.zookeeper.paths as paths
 

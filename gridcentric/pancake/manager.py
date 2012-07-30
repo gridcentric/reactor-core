@@ -1,4 +1,3 @@
-import ConfigParser
 import logging
 import threading
 import time
@@ -9,9 +8,10 @@ import json
 import traceback
 from StringIO import StringIO
 
-from gridcentric.pancake.config import ManagerConfig
-from gridcentric.pancake.config import EndpointConfig
+from gridcentric.pancake.config import Config
+from gridcentric.pancake.config import ConfigView
 
+from gridcentric.pancake.endpoint import EndpointConfig
 from gridcentric.pancake.endpoint import Endpoint
 
 import gridcentric.pancake.loadbalancer.connection as lb_connection
@@ -23,6 +23,26 @@ import gridcentric.pancake.zookeeper.paths as paths
 import gridcentric.pancake.ips as ips
 
 from gridcentric.pancake.metrics.calculator import calculate_weighted_averages
+
+class ManagerConfig(Config):
+
+    def loadbalancer_names(self):
+        """ The name of the loadbalancer. """
+        return self._get("manager", "loadbalancer", "").split(",")
+
+    def loadbalancer_config(self, name):
+        """ The set of keys required to configure the loadbalancer. """
+        return ConfigView(self, "loadbalancer:%s" % name)
+
+    def mark_maximum(self, label):
+        if label in ['unregistered', 'decommissioned']:
+            return int(self._get("manager", "%s_wait" % (label), "20"))
+
+    def keys(self):
+        return int(self._get("manager", "keys", "64"))
+
+    def health_check(self):
+        return float(self._get("manager", "health_check", "5"))
 
 def locked(fn):
     def wrapped_fn(self, *args, **kwargs):
@@ -240,6 +260,7 @@ class ScaleManager(object):
         # Create the object.
         endpoint_path = paths.endpoint(endpoint_name)
         endpoint_config = EndpointConfig(self.zk_conn.read(endpoint_path))
+        endpoint_config._defaults(str(self.config))
         endpoint = Endpoint(endpoint_name, endpoint_config, self)
         self.add_endpoint(endpoint,
                           endpoint_path=endpoint_path,
@@ -373,7 +394,9 @@ class ScaleManager(object):
                 continue
             else:
                 names.append(endpoint_name)
-                self.collect_endpoint_ips(self.endpoints[endpoint_name], public_ips, private_ips)
+                self.collect_endpoint_ips(
+                    self.endpoints[endpoint_name],
+                    public_ips, private_ips)
 
         logging.info("Updating loadbalancer for %s (%s) with public=%s, private=%s" %
                      (endpoint.url(), ",".join(names), public_ips, private_ips))
@@ -395,7 +418,9 @@ class ScaleManager(object):
             names = []
             for endpoint_name in self.key_to_endpoints.get(endpoint.key(), []):
                 names.append(endpoint_name)
-                self.collect_endpoint_ips(self.endpoints[endpoint_name], public_ips, private_ips)
+                self.collect_endpoint_ips(
+                    self.endpoints[endpoint_name],
+                    public_ips, private_ips)
 
             self.load_balancer.change(endpoint.url(),
                                       endpoint.port(),
@@ -624,7 +649,8 @@ class ScaleManager(object):
                     if self.metric_indicates_active(ip_metrics):
                         active_connections.append(ip_address)
                 except ValueError:
-                    logging.warn("Invalid instance metrics for %s:%s." % (endpoint.name, ip_address))
+                    logging.warn("Invalid instance metrics for %s:%s." % \
+                                 (endpoint.name, ip_address))
 
         for instance_id in self.decommissioned_instances(endpoint.name):
             # Also check the metrics of decommissioned instances looking for any active counts.
@@ -655,7 +681,8 @@ class ScaleManager(object):
                 continue
 
             try:
-                metrics, endpoint_active_connections = self.load_metrics(endpoint, endpoint_metrics)
+                metrics, endpoint_active_connections = \
+                    self.load_metrics(endpoint, endpoint_metrics)
                 connections = list(set(active_connections.get(endpoint.name, []) + \
                                        endpoint_active_connections))
                 metrics = calculate_weighted_averages(metrics)

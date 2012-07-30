@@ -3,14 +3,22 @@ import signal
 
 from mako.template import Template
 
+from gridcentric.pancake.config import SubConfig
 from gridcentric.pancake.loadbalancer.connection import LoadBalancerConnection
 from gridcentric.pancake.loadbalancer.netstat import connection_count
 
+class DnsmasqLoadBalancerConfig(SubConfig):
+
+    def config_path(self):
+        return self._get("config_path", "/etc/dnsmasq.d")
+
+    def hosts_path(self):
+        return self._get("hosts_path", "/etc/hosts.pancake")
+
 class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
     
-    def __init__(self, config_path, hosts_path, scale_manager):
-        self.config_path = config_path
-        self.hosts_path = hosts_path
+    def __init__(self, config, scale_manager):
+        self.config = config
         self.scale_manager = scale_manager
         template_file = os.path.join(os.path.dirname(__file__),'dnsmasq.template')
         self.template = Template(filename=template_file)
@@ -47,7 +55,7 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
                 ipmap[ip].append(name)
 
         # Write out our hosts file.
-        hosts = file(self.hosts_path, 'wb')
+        hosts = file(self.config.hosts_path(), 'wb')
         for (address, names) in ipmap.items():
             hosts.write("%s %s\n" % (address, " ".join(set(names))))
         hosts.close()
@@ -58,10 +66,10 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
             domain = "example.com"
 
         # Write out our configuration template.
-        conf = self.template.render(domain=domain, hosts=self.hosts_path)
+        conf = self.template.render(domain=domain, hosts=self.config.hosts_path())
 
         # Write out the config file.
-        config_file = file(os.path.join(self.config_path,"pancake.conf"), 'wb')
+        config_file = file(os.path.join(self.config.config_path(), "pancake.conf"), 'wb')
         config_file.write(conf)
         config_file.flush()
         config_file.close()

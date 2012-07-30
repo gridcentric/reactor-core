@@ -6,8 +6,8 @@ import traceback
 from pyramid.config import Configurator
 from pyramid.response import Response
 
-from gridcentric.pancake.config import EndpointConfig
-from gridcentric.pancake.config import ManagerConfig
+from gridcentric.pancake.endpoint import EndpointConfig
+from gridcentric.pancake.manager import ManagerConfig
 from gridcentric.pancake.zooclient import PancakeClient
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
 
