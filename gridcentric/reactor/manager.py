@@ -61,7 +61,7 @@ class ReactorScaleManager(ScaleManager):
 
             # Create the API endpoint object.
             endpoint = APIEndpoint(self)
-            self.add_endpoint(endpoint, endpoint_path=paths.endpoint(endpoint.name))
+            self.add_endpoint(endpoint)
         else:
             # Create the standard endpoint.
             super(ReactorScaleManager, self).create_endpoint(endpoint_name)
