@@ -312,7 +312,7 @@ class PancakeApi:
         """
         This Handles a general manager action:
         GET - Returns the manager config in the Response body
-        POST - Updates the manager with a new config in the request body
+        POST/PUT - Updates the manager with a new config in the request body
         DELETE - Removes the management config.
         """
         manager = request.matchdict['manager']
@@ -378,7 +378,7 @@ class PancakeApi:
         """
         This handles a general endpoint action:
         GET - Returns the endpoint config in the Response body
-        POST - Either manages or updates the endpoint with a new config in the request body
+        POST/PUT - Either manages or updates the endpoint with a new config in the request body
         DELETE - Unmanages the endpoint.
         """
         endpoint_name = request.matchdict['endpoint_name']
@@ -447,7 +447,7 @@ class PancakeApi:
     def handle_metric_action(self, context, request):
         """
         This handles a general metric action:
-        POST - Updates the metric info.
+        POST/PUT - Updates the metric info.
         """
         endpoint_name = request.matchdict['endpoint_name']
         endpoint_ip = request.matchdict.get('endpoint_ip', None)
