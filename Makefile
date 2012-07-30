@@ -63,14 +63,14 @@ image/contrib/nginx-1.2.1.tgz: contrib/nginx-1.2.1 Makefile
 	@rm -rf dist-nginx
 
 # Build the local overlays.
-image/local: Makefile
-	@mkdir -p image/local
 image/local/local.tgz: $(shell find local -type f -o -type d) Makefile
+	@mkdir -p image/local
 	@rm -rf image/local/local.tgz
 	@cd local && fakeroot tar cvzf ../image/local/local.tgz .
 image/local/reactor.tgz: Makefile
-	@python setup.py cd contrib/cx_Freeze-4.2.3 && python setup.py build
-	@
+	@mkdir -p image/local
+	@python setup.py bdist
+	@mv dist/reactor-*.tar.gz $@
 
 # Build a virtual machine image for the given hypervisor.
 image-%: image/local/local.tgz \
@@ -142,5 +142,5 @@ clean:
 	@sudo make -C image clean
 	@make -C demo clean
 	@rm -rf $(RPMBUILD) $(DEBBUILD) *.rpm *.deb
-	@rm -rf tmp-* demo-* reactor-*
+	@rm -rf tmp-* demo-* reactor-* build/ dist/
 .PHONY: clean
