@@ -31,6 +31,12 @@ class Endpoint(object):
     def port(self):
         return self.config.port()
 
+    def enabled(self):
+        return self.config.enabled()
+
+    def public(self):
+        return self.config.public()
+
     def source_key(self):
         source_url = self.config.source_url()
         if source_url:
@@ -147,12 +153,16 @@ class Endpoint(object):
         old_static_addresses = self.config.static_ips()
         old_port = self.config.port()
         old_cloud_config = self.config.cloud_config()
+        old_public = self.config.public()
+        old_enabled = self.config.enabled()
 
         new_config = EndpointConfig(config_str)
         new_url = new_config.url()
         new_static_addresses = new_config.static_ips()
         new_port = new_config.port()
         new_cloud_config = new_config.cloud_config()
+        new_public = self.config.public()
+        new_enabled = self.config.enabled()
 
         # Remove all old instances from loadbalancer.
         if old_url != new_url:
@@ -170,7 +180,9 @@ class Endpoint(object):
         if old_url != new_url:
             self.scale_manager.add_endpoint(self)
         elif old_static_addresses != new_static_addresses or \
-             old_port != new_port:
+             old_port != new_port or \
+             old_public != new_public or \
+             old_enabled != new_enabled:
             self._update_loadbalancer()
 
     def decommission_instances(self, instances, reason):

@@ -94,8 +94,8 @@ class EndpointConfig(Config):
     def public(self):
         return self._get("endpoint", "public", "true") == "true"
 
-    def instance_id(self):
-        return str(self._get("nova", "instance_id", "0"))
+    def enabled(self):
+        return self._get("endpoint", "enabled", "false") == "true"
 
     def min_instances(self):
         return int(self._get("scaling", "min_instances", "1"))

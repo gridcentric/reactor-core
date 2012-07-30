@@ -11,12 +11,17 @@ from StringIO import StringIO
 
 from gridcentric.pancake.config import ManagerConfig
 from gridcentric.pancake.config import EndpointConfig
+
 from gridcentric.pancake.endpoint import Endpoint
+
 import gridcentric.pancake.loadbalancer.connection as lb_connection
+
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
 import gridcentric.pancake.zookeeper.paths as paths
+
 import gridcentric.pancake.ips as ips
+
 from gridcentric.pancake.metrics.calculator import calculate_weighted_averages
 
 def locked(fn):
@@ -348,6 +353,15 @@ class ScaleManager(object):
                     break
 
     @locked
+    def collect_endpoint_ips(self, endpoint, public_ips, private_ips):
+        if not(endpoint.enabled()):
+            return
+        elif not(endpoint.public()):
+            public_ips.extend(self.active_ips(endpoint.name))
+        else:
+            private_ips.extend(self.active_ips(endpoint.name))
+
+    @locked
     def update_loadbalancer(self, endpoint, remove=False):
         public_ips = []
         private_ips = []
@@ -359,10 +373,7 @@ class ScaleManager(object):
                 continue
             else:
                 names.append(endpoint_name)
-                if self.endpoints[endpoint_name].config.public():
-                    public_ips += self.active_ips(endpoint_name)
-                else:
-                    private_ips += self.active_ips(endpoint_name)
+                self.collect_endpoint_ips(self.endpoints[endpoint_name], public_ips, private_ips)
 
         logging.info("Updating loadbalancer for %s (%s) with public=%s, private=%s" %
                      (endpoint.url(), ",".join(names), public_ips, private_ips))
@@ -377,16 +388,14 @@ class ScaleManager(object):
     @locked
     def reload_loadbalancer(self):
         self.load_balancer.clear()
+
         for endpoint in self.endpoints.values():
             public_ips = []
             private_ips = []
             names = []
             for endpoint_name in self.key_to_endpoints.get(endpoint.key(), []):
                 names.append(endpoint_name)
-                if self.endpoints[endpoint_name].config.public():
-                    public_ips += self.active_ips(endpoint_name)
-                else:
-                    private_ips += self.active_ips(endpoint_name)
+                self.collect_endpoint_ips(self.endpoints[endpoint_name], public_ips, private_ips)
 
             self.load_balancer.change(endpoint.url(),
                                       endpoint.port(),
@@ -394,6 +403,7 @@ class ScaleManager(object):
                                       self.manager_ips,
                                       public_ips,
                                       private_ips)
+
         self.load_balancer.save()
 
     @locked
