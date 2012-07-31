@@ -10,3 +10,7 @@ contrib/nginx-sticky-module-1.0
 contrib/cx_Freeze-4.2.3
 tmp-cxfreeze/
 reactor-demo-*
+build/
+dist/
+*.egg-info
+*.pyc
