@@ -22,7 +22,7 @@ def get_connection(name, config, scale_manager):
 class LoadBalancerConnection(object):
     def clear(self):
         pass
-    def change(self, url, port, names, manager_ips, public_ips, private_ips):
+    def change(self, url, port, weight, names, manager_ips, public_ips, private_ips):
         pass
     def save(self):
         pass
@@ -31,15 +31,19 @@ class LoadBalancerConnection(object):
         return {}
 
 class LoadBalancers(list):
+
     def clear(self):
         for lb in self:
             lb.clear()
-    def change(self, url, port, names, manager_ips, public_ips, private_ips):
+
+    def change(self, url, port, weight, names, manager_ips, public_ips, private_ips):
         for lb in self:
-            lb.change(url, port, names, manager_ips, public_ips, private_ips)
+            lb.change(url, port, weight, names, manager_ips, public_ips, private_ips)
+
     def save(self):
         for lb in self:
             lb.save()
+
     def metrics(self):
         # This is the only complex metric (that requires multiplexing).  We
         # combine the load balancer metrics by hostname, adding weights where

@@ -118,6 +118,9 @@ class Endpoint(object):
     def enabled(self):
         return self.config.enabled()
 
+    def weight(self):
+        return self.config.weight()
+
     def source_key(self):
         source_url = self.config.source_url()
         if source_url:
@@ -249,14 +252,16 @@ class Endpoint(object):
         old_cloud_config = self.config.cloud_config()
         old_public = self.config.public()
         old_enabled = self.config.enabled()
+        old_weight = self.config.weight()
 
         new_config = EndpointConfig(config_str)
         new_url = new_config.url()
         new_static_addresses = new_config.static_ips()
         new_port = new_config.port()
         new_cloud_config = new_config.cloud_config()
-        new_public = self.config.public()
-        new_enabled = self.config.enabled()
+        new_public = new_config.public()
+        new_enabled = new_config.enabled()
+        new_weight = new_config.weight()
 
         # Drop all removed static addresses.
         for ip in old_static_addresses:
@@ -283,7 +288,8 @@ class Endpoint(object):
         elif old_static_addresses != new_static_addresses or \
              old_port != new_port or \
              old_public != new_public or \
-             old_enabled != new_enabled:
+             old_enabled != new_enabled or \
+             old_weight != new_weight:
             self._update_loadbalancer()
 
     def decommission_instances(self, instances, reason):

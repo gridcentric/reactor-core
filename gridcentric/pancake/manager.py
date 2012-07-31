@@ -408,6 +408,7 @@ class ScaleManager(object):
                      (endpoint.url(), ",".join(names), public_ips, private_ips))
         self.load_balancer.change(endpoint.url(),
                                   endpoint.port(),
+                                  endpoint.weight(),
                                   names,
                                   self.manager_ips,
                                   public_ips,
@@ -430,6 +431,7 @@ class ScaleManager(object):
 
             self.load_balancer.change(endpoint.url(),
                                       endpoint.port(),
+                                      endpoint.weight(),
                                       names,
                                       self.manager_ips,
                                       public_ips,
