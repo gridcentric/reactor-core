@@ -25,6 +25,11 @@ import gridcentric.pancake.ips as ips
 
 from gridcentric.pancake.metrics.calculator import calculate_weighted_averages
 
+# We must always specify some domain for the installation.
+# If none is available, we use example.com as it is protected
+# under domain name RFC as a reserved name.
+NODOMAIN = "example.com"
+
 class ManagerConfig(Config):
 
     def loadbalancer_names(self):
@@ -64,7 +69,7 @@ class ScaleManager(object):
         self.cond       = threading.Condition()
 
         self.uuid   = str(uuid.uuid4()) # Manager uuid (generated).
-        self.domain = ""                # Pancake domain.
+        self.domain = NODOMAIN          # Pancake domain.
 
         self.endpoints = {}        # Endpoint map (name -> endpoint)
         self.key_to_endpoints = {} # Endpoint map (key() -> [names...])
@@ -450,7 +455,7 @@ class ScaleManager(object):
 
     @locked
     def reload_domain(self, domain):
-        self.domain = domain
+        self.domain = domain or NODOMAIN
         self.reload_loadbalancer()
 
     @locked
