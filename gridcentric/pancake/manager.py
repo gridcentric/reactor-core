@@ -349,32 +349,33 @@ class ScaleManager(object):
         ips += self.confirmed_ips(endpoint_name)
         if endpoint_name in self.endpoints:
             ips += self.endpoints[endpoint_name].static_addresses()
-        return ips
+        # Make sure that we return a unique set.
+        return list(set(ips))
 
     @locked
-    def drop_ip(self, endpoint_name, ip_address):
-        self.zk_conn.delete(paths.endpoint_ip_metrics(endpoint_name, ip_address))
-        self.zk_conn.delete(paths.confirmed_ip(endpoint_name, ip_address))
-        self.zk_conn.delete(paths.ip_address(ip_address))
+    def drop_ip(self, endpoint_name, ip):
+        logging.info("Dropping endpoint %s IP %s" % (endpoint_name, ip))
+        self.zk_conn.delete(paths.endpoint_ip_metrics(endpoint_name, ip))
+        self.zk_conn.delete(paths.confirmed_ip(endpoint_name, ip))
+        self.zk_conn.delete(paths.ip_address(ip))
+
+    @locked
+    def confirm_ip(self, endpoint_name, ip):
+        logging.info("Adding endpoint %s IP %s" % (endpoint_name, ip))
+        self.zk_conn.write(paths.confirmed_ip(endpoint_name, ip), "")
+        self.zk_conn.write(paths.ip_address(ip), endpoint_name)
+        self.zk_conn.delete(paths.new_ip(ip))
 
     @locked
     def register_ip(self, ips):
-        def _register_ip(scale_manager, endpoint, ip):
-            logging.info("Endpoint %s found for IP %s" % (endpoint.name, ip))
-            # We found the endpoint that this IP address belongs. Confirm this
-            # IP address and remove it from the new-ip address. Finally update
-            # the loadbalancer.
-            scale_manager.zk_conn.write(paths.confirmed_ip(endpoint.name, ip), "")
-            scale_manager.zk_conn.write(paths.ip_address(ip), endpoint.name)
-            scale_manager.zk_conn.delete(paths.new_ip(ip))
-            scale_manager.update_loadbalancer(endpoint)
-
         for endpoint in self.endpoints.values():
             endpoint_ips = endpoint.addresses()
+            endpoint_ips.extend(endpoint.static_addresses())
             for ip in ips:
                 if ip in endpoint_ips:
-                    _register_ip(self, endpoint, ip)
+                    self.confirm_ip(endpoint.name, ip)
                     break
+        self.update_loadbalancer(endpoint)
 
     @locked
     def collect_endpoint_ips(self, endpoint, public_ips, private_ips):
@@ -556,13 +557,16 @@ class ScaleManager(object):
 
         for ip in metrics:
             for endpoint in self.endpoints.values():
+
                 if not endpoint.name in endpoint_addresses:
                     endpoint_addresses[endpoint.name] = self.active_ips(endpoint.name)
+
                 endpoint_ips = endpoint_addresses[endpoint.name]
                 if not(endpoint.key() in metrics_by_key):
                     metrics_by_key[endpoint.key()] = []
                 if not(endpoint.name in active_connections):
                     active_connections[endpoint.name] = []
+
                 if ip in endpoint_ips:
                     metrics_by_key[endpoint.key()].append(metrics[ip])
                     ip_to_endpoint_name[ip] = endpoint.name

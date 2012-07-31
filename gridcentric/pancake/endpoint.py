@@ -255,7 +255,13 @@ class Endpoint(object):
         new_public = self.config.public()
         new_enabled = self.config.enabled()
 
-        # Remove all old instances from loadbalancer.
+        # Drop all removed static addresses.
+        for ip in old_static_addresses:
+            if not(ip in new_static_addresses):
+                self.scale_manager.drop_ip(self.name, ip)
+
+        # Remove all old instances from loadbalancer,
+        # (Only necessary if we've changed the endpoint URL).
         if old_url != new_url:
             self.scale_manager.remove_endpoint(self.name)
 
@@ -270,6 +276,7 @@ class Endpoint(object):
         # Do a referesh (to capture the new endpoint).
         if old_url != new_url:
             self.scale_manager.add_endpoint(self)
+
         elif old_static_addresses != new_static_addresses or \
              old_port != new_port or \
              old_public != new_public or \
