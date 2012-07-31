@@ -35,25 +35,28 @@ class EndpointConfig(Config):
         return self._get("endpoint", "url", '')
 
     def port(self):
-        return int(self._get("endpoint", "port", "80"))
+        return self._getint("endpoint", "port", 80)
 
     def public(self):
-        return self._get("endpoint", "public", "true") == "true"
+        return self._getbool("endpoint", "public", True)
 
     def enabled(self):
-        return self._get("endpoint", "enabled", "true") == "true"
+        return self._getbool("endpoint", "enabled", True)
+
+    def weight(self):
+        return self._getint("endpoint", "weight", 1)
 
     def min_instances(self):
-        return int(self._get("scaling", "min_instances", "1"))
+        return self._getint("scaling", "min_instances", 1)
 
     def max_instances(self):
-        return int(self._get("scaling", "max_instances", "1"))
+        return self._getint("scaling", "max_instances", 1)
 
     def rules(self):
-        return self._get("scaling", "rules", "").split(",")
+        return self._getlist("scaling", "rules")
 
     def ramp_limit(self):
-        return int(self._get("scaling", "ramp_limit", "5"))
+        return self._getint("scaling", "ramp_limit", 5)
 
     def source_url(self):
         return self._get("scaling", "url", "")

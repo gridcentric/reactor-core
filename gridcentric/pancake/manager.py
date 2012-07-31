@@ -29,7 +29,7 @@ class ManagerConfig(Config):
 
     def loadbalancer_names(self):
         """ The name of the loadbalancer. """
-        return self._get("manager", "loadbalancer", "").split(",")
+        return self._getlist("manager", "loadbalancer")
 
     def loadbalancer_config(self, name):
         """ The set of keys required to configure the loadbalancer. """
@@ -37,13 +37,13 @@ class ManagerConfig(Config):
 
     def mark_maximum(self, label):
         if label in ['unregistered', 'decommissioned']:
-            return int(self._get("manager", "%s_wait" % (label), "20"))
+            return self._getint("manager", "%s_wait" % (label), 20)
 
     def keys(self):
-        return int(self._get("manager", "keys", "64"))
+        return self._getint("manager", "keys", 64)
 
     def health_check(self):
-        return float(self._get("manager", "health_check", "5"))
+        return self._getint("manager", "health_check", 5)
 
 def locked(fn):
     def wrapped_fn(self, *args, **kwargs):

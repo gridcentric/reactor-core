@@ -22,6 +22,19 @@ class Config(object):
         else:
             return default
 
+    def _getint(self, section, key, default):
+        try:
+            return int(self._get(section, key, str(default)))
+        except ValueError:
+            return default
+
+    def _getbool(self, section, key, default):
+        default = default and "true" or "false"
+        return self._get(section, key, default).lower() == "true"
+
+    def _getlist(self, section, key):
+        return self._get(section, key, "").split(",")
+
     def _set(self, section, key, value):
         if not(self.config.has_section(section)):
             self.config.add_section(section)
