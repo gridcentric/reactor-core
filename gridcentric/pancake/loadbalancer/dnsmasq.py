@@ -36,7 +36,12 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
     def clear(self):
         self.mappings = {}
 
-    def change(self, url, names, public_ips, private_ips):
+    def change(self, url, names, public_ips, manager_ips, private_ips):
+        # If there are no public IPs to serve up for this endpoint,
+        # then we provide instead the available manager IPs. 
+        if len(public_ips) == 0:
+            public_ips = manager_ips
+
         # Save the mappings.
         for name in names:
             self.mappings[name] = public_ips

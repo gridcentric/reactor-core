@@ -181,7 +181,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # Remove all tracked connections.
         self.tracked = {}
 
-    def change(self, url, names, public_ips, private_ips):
+    def change(self, url, names, public_ips, manager_ips, private_ips):
         # We use a simple hash of the URL as the file name for the
         # configuration file.
         uniq_id = hashlib.md5(url).hexdigest()

@@ -403,13 +403,6 @@ class ScaleManager(object):
                 private_ips.append(ip)
 
     @locked
-    def fixup_endpoint_ips(self, public_ips, private_ips):
-        if len(public_ips) == 0:
-            return (self.manager_ips, private_ips)
-        else:
-            return (public_ips, private_ips)
-
-    @locked
     def update_loadbalancer(self, endpoint, remove=False):
         public_ips = []
         private_ips = []
@@ -425,10 +418,10 @@ class ScaleManager(object):
                     self.endpoints[endpoint_name],
                     public_ips, private_ips)
 
-        (public_ips, private_ips) = self.fixup_endpoint_ips(public_ips, private_ips)
         self.load_balancer.change(endpoint.url(),
                                   names,
                                   public_ips,
+                                  self.manager_ips,
                                   private_ips)
         self.load_balancer.save()
 
@@ -445,10 +438,10 @@ class ScaleManager(object):
                 names.append(endpoint.name)
                 self.collect_endpoint_ips(endpoint, public_ips, private_ips)
 
-            (public_ips, private_ips) = self.fixup_endpoint_ips(public_ips, private_ips)
             self.load_balancer.change(endpoint.url(),
                                       names,
                                       public_ips,
+                                      self.manager_ips,
                                       private_ips)
 
         self.load_balancer.save()
