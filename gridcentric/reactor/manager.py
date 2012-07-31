@@ -35,7 +35,7 @@ class ReactorScaleManager(ScaleManager):
         # Ensure that the default loadbalancers are available.
         new_config = ManagerConfig(config_str)
         new_config._set("manager", "loadbalancer", "dnsmasq,nginx")
-        ScaleManager.manager_register(self, str(new_config))
+        super(ReactorScaleManager, self).manager_register(str(new_config))
 
     @locked
     def serve(self):
@@ -46,10 +46,6 @@ class ReactorScaleManager(ScaleManager):
         self.setup_iptables(self.zk_conn.watch_children(
             paths.manager_configs(), self.setup_iptables))
 
-        # Create the API endpoint.
-        if not(self.api_endpoint):
-            self.api_endpoint = APIEndpoint(self)
-
         # Ensure it is being served.
         if not(self.api_endpoint.name in self.endpoints):
             self.create_endpoint(self.api_endpoint.name)
@@ -57,11 +53,12 @@ class ReactorScaleManager(ScaleManager):
     @locked
     def create_endpoint(self, endpoint_name):
         if endpoint_name == "api":
-            logging.info("API endpoint found.")
+            # Create the API endpoint.
+            if not(self.api_endpoint):
+                self.api_endpoint = APIEndpoint(self)
 
-            # Create the API endpoint object.
-            endpoint = APIEndpoint(self)
-            self.add_endpoint(endpoint)
+            logging.info("API endpoint found.")
+            self.add_endpoint(self.api_endpoint)
         else:
             # Create the standard endpoint.
             super(ReactorScaleManager, self).create_endpoint(endpoint_name)

@@ -16,7 +16,7 @@ class APIEndpoint(Endpoint):
         # Read the configuration.
         api_path = paths.endpoint("api")
         if config == None:
-            config = EndpointConfig(self.scale_manager.zk_conn.read(api_path))
+            config = self.scale_manager.zk_conn.read(api_path) or ''
         api_config = EndpointConfig(str(config))
 
         # Update basic information.
