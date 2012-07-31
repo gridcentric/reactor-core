@@ -26,6 +26,7 @@ PACKAGES += python-netifaces
 PACKAGES += dnsmasq
 PACKAGES += graphviz
 PACKAGES += curl
+PACKAGES += iptables
 
 PACKAGE_CMDLINE := $(PACKAGES:%=--addpkg=%)
 
