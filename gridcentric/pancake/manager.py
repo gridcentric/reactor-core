@@ -349,6 +349,7 @@ class ScaleManager(object):
         ips += self.confirmed_ips(endpoint_name)
         if endpoint_name in self.endpoints:
             ips += self.endpoints[endpoint_name].static_addresses()
+
         # Make sure that we return a unique set.
         return list(set(ips))
 
@@ -382,7 +383,7 @@ class ScaleManager(object):
         if not(endpoint.enabled()):
             return
 
-        if not(endpoint.public()):
+        if endpoint.public():
             public_ips.extend(self.active_ips(endpoint.name))
         else:
             private_ips.extend(self.active_ips(endpoint.name))
