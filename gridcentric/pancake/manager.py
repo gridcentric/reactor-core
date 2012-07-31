@@ -561,7 +561,7 @@ class ScaleManager(object):
         # Update all the endpoint metrics from the loadbalancer.
         metrics = self.load_balancer.metrics()
 
-        logging.debug("Load_balancer returned metrics: %s" % metrics)
+        logging.debug("Load balancer returned metrics: %s" % metrics)
         metrics_by_key = {}
         endpoint_addresses = {}
         ip_to_endpoint_name = {}
@@ -683,8 +683,8 @@ class ScaleManager(object):
                             if self.metric_indicates_active(ip_metrics):
                                 active_connections.append(ip_address)
                         except ValueError:
-                            logging.warn("Invalid instance metrics for %s:%s."
-                                         % (endpoint.name, ip_address))
+                            logging.warn("Invalid instance metrics for %s:%s." % \
+                                         (endpoint.name, ip_address))
 
         # Return the metrics.
         return metrics, active_connections
