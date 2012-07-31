@@ -98,12 +98,12 @@ class ScaleManager(object):
                                 self.reload_domain,
                                 default_value=self.domain))
 
-        # Watch all IPs.
-        self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
-
         # Watch all managers and endpoints.
         self.manager_change(self.zk_conn.watch_children(paths.managers(), self.manager_change))
         self.endpoint_change(self.zk_conn.watch_children(paths.endpoints(), self.endpoint_change))
+
+        # Watch all IPs.
+        self.register_ip(self.zk_conn.watch_children(paths.new_ips(), self.register_ip))
 
     @locked
     def manager_select(self, endpoint):
