@@ -70,8 +70,8 @@ def endpoint(name):
     return "%s/%s" % (ENDPOINTS, name)
 
 # The action for an endpoint.
-def endpoint_action(name):
-    return "%s/action" % (endpoint(name))
+def endpoint_state(name):
+    return "%s/state" % (endpoint(name))
 
 # The manager for this endpoint.
 def endpoint_manager(name):

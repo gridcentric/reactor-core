@@ -272,8 +272,8 @@ class ScaleManager(object):
         if not(endpoint.name in self.key_to_endpoints[endpoint.key()]):
             self.key_to_endpoints[endpoint.key()].append(endpoint.name)
 
-        def update_action(value):
-            endpoint.update_action(value)
+        def update_state(value):
+            endpoint.update_state(value)
             if self.endpoint_owned(endpoint):
                 endpoint.update()
         def update_config(value):
@@ -283,9 +283,9 @@ class ScaleManager(object):
 
         # Watch the config for this endpoint.
         logging.info("Watching endpoint %s." % (endpoint.name))
-        update_action(
-            self.zk_conn.watch_contents(paths.endpoint_action(endpoint.name),
-                                        update_action, '',
+        update_state(
+            self.zk_conn.watch_contents(paths.endpoint_state(endpoint.name),
+                                        update_state, '',
                                         clean=True))
         update_config(
             self.zk_conn.watch_contents(paths.endpoint(endpoint.name),

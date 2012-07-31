@@ -227,7 +227,7 @@ try:
 
         if len(args) > 2:
             action = get_arg(2)
-            api_client.set_endpoint_action(endpoint_name, action)
+            api_client.endpoint_action(endpoint_name, action)
         else:
             print json.dumps(api_client.get_endpoint_state(endpoint_name))
 

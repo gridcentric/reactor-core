@@ -97,7 +97,7 @@ class PancakeApiClient(httplib2.Http):
                                                  endpoint_name, 'GET')
         return body.get('ip_addresses', [])
 
-    def set_endpoint_action(self, endpoint_name, action):
+    def endpoint_action(self, endpoint_name, action):
         """
         Set the current endpoint action.
         """

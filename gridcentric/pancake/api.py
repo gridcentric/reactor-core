@@ -7,6 +7,7 @@ from pyramid.config import Configurator
 from pyramid.response import Response
 
 from gridcentric.pancake.endpoint import EndpointConfig
+from gridcentric.pancake.endpoint import State
 from gridcentric.pancake.manager import ManagerConfig
 from gridcentric.pancake.zooclient import PancakeClient
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
@@ -427,9 +428,9 @@ class PancakeApi:
         if request.method == "GET":
             logging.info("Retrieving state for endpoint %s" % endpoint_name)
             config = self.client.get_endpoint_config(endpoint_name)
-            state = self.client.get_endpoint_state(endpoint_name)
 
             if config != None:
+                state = self.client.get_endpoint_state(endpoint_name) or State.default
                 connections = self.client.get_endpoint_connections(endpoint_name)
                 manager = self.client.get_endpoint_manager(endpoint_name)
                 value = {
@@ -447,7 +448,9 @@ class PancakeApi:
             config = self.client.get_endpoint_config(endpoint_name)
 
             if config != None:
-                self.client.set_endpoint_action(endpoint_name, state_action.get('action', ''))
+                current_state = self.client.get_endpoint_state(endpoint_name)
+                new_state = State.from_action(current_state, state_action.get('action', ''))
+                self.client.set_endpoint_state(endpoint_name, new_state)
                 response = Response()
             else:
                 response = Response(status=404, body="%s not found" % endpoint_name)

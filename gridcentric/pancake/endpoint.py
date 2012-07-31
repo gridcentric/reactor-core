@@ -241,8 +241,8 @@ class Endpoint(object):
         self.decommission_instances(instances_to_delete,
             "bringing instance total down to target %s" % target)
 
-    def update_action(self, action):
-        self.state = State.from_action(self.state, action)
+    def update_state(self, state):
+        self.state = state
 
     def update_config(self, config_str):
         # Check if our configuration is about to change.
