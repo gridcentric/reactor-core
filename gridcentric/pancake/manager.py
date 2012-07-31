@@ -11,7 +11,6 @@ from StringIO import StringIO
 from gridcentric.pancake.config import Config
 from gridcentric.pancake.config import ConfigView
 
-from gridcentric.pancake.endpoint import EndpointConfig
 from gridcentric.pancake.endpoint import Endpoint
 from gridcentric.pancake.endpoint import State
 
@@ -259,6 +258,12 @@ class ScaleManager(object):
         logging.info("New endpoint %s found to be managed." % endpoint_name)
 
         # Create the object.
+        # NOTE: We create all endpoints on this manager with the current
+        # manager config. This means that all manager keys will be inherited
+        # and you can set some sensible defaults either in the local manager
+        # configuration or in the global configuration. 
+        # This does mean however, that the ManagerConfig and EndpointConfig
+        # should have disjoint sections for the most part.
         endpoint = Endpoint(endpoint_name, str(self.config), self)
         self.add_endpoint(endpoint)
 
