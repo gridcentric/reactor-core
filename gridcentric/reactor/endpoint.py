@@ -10,7 +10,7 @@ class APIEndpoint(Endpoint):
         self.scale_manager = scale_manager
         Endpoint.__init__(self, "api", self.api_config(), scale_manager)
         # Make sure that this service is running.
-        self.update_action('')
+        self.update_state(None)
 
     def api_config(self, config=None):
         # Read the configuration.
@@ -38,10 +38,10 @@ class APIEndpoint(Endpoint):
 
         return api_config
 
-    def update_action(self, action):
-        if State.from_action(self.state, action) != State.running:
+    def update_state(self, state):
+        if state != State.running:
             # Always make sure that the latest action reflects our state.
-            self.scale_manager.zk_conn.write(paths.endpoint_action("api"), "start")
+            self.scale_manager.zk_conn.write(paths.endpoint_state("api"), State.running)
 
     def update_config(self, config_str):
         new_config = EndpointConfig(config_str)
