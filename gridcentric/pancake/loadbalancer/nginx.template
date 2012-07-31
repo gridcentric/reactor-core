@@ -1,7 +1,7 @@
 upstream ${id} {
 
-    % for ip in ips:
-    server ${ip}:${port} weight=${weight};
+    % for ipspec in ipspecs:
+    server ${ipspec};
     % endfor
 ${extra}
 }

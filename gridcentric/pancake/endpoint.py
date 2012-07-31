@@ -35,7 +35,7 @@ class EndpointConfig(Config):
         return self._get("endpoint", "url", '')
 
     def port(self):
-        return self._getint("endpoint", "port", 80)
+        return self._getint("endpoint", "port", 0)
 
     def public(self):
         return self._getbool("endpoint", "public", True)
@@ -220,6 +220,10 @@ class Endpoint(object):
             target = 0
             ramp_limit = sys.maxint
 
+        else:
+            logging.error("Unknown state '%s' ?!?" % self.state)
+            return
+
         logging.debug("Target number of instances for endpoint %s determined to be %s (current: %s)"
                       % (self.name, target, num_instances))
 
@@ -242,7 +246,7 @@ class Endpoint(object):
             "bringing instance total down to target %s" % target)
 
     def update_state(self, state):
-        self.state = state
+        self.state = state or State.default
 
     def update_config(self, config_str):
         # Check if our configuration is about to change.

@@ -36,14 +36,10 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
     def clear(self):
         self.mappings = {}
 
-    def change(self, url, port, weight, names, manager_ips, public_ips, private_ips):
-        # If there are no public ips, we use the manager.
-        if len(public_ips) == 0:
-            public_ips = manager_ips
-
+    def change(self, url, names, public_ips, private_ips):
         # Save the mappings.
         for name in names:
-            self.mappings[name] = (weight, public_ips)
+            self.mappings[name] = public_ips
 
     def save(self):
         # Compute the address mapping.
@@ -51,12 +47,11 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
         # for dns-based loadbalancer. This may be implemented in
         # the future -- but for now this parameter is ignored.
         ipmap = {}
-        for (name, info) in self.mappings.items():
-            (weight, ips) = info
-            for ip in ips:
-                if not(ip in ipmap):
-                    ipmap[ip] = []
-                ipmap[ip].append(name)
+        for (name, backends) in self.mappings.items():
+            for backend in backends:
+                if not(backend.ip in ipmap):
+                    ipmap[backend.ip] = []
+                ipmap[backend.ip].append(name)
 
         # Write out our hosts file.
         hosts = open(self.config.hosts_path(), 'wb')

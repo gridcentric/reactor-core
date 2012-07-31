@@ -22,7 +22,7 @@ def get_connection(name, config, scale_manager):
 class LoadBalancerConnection(object):
     def clear(self):
         pass
-    def change(self, url, port, weight, names, manager_ips, public_ips, private_ips):
+    def change(self, url, names, public_ips, private_ips):
         pass
     def save(self):
         pass
@@ -30,15 +30,21 @@ class LoadBalancerConnection(object):
         # Returns { host : (weight, value) }
         return {}
 
+class BackendIP(object):
+    def __init__(self, ip, port=0, weight=1):
+        self.ip     = ip
+        self.port   = port
+        self.weight = weight
+
 class LoadBalancers(list):
 
     def clear(self):
         for lb in self:
             lb.clear()
 
-    def change(self, url, port, weight, names, manager_ips, public_ips, private_ips):
+    def change(self, url, names, public_ips, private_ips):
         for lb in self:
-            lb.change(url, port, weight, names, manager_ips, public_ips, private_ips)
+            lb.change(url, names, public_ips, private_ips)
 
     def save(self):
         for lb in self:

@@ -181,8 +181,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # Remove all tracked connections.
         self.tracked = {}
 
-    def change(self, url, port, weight, names, manager_ips, public_ips, private_ips):
-
+    def change(self, url, names, public_ips, private_ips):
         # We use a simple hash of the URL as the file name for the
         # configuration file.
         uniq_id = hashlib.md5(url).hexdigest()
@@ -217,25 +216,27 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         netloc = w_port[0]
         if len(w_port) == 1:
             if scheme == "http":
-                listen = "80"
+                listen = 80
             elif scheme == "https":
-                listen = "443"
+                listen = 443
         else:
-            listen = w_port[1]
-
-        # Check the front end port.
-        if not(port):
-            port = listen
+            listen = int(w_port[1])
 
         # Ensure that there is a path.
         path = path or "/"
 
         # Ensure that there is a server name.
-        if not(netloc):
-            netloc = "example.com"
+        netloc = netloc or "example.com"
 
-        # Add the connection to our tracking list.
-        self.tracked[uniq_id] = (int(port), ips)
+        # Add the connection to our tracking list, and
+        # compute the specification for the template.
+        ipspecs = []
+        self.tracked[uniq_id] = []
+        for backend in ips:
+            if not(backend.port):
+                backend.port = listen
+            ipspecs.append("%s:%d weight=%d" % (backend.ip, backend.port, backend.weight))
+            self.tracked[uniq_id].append((backend.ip, backend.port))
 
         # Compute any extra bits for the template.
         extra = ''
@@ -250,10 +251,8 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
                                     netloc=netloc,
                                     path=path,
                                     scheme=scheme,
-                                    port=port,
-                                    weight=str(weight),
-                                    listen=listen,
-                                    ips=ips,
+                                    listen=str(listen),
+                                    ipspecs=ipspecs,
                                     extra=extra)
 
         # Write out the config file.
@@ -280,8 +279,8 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # Grab the active connections.
         active_connections = connection_count()
 
-        for (port, ips) in self.tracked.values():
-            for ip in ips:
+        for connection_list in self.tracked.values():
+            for (ip, port) in connection_list:
                 active = active_connections.get((ip, port), 0)
                 if not(ip in records):
                     records[ip] = {}

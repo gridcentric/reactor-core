@@ -15,6 +15,7 @@ from gridcentric.pancake.endpoint import Endpoint
 from gridcentric.pancake.endpoint import State
 
 import gridcentric.pancake.loadbalancer.connection as lb_connection
+from gridcentric.pancake.loadbalancer.connection import BackendIP
 
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
@@ -66,7 +67,7 @@ class ScaleManager(object):
         self.domain = ""                # Pancake domain.
 
         self.endpoints = {}        # Endpoint map (name -> endpoint)
-        self.key_to_endpoints = {} # Endpoint map (key() -> [endpoints...])
+        self.key_to_endpoints = {} # Endpoint map (key() -> [names...])
 
         self.managers = {}        # Forward map of manager keys.
         self.manager_ips = []     # List of all manager IPs.
@@ -248,7 +249,9 @@ class ScaleManager(object):
             self.manager_select(endpoint)
 
         # Reload all managers IPs.
-        self.manager_ips = self.zk_conn.list_children(paths.manager_ips())
+        self.manager_ips = \
+            map(lambda x: BackendIP(x),
+                self.zk_conn.list_children(paths.manager_ips()))
 
         # Kick the loadbalancer.
         self.reload_loadbalancer()
@@ -324,10 +327,9 @@ class ScaleManager(object):
             logging.info("Unmanaging endpoint %s" % (endpoint_name))
             endpoint_names = self.key_to_endpoints.get(endpoint.key(), [])
             if endpoint_name in endpoint_names:
-                # Remove the endpoint name from the list of endpoints with the
-                # same key. If the endpoint name is not in the list, then it is
-                # fine because we are just removing it anyway.
                 endpoint_names.remove(endpoint_name)
+                if len(endpoint_names) == 0:
+                    del self.key_to_endpoints[endpoint.key()]
 
             # Perform a full unmanage if this is required.
             if unmanage and self.endpoint_owned(endpoint):
@@ -388,10 +390,19 @@ class ScaleManager(object):
         if not(endpoint.enabled()):
             return
 
-        if endpoint.public():
-            public_ips.extend(self.active_ips(endpoint.name))
+        for ip in self.active_ips(endpoint.name):
+            ip = BackendIP(ip, endpoint.port(), endpoint.weight())
+            if endpoint.public():
+                public_ips.append(ip)
+            else:
+                private_ips.append(ip)
+
+    @locked
+    def fixup_endpoint_ips(self, public_ips, private_ips):
+        if len(public_ips) == 0:
+            return (self.manager_ips, private_ips)
         else:
-            private_ips.extend(self.active_ips(endpoint.name))
+            return (public_ips, private_ips)
 
     @locked
     def update_loadbalancer(self, endpoint, remove=False):
@@ -409,13 +420,9 @@ class ScaleManager(object):
                     self.endpoints[endpoint_name],
                     public_ips, private_ips)
 
-        logging.info("Updating loadbalancer for %s (%s) with public=%s, private=%s" %
-                     (endpoint.url(), ",".join(names), public_ips, private_ips))
+        (public_ips, private_ips) = self.fixup_endpoint_ips(public_ips, private_ips)
         self.load_balancer.change(endpoint.url(),
-                                  endpoint.port(),
-                                  endpoint.weight(),
                                   names,
-                                  self.manager_ips,
                                   public_ips,
                                   private_ips)
         self.load_balancer.save()
@@ -424,21 +431,18 @@ class ScaleManager(object):
     def reload_loadbalancer(self):
         self.load_balancer.clear()
 
-        for endpoint in self.endpoints.values():
+        for (key, endpoint_names) in self.key_to_endpoints.items():
             public_ips = []
             private_ips = []
             names = []
-            for endpoint_name in self.key_to_endpoints.get(endpoint.key(), []):
-                names.append(endpoint_name)
-                self.collect_endpoint_ips(
-                    self.endpoints[endpoint_name],
-                    public_ips, private_ips)
 
+            for endpoint in map(lambda x: self.endpoints[x], endpoint_names):
+                names.append(endpoint.name)
+                self.collect_endpoint_ips(endpoint, public_ips, private_ips)
+
+            (public_ips, private_ips) = self.fixup_endpoint_ips(public_ips, private_ips)
             self.load_balancer.change(endpoint.url(),
-                                      endpoint.port(),
-                                      endpoint.weight(),
                                       names,
-                                      self.manager_ips,
                                       public_ips,
                                       private_ips)
 
