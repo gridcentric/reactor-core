@@ -24,6 +24,7 @@ class APIEndpoint(Endpoint):
         api_config._set("endpoint", "url", url)
         api_config._set("scaling",  "url", url)
         api_config._set("endpoint", "port", "8080")
+        api_config._set("endpoint", "public", "false")
         api_config._set("endpoint", "enabled", "true")
 
         # Update the static IPs in the configuration.
