@@ -17,9 +17,9 @@ class APIEndpoint(Endpoint):
         api_path = paths.endpoint("api")
         if config == None:
             config = self.scale_manager.zk_conn.read(api_path) or ''
-        api_config = EndpointConfig(str(config))
 
         # Update basic information.
+        api_config = EndpointConfig(str(config))
         url = "http://api.%s" % self.scale_manager.domain
         api_config._set("endpoint", "url", url)
         api_config._set("scaling",  "url", url)

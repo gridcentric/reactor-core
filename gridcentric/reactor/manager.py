@@ -65,8 +65,10 @@ class ReactorScaleManager(ScaleManager):
 
     @locked
     def remove_endpoint(self, endpoint_name, unmanage=False):
-        # We don't allow users to remove the API endpoint.
-        if endpoint_name != "api":
+        if endpoint_name == "api" and unmanage:
+            # Recreate, we always have an API endpoint.
+            self.create_endpoint(endpoint_name)
+        else:
             super(ReactorScaleManager, self).remove_endpoint(endpoint_name, unmanage=unmanage)
 
     @locked
