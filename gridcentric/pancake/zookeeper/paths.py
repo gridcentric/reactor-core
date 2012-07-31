@@ -55,55 +55,59 @@ def manager_keys(name):
 def manager_metrics(name):
     return "%s/%s" % (MANAGER_METRICS, name)
 
-# The mappings of service to ip address that have no connections
+# The mappings of endpoint to ip address that have no connections
 def manager_active_connections(name):
     return "%s/active_connections/%s" % (MANAGERS, name)
 
-# The services subtree. Basically anything related to a particular service
+# The endpoints subtree. Basically anything related to a particular endpoint
 # should be rooted here.
-SERVICES = "%s/service" % (ROOT)
-def services():
-    return SERVICES
+ENDPOINTS = "%s/endpoint" % (ROOT)
+def endpoints():
+    return ENDPOINTS
 
-# The subtree for a particular service.
-def service(name):
-    return "%s/%s" % (SERVICES, name)
+# The subtree for a particular endpoint.
+def endpoint(name):
+    return "%s/%s" % (ENDPOINTS, name)
 
-# The manager for this service.
-def service_manager(name):
-    return "%s/manager" % (service(name))
+# The action for an endpoint.
+def endpoint_state(name):
+    return "%s/state" % (endpoint(name))
+
+# The manager for this endpoint.
+def endpoint_manager(name):
+    return "%s/manager" % (endpoint(name))
 
 # The custom metrics for a particular host.
-def service_ip_metrics(name, ip_address):
-    return "%s/ip_metrics/%s" % (service(name), ip_address)
+def endpoint_ip_metrics(name, ip_address):
+    return "%s/ip_metrics/%s" % (endpoint(name), ip_address)
 
-# The global custom metrics for a service (posted by the API).
-def service_custom_metrics(name):
-    return "%s/custom_metrics" % (service(name))
+# The global custom metrics for a endpoint (posted by the API).
+def endpoint_custom_metrics(name):
+    return "%s/custom_metrics" % (endpoint(name))
 
-# The updated metrics for a particular service (posted by the manager).
-def service_live_metrics(name):
-    return "%s/live_metrics" % (service(name))
+# The updated metrics for a particular endpoint (posted by the manager).
+def endpoint_live_metrics(name):
+    return "%s/live_metrics" % (endpoint(name))
 
-# The updated connections for a particular service (posted by the manager).
-def service_live_connections(name):
-    return "%s/live_connections" % (service(name))
+# The updated connections for a particular endpoint (posted by the manager).
+def endpoint_live_connections(name):
+    return "%s/live_connections" % (endpoint(name))
 
-# The ips that have been confirmed by the system for a particular service. An
+# The ips that have been confirmed by the system for a particular endpoint. An
 # ip is confirmed once it sends a message to a pancake.
 def confirmed_ips(name):
-    return "%s/confirmed_ip" % (service(name))
+    return "%s/confirmed_ip" % (endpoint(name))
 
-# A particular ip that has been confirmed for the service.
+# A particular ip that has been confirmed for the endpoint.
 def confirmed_ip(name, ip_address):
     return "%s/%s" % (confirmed_ips(name), ip_address)
 
 # The instance ids that have been marked as having an issue relating to them.
 # Usually this issue will be related to connectivity issue.
 def marked_instances(name):
-    return "%s/marked_ip" % (service(name))
+    return "%s/marked_ip" % (endpoint(name))
 
-# The particular instance id that has been marked for the service. This is a
+# The particular instance id that has been marked for the endpoint. This is a
 # running counter and once it has reached some configurable value the system
 # should attempt to clean it up because there is something wrong with it.
 def marked_instance(name, instance_id):
@@ -113,13 +117,13 @@ def marked_instance(name, instance_id):
 # is basically marked for deletion but waiting for client / connections to
 # finish up.
 def decommissioned_instances(name):
-    return "%s/decommissioned" % (service(name))
+    return "%s/decommissioned" % (endpoint(name))
 
-# The particular instance id that has been decommissioned for a service.
+# The particular instance id that has been decommissioned for a endpoint.
 def decommissioned_instance(name, instance_id):
     return "%s/%s" % (decommissioned_instances(name), instance_id)
 
-# New IPs currently not associated with any service are logged here.
+# New IPs currently not associated with any endpoint are logged here.
 NEW_IPS = "%s/new-ips" % (ROOT)
 def new_ips():
     return NEW_IPS

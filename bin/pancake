@@ -13,7 +13,6 @@ from ConfigParser import SafeConfigParser
 
 from gridcentric.pancake.apiclient import PancakeApiClient
 from gridcentric.pancake import log
-import gridcentric.pancake.zookeeper.config as config
 
 api_server = "http://localhost:8080"
 zk_servers = []
@@ -22,72 +21,65 @@ debug = False
 logfile = None
 update = False
 
-def default_zk_servers():
-    try:
-        servers = config.read_config()
-    except:
-        servers = []
-    if len(servers) > 0:
-        return servers
-    else:
-        return ["localhost"]
-
 def usage():
     print "usage: %s < -h|--help | [options] command >" % sys.argv[0]
     print ""
     print "Optional arguments:"
-    print "   -h, --help             Display this help message"
+    print "   -h, --help              Display this help message"
     print ""
-    print "   -a, --api=             The API url (default is %s)." % api_server
+    print "   -a, --api=              The API url (default is %s)." % api_server
     print ""
-    print "   -p, --password=        The password used to connect to the API."
+    print "   -p, --password=         The password used to connect to the API."
     print ""
-    print "   -z, --zookeeper=       The host:port of a zookeeper instance. Use this option"
-    print "                          multiple times to specific multiple instances. Only"
-    print "                          necessary for run commands."
-    print "                          The default set is: %s" % ",".join(default_zk_servers())
+    print "   -z, --zookeeper=        The host:port of a zookeeper instance. Use this option"
+    print "                           multiple times to specific multiple instances. Only"
+    print "                           necessary for run commands. The default is localhost."
     print ""
-    print "   -d, --debug            Enables debugging log and full stack trace errors."
+    print "   -d, --debug             Enables debugging log and full stack trace errors."
     print ""
-    print "   -l, --log=             Log to a file instead of stdout."
+    print "   -l, --log=              Log to a file instead of stdout."
     print ""
-    print "   -u, --update           Perform an incremental configuration update."
+    print "   -u, --update            Perform an incremental configuration update."
     print ""
     print "Commands:"
-    print "    version               Get the server API version."
+    print "    version                Get the server API version."
     print ""
-    print "    list                  List all the services currently being managed."
+    print "    list                   List all the endpoints currently being managed."
     print ""
-    print "    manage <service>      Manage or update a serivce with the given name."
-    print "                          The service configuration is read from stdin."
+    print "    manage <endpoint>      Manage or update a serivce with the given name."
+    print "                           The endpoint configuration is read from stdin."
     print ""
-    print "    unmanage <service>    Unmanged the service with the given name."
+    print "    unmanage <endpoint>    Unmanged the endpoint with the given name."
     print ""
-    print "    show <service>        Show the current configuration for the service."
+    print "    show <endpoint>        Show the current configuration for the endpoint."
     print ""
-    print "    ips <service>         Displays all of the IP addresses associated with"
-    print "                          the service."
+    print "    ips <endpoint>         Displays all of the IP addresses associated with"
+    print "                           the endpoint."
     print ""
-    print "    info <service>        Display the current service info."
+    print "    state <endpoint> [action] See or update the endpoint state."
     print ""
-    print "    metrics <service>     Set custom service metrics. The metrics are read"
-    print "                          as JSON { \"name\" : [weight, value] } from stdin."
+    print "    get-metrics <endpoint> Get custom endpoint metrics."
     print ""
-    print "    managers-configured   List all the configured managers."
+    print "    set-metrics <endpoint> Set custom endpoint metrics. The metrics are read"
+    print "                           as JSON { \"name\" : [weight, value] } from stdin."
     print ""
-    print "    managers-active       List all the active managers."
+    print "    managers-configured    List all the configured managers."
     print ""
-    print "    update-manager [ip]   Update the current configuration for the manager."
+    print "    managers-active        List all the active managers."
     print ""
-    print "    show-manager [ip]     Show the current configuration for the manager."
+    print "    update-manager [ip]    Update the current configuration for the manager."
     print ""
-    print "    passwd [password]     Updates the API's password."
+    print "    show-manager [ip]      Show the current configuration for the manager."
     print ""
-    print "    domain [domain]       Get or set the domain."
+    print "    forget-manager <ip>    Remove and forget the given manager."
     print ""
-    print "    runserver             Run the scale manager server."
+    print "    passwd [password]      Updates the API's password."
     print ""
-    print "    runapi                Runs the API server."
+    print "    domain [domain]        Get or set the domain."
+    print ""
+    print "    runserver              Run the scale manager server."
+    print ""
+    print "    runapi                 Runs the API server."
     print ""
 
 opts, args = getopt.getopt(sys.argv[1:], 
@@ -112,7 +104,7 @@ for o, a in opts:
         update = True
 
 if len(zk_servers) == 0:
-    zk_servers = default_zk_servers()
+    zk_servers = ["localhost"]
 
 loglevel = logging.INFO
 if debug:
@@ -136,13 +128,13 @@ try:
 
     elif command == "list":
         api_client = get_api_client()
-        services = api_client.list_managed_services()
-        if services:
-            for service in services: 
-                print service
+        endpoints = api_client.list_managed_endpoints()
+        if endpoints:
+            for endpoint in endpoints: 
+                print endpoint
 
     elif command == "manage":
-        service_name = get_arg(1)
+        endpoint_name = get_arg(1)
         new_conf = ""
         for line in sys.stdin.readlines():
             new_conf += line
@@ -153,24 +145,24 @@ try:
             # Read in the existing configuration and update it with
             # with the new configuration. This allows people to do a
             # partial update.
-            service_conf = api_client.get_service_config(service_name)
-            config.readfp(StringIO(service_conf))
+            endpoint_conf = api_client.get_endpoint_config(endpoint_name)
+            config.readfp(StringIO(endpoint_conf))
         config.readfp(StringIO(new_conf))
 
         # Write out the full contents of the updated configuration.
         config_value = StringIO()
         config.write(config_value)
-        api_client.manage_service(service_name, config_value.getvalue())
+        api_client.manage_endpoint(endpoint_name, config_value.getvalue())
 
     elif command == "unmanage":
-        service_name = get_arg(1)
+        endpoint_name = get_arg(1)
         api_client = get_api_client()
-        api_client.unmanage_service(service_name)
+        api_client.unmanage_endpoint(endpoint_name)
 
     elif command == "show":
-        service_name = get_arg(1)
+        endpoint_name = get_arg(1)
         api_client = get_api_client()
-        config = api_client.get_service_config(service_name)
+        config = api_client.get_endpoint_config(endpoint_name)
         print config.strip()
 
     elif command == "managers-configured":
@@ -217,27 +209,42 @@ try:
         config = api_client.get_manager_config(manager)
         print config.strip()
 
-    elif command == "ips":
-        service_name = get_arg(1)
+    elif command == "forget-manager":
+        manager = get_arg(1)
         api_client = get_api_client()
-        ip_addresses = api_client.list_service_ips(service_name)
+        api_client.remove_manager_config(manager)
+
+    elif command == "ips":
+        endpoint_name = get_arg(1)
+        api_client = get_api_client()
+        ip_addresses = api_client.list_endpoint_ips(endpoint_name)
         for ip in ip_addresses:
             print ip
 
-    elif command == "info":
-        service_name = get_arg(1)
+    elif command == "state":
         api_client = get_api_client()
-        info = api_client.get_service_info(service_name)
-        print json.dumps(info)
+        endpoint_name = get_arg(1)
 
-    elif command == "metrics":
+        if len(args) > 2:
+            action = get_arg(2)
+            api_client.endpoint_action(endpoint_name, action)
+        else:
+            print json.dumps(api_client.get_endpoint_state(endpoint_name))
+
+    elif command == "get-metrics":
+        endpoint_name = get_arg(1)
+        api_client = get_api_client()
+        metrics = api_client.get_endpoint_metrics(endpoint_name)
+        print metrics
+
+    elif command == "set-metrics":
         new_metrics = ""
         for line in sys.stdin.readlines():
             new_metrics += line
 
-        service_name = get_arg(1)
+        endpoint_name = get_arg(1)
         api_client = get_api_client()
-        api_client.set_service_metrics(service_name, json.loads(new_metrics))
+        api_client.set_endpoint_metrics(endpoint_name, json.loads(new_metrics))
 
     elif command == "passwd":
         if len(args) > 1:

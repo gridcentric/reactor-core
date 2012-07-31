@@ -1,6 +1,6 @@
 import json
 
-from gridcentric.pancake.config import ServiceConfig
+from gridcentric.pancake.endpoint import EndpointConfig
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 import gridcentric.pancake.zookeeper.paths as paths
 
@@ -15,8 +15,8 @@ class PancakeClient(object):
     def close(self):
         self.zk_conn.close()
 
-    def list_managed_services(self):
-        return self.zk_conn.list_children(paths.services())
+    def list_managed_endpoints(self):
+        return self.zk_conn.list_children(paths.endpoints())
 
     def get_managers_active(self, full=False):
         ips = self.zk_conn.list_children(paths.manager_ips())
@@ -31,44 +31,54 @@ class PancakeClient(object):
     def list_managers_configured(self):
         return self.zk_conn.list_children(paths.manager_configs())
 
-    def manage_service(self, service_name, config):
-        self.zk_conn.write(paths.service(service_name), config)
+    def manage_endpoint(self, endpoint_name, config):
+        self.zk_conn.write(paths.endpoint(endpoint_name), config)
 
-    def unmanage_service(self, service_name):
-        self.zk_conn.delete(paths.service(service_name))
+    def unmanage_endpoint(self, endpoint_name):
+        self.zk_conn.delete(paths.endpoint(endpoint_name))
 
-    def update_service(self, service_name, config):
-        self.zk_conn.write(paths.service(service_name), config)
+    def update_endpoint(self, endpoint_name, config):
+        self.zk_conn.write(paths.endpoint(endpoint_name), config)
 
-    def set_service_metrics(self, service_name, metrics, service_ip=None):
-        if service_ip:
+    def set_endpoint_metrics(self, endpoint_name, metrics, endpoint_ip=None):
+        if endpoint_ip:
             self.zk_conn.write(
-                paths.service_ip_metrics(service_name, service_ip),
+                paths.endpoint_ip_metrics(endpoint_name, endpoint_ip),
                 json.dumps(metrics))
         else:
             self.zk_conn.write(
-                paths.service_custom_metrics(service_name),
+                paths.endpoint_custom_metrics(endpoint_name),
                 json.dumps(metrics))
 
-    def get_service_metrics(self, service_name):
-        blob = self.zk_conn.read(paths.service_live_metrics(service_name))
+    def get_endpoint_metrics(self, endpoint_name):
+        blob = self.zk_conn.read(paths.endpoint_live_metrics(endpoint_name))
+        if blob:
+            return json.loads(blob)
+        else:
+            blob = self.zk_conn.read(paths.endpoint_custom_metrics(endpoint_name))
+            if blob:
+                return json.loads(blob)
+            else:
+                return blob
+
+    def get_endpoint_connections(self, endpoint_name):
+        blob = self.zk_conn.read(paths.endpoint_live_connections(endpoint_name))
         if blob:
             return json.loads(blob)
         else:
             return blob
 
-    def get_service_connections(self, service_name):
-        blob = self.zk_conn.read(paths.service_live_connections(service_name))
-        if blob:
-            return json.loads(blob)
-        else:
-            return blob
+    def set_endpoint_state(self, endpoint_name, state):
+        self.zk_conn.write(paths.endpoint_state(endpoint_name), state)
 
-    def get_service_manager(self, service_name):
-        return self.zk_conn.read(paths.service_manager(service_name))
+    def get_endpoint_state(self, endpoint_name):
+        return self.zk_conn.read(paths.endpoint_state(endpoint_name))
 
-    def get_service_config(self, service_name):
-        return self.zk_conn.read(paths.service(service_name))
+    def get_endpoint_manager(self, endpoint_name):
+        return self.zk_conn.read(paths.endpoint_manager(endpoint_name))
+
+    def get_endpoint_config(self, endpoint_name):
+        return self.zk_conn.read(paths.endpoint(endpoint_name))
 
     def update_config(self, config):
         self.zk_conn.write(paths.config(), config)
@@ -82,19 +92,22 @@ class PancakeClient(object):
     def get_manager_config(self, manager):
         return self.zk_conn.read(paths.manager_config(manager))
 
-    def get_service_ip_addresses(self, service_name):
+    def remove_manager_config(self, manager):
+        return self.zk_conn.delete(paths.manager_config(manager))
+
+    def get_endpoint_ip_addresses(self, endpoint_name):
         """
         Returns all the IP addresses (confirmed or explicitly configured)
-        associated with the service.
+        associated with the endpoint.
         """
         ip_addresses = []
         confirmed_ips = self.zk_conn.list_children(\
-            paths.confirmed_ips(service_name))
+            paths.confirmed_ips(endpoint_name))
         if confirmed_ips != None:
             ip_addresses += confirmed_ips
 
-        configured_ips = ServiceConfig(\
-            self.get_service_config(service_name)).static_ips()
+        configured_ips = EndpointConfig(\
+            self.get_endpoint_config(endpoint_name)).static_ips()
         if configured_ips != None:
             ip_addresses += configured_ips
 
@@ -104,9 +117,9 @@ class PancakeClient(object):
         self.zk_conn.delete(paths.new_ip(ip_address))
         self.zk_conn.write(paths.new_ip(ip_address), "")
 
-    def get_ip_address_service(self, ip_address):
+    def get_ip_address_endpoint(self, ip_address):
         """
-        Returns the service name associated with this ip address.
+        Returns the endpoint name associated with this ip address.
         """
         return self.zk_conn.read(paths.ip_address(ip_address))
 

@@ -4,21 +4,14 @@ The generic load balancer interface.
 
 def get_connection(name, config, scale_manager):
     if name == "nginx":
-        config_path = config.get("config_path", "/etc/nginx/conf.d")
-        site_path = config.get("site_path", "/etc/nginx/sites-enabled")
-        sticky_sessions = config.get("sticky_sessions", "false").lower() == "true"
-        try:
-            keepalive = int(config.get("keepalive", '0'))
-        except:
-            keepalive = 0
+        from gridcentric.pancake.loadbalancer.nginx import NginxLoadBalancerConfig
         from gridcentric.pancake.loadbalancer.nginx import NginxLoadBalancerConnection
-        return NginxLoadBalancerConnection(config_path, site_path, sticky_sessions, keepalive)
+        return NginxLoadBalancerConnection(NginxLoadBalancerConfig(config))
 
     elif name == "dnsmasq":
-        config_path = config.get("config_path", "/etc/dnsmasq.d")
-        hosts_path = config.get("hosts_path", "/etc/hosts.pancake")
+        from gridcentric.pancake.loadbalancer.dnsmasq import DnsmasqLoadBalancerConfig
         from gridcentric.pancake.loadbalancer.dnsmasq import DnsmasqLoadBalancerConnection
-        return DnsmasqLoadBalancerConnection(config_path, hosts_path, scale_manager)
+        return DnsmasqLoadBalancerConnection(DnsmasqLoadBalancerConfig(config), scale_manager)
 
     elif name == "none" or name == "":
         return LoadBalancerConnection()
@@ -29,7 +22,7 @@ def get_connection(name, config, scale_manager):
 class LoadBalancerConnection(object):
     def clear(self):
         pass
-    def change(self, url, port, names, manager_ips, public_ips, private_ips):
+    def change(self, url, names, public_ips, private_ips):
         pass
     def save(self):
         pass
@@ -37,16 +30,26 @@ class LoadBalancerConnection(object):
         # Returns { host : (weight, value) }
         return {}
 
+class BackendIP(object):
+    def __init__(self, ip, port=0, weight=1):
+        self.ip     = ip
+        self.port   = port
+        self.weight = weight
+
 class LoadBalancers(list):
+
     def clear(self):
         for lb in self:
             lb.clear()
-    def change(self, url, port, names, manager_ips, public_ips, private_ips):
+
+    def change(self, url, names, public_ips, private_ips):
         for lb in self:
-            lb.change(url, port, names, manager_ips, public_ips, private_ips)
+            lb.change(url, names, public_ips, private_ips)
+
     def save(self):
         for lb in self:
             lb.save()
+
     def metrics(self):
         # This is the only complex metric (that requires multiplexing).  We
         # combine the load balancer metrics by hostname, adding weights where

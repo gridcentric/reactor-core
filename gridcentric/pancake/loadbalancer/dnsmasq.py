@@ -3,14 +3,22 @@ import signal
 
 from mako.template import Template
 
+from gridcentric.pancake.config import SubConfig
 from gridcentric.pancake.loadbalancer.connection import LoadBalancerConnection
 from gridcentric.pancake.loadbalancer.netstat import connection_count
 
+class DnsmasqLoadBalancerConfig(SubConfig):
+
+    def config_path(self):
+        return self._get("config_path", "/etc/dnsmasq.d")
+
+    def hosts_path(self):
+        return self._get("hosts_path", "/etc/hosts.pancake")
+
 class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
     
-    def __init__(self, config_path, hosts_path, scale_manager):
-        self.config_path = config_path
-        self.hosts_path = hosts_path
+    def __init__(self, config, scale_manager):
+        self.config = config
         self.scale_manager = scale_manager
         template_file = os.path.join(os.path.dirname(__file__),'dnsmasq.template')
         self.template = Template(filename=template_file)
@@ -28,26 +36,25 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
     def clear(self):
         self.mappings = {}
 
-    def change(self, url, port, names, manager_ips, public_ips, private_ips):
-        # If there are no public ips, we use the manager.
-        if len(public_ips) == 0:
-            public_ips = manager_ips
-
+    def change(self, url, names, public_ips, private_ips):
         # Save the mappings.
         for name in names:
             self.mappings[name] = public_ips
 
     def save(self):
         # Compute the address mapping.
+        # NOTE: We do not currently support the weight parameter
+        # for dns-based loadbalancer. This may be implemented in
+        # the future -- but for now this parameter is ignored.
         ipmap = {}
-        for (name, ips) in self.mappings.items():
-            for ip in ips:
-                if not(ip in ipmap):
-                    ipmap[ip] = []
-                ipmap[ip].append(name)
+        for (name, backends) in self.mappings.items():
+            for backend in backends:
+                if not(backend.ip in ipmap):
+                    ipmap[backend.ip] = []
+                ipmap[backend.ip].append(name)
 
         # Write out our hosts file.
-        hosts = file(self.hosts_path, 'wb')
+        hosts = open(self.config.hosts_path(), 'wb')
         for (address, names) in ipmap.items():
             hosts.write("%s %s\n" % (address, " ".join(set(names))))
         hosts.close()
@@ -58,10 +65,10 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
             domain = "example.com"
 
         # Write out our configuration template.
-        conf = self.template.render(domain=domain, hosts=self.hosts_path)
+        conf = self.template.render(domain=domain, hosts=self.config.hosts_path())
 
         # Write out the config file.
-        config_file = file(os.path.join(self.config_path,"pancake.conf"), 'wb')
+        config_file = file(os.path.join(self.config.config_path(), "pancake.conf"), 'wb')
         config_file.write(conf)
         config_file.flush()
         config_file.close()

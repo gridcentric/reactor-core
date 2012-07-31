@@ -1,4 +1,3 @@
-import ConfigParser
 import logging
 import threading
 import time
@@ -9,15 +8,42 @@ import json
 import traceback
 from StringIO import StringIO
 
-from gridcentric.pancake.config import ManagerConfig
-from gridcentric.pancake.config import ServiceConfig
-from gridcentric.pancake.service import Service
+from gridcentric.pancake.config import Config
+from gridcentric.pancake.config import ConfigView
+
+from gridcentric.pancake.endpoint import Endpoint
+from gridcentric.pancake.endpoint import State
+
 import gridcentric.pancake.loadbalancer.connection as lb_connection
+from gridcentric.pancake.loadbalancer.connection import BackendIP
+
 from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
 import gridcentric.pancake.zookeeper.paths as paths
+
 import gridcentric.pancake.ips as ips
+
 from gridcentric.pancake.metrics.calculator import calculate_weighted_averages
+
+class ManagerConfig(Config):
+
+    def loadbalancer_names(self):
+        """ The name of the loadbalancer. """
+        return self._getlist("manager", "loadbalancer")
+
+    def loadbalancer_config(self, name):
+        """ The set of keys required to configure the loadbalancer. """
+        return ConfigView(self, "loadbalancer:%s" % name)
+
+    def mark_maximum(self, label):
+        if label in ['unregistered', 'decommissioned']:
+            return self._getint("manager", "%s_wait" % (label), 20)
+
+    def keys(self):
+        return self._getint("manager", "keys", 64)
+
+    def health_check(self):
+        return self._getint("manager", "health_check", 5)
 
 def locked(fn):
     def wrapped_fn(self, *args, **kwargs):
@@ -40,14 +66,14 @@ class ScaleManager(object):
         self.uuid   = str(uuid.uuid4()) # Manager uuid (generated).
         self.domain = ""                # Pancake domain.
 
-        self.services = {}        # Service map (name -> service)
-        self.key_to_services = {} # Service map (key() -> [services...])
+        self.endpoints = {}        # Endpoint map (name -> endpoint)
+        self.key_to_endpoints = {} # Endpoint map (key() -> [names...])
 
         self.managers = {}        # Forward map of manager keys.
         self.manager_ips = []     # List of all manager IPs.
         self.manager_keys = []    # Our local manager keys.
         self.key_to_manager = {}  # Reverse map for manager keys.
-        self.key_to_owned = {}    # Service to ownership.
+        self.key_to_owned = {}    # Endpoint to ownership.
 
         self.load_balancer = None # Load balancer connections.
 
@@ -58,8 +84,8 @@ class ScaleManager(object):
             self.zk_conn.close()
         self.zk_conn = ZookeeperConnection(self.zk_servers)
 
-        # Register ourselves.
-        self.manager_register(initial=True)
+        # Load our configuration and register ourselves.
+        self.manager_register()
 
         # Read the domain.
         self.reload_domain(self.zk_conn.watch_contents(\
@@ -70,14 +96,14 @@ class ScaleManager(object):
         # Watch all IPs.
         self.zk_conn.watch_children(paths.new_ips(), self.register_ip)
 
-        # Watch all managers and services.
+        # Watch all managers and endpoints.
         self.manager_change(self.zk_conn.watch_children(paths.managers(), self.manager_change))
-        self.service_change(self.zk_conn.watch_children(paths.services(), self.service_change))
+        self.endpoint_change(self.zk_conn.watch_children(paths.endpoints(), self.endpoint_change))
 
     @locked
-    def manager_select(self, service):
+    def manager_select(self, endpoint):
         # Remember whether this was previous managed.
-        managed = self.service_owned(service)
+        managed = self.endpoint_owned(endpoint)
 
         # Find the closest key.
         keys = self.key_to_manager.keys()
@@ -86,72 +112,67 @@ class ScaleManager(object):
             manager_key = None
         else:
             keys.sort()
-            index = bisect.bisect(keys, service.key())
+            index = bisect.bisect(keys, endpoint.key())
             key = keys[index % len(self.key_to_manager)]
             manager_key = self.key_to_manager[key]
 
         # Check if this is us.
-        self.key_to_owned[service.key()] = (manager_key == self.uuid)
+        self.key_to_owned[endpoint.key()] = (manager_key == self.uuid)
 
-        logging.info("Service %s owned by %s (%s)." % \
-            (service.name, manager_key, \
-            self.service_owned(service) and "That's me!" or "Not me!"))
+        logging.info("Endpoint %s owned by %s (%s)." % \
+            (endpoint.name, manager_key, \
+            self.endpoint_owned(endpoint) and "That's me!" or "Not me!"))
 
         # Check if it is one of our own.
-        # Start the service if necessary (now owned).
-        if self.service_owned(service):
-            self.zk_conn.write(paths.service_manager(service.name), self.uuid, ephemeral=True)
+        # Start the endpoint if necessary (now owned).
+        if self.endpoint_owned(endpoint):
+            self.zk_conn.write(paths.endpoint_manager(endpoint.name), self.uuid, ephemeral=True)
             if not(managed):
-                self.start_service(service)
+                self.start_endpoint(endpoint)
 
     @locked
-    def manager_remove(self, service):
-        if self.key_to_owned.has_key(service.key()):
-            del self.key_to_owned[service.key()]
+    def manager_remove(self, endpoint):
+        if self.key_to_owned.has_key(endpoint.key()):
+            del self.key_to_owned[endpoint.key()]
 
     @locked
-    def service_owned(self, service):
-        return self.key_to_owned.get(service.key(), False)
+    def endpoint_owned(self, endpoint):
+        return self.key_to_owned.get(endpoint.key(), False)
 
     @locked
-    def service_change(self, services):
-        logging.info("Services have changed: new=%s, existing=%s" %
-                     (services, self.services.keys()))
+    def endpoint_change(self, endpoints):
+        logging.info("Endpoints have changed: new=%s, existing=%s" %
+                     (endpoints, self.endpoints.keys()))
 
-        for service_name in services:
-            if service_name not in self.services:
-                self.create_service(service_name)
+        for endpoint_name in endpoints:
+            if endpoint_name not in self.endpoints:
+                self.create_endpoint(endpoint_name)
 
-        services_to_remove = []
-        for service_name in self.services:
-            if service_name not in services:
-                self.remove_service(service_name, unmanage=True)
-                services_to_remove += [service_name]
+        endpoints_to_remove = []
+        for endpoint_name in self.endpoints:
+            if endpoint_name not in endpoints:
+                self.remove_endpoint(endpoint_name, unmanage=True)
+                endpoints_to_remove += [endpoint_name]
 
-        for service in services_to_remove:
-            del self.services[service]
+        for endpoint in endpoints_to_remove:
+            del self.endpoints[endpoint]
 
     @locked
-    def manager_config_change(self, value):
-        self.manager_register(initial=False)
+    def update_config(self, config_str):
+        self.manager_register(config_str)
         self.reload_loadbalancer()
 
-    def default_config(self):
-        return ''
-
     @locked
-    def manager_register(self, initial=False):
+    def manager_register(self, config_str=''):
         # Figure out our global IPs.
         global_ips = ips.find_global()
         logging.info("Manager %s has key %s." % (str(global_ips), self.uuid))
 
-        # Reload our global config.
-        self.config = ManagerConfig(self.default_config())
-        if initial:
-            global_config = self.zk_conn.watch_contents(paths.config(),
-                                                        self.manager_config_change)
-        else:
-            global_config = self.zk_conn.read(paths.config())
+        # Load our given configuration.
+        self.config = ManagerConfig(config_str)
+
+        # Watch for future updates to our configuration, and recall update_config.
+        global_config = self.zk_conn.watch_contents(paths.config(), self.update_config)
         if global_config:
             self.config.reload(global_config)
 
@@ -162,11 +183,9 @@ class ScaleManager(object):
         if global_ips:
             for ip in global_ips:
                 # Reload our local config.
-                if initial:
-                    local_config = self.zk_conn.watch_contents(paths.manager_config(ip),
-                                                               self.manager_config_change)
-                else:
-                    local_config = self.zk_conn.read(paths.manager_config(ip))
+                local_config = self.zk_conn.watch_contents(
+                                    paths.manager_config(ip),
+                                    self.update_config)
                 if local_config:
                     self.config.reload(local_config)
 
@@ -186,9 +205,9 @@ class ScaleManager(object):
         self.zk_conn.write(paths.manager_keys(self.uuid), key_string, ephemeral=True)
         logging.info("Generated %d keys." % len(self.manager_keys))
 
-        # If we're not doing initial setup, refresh services.
-        for service in self.services.values():
-            self.manager_select(service)
+        # If we're not doing initial setup, refresh endpoints.
+        for endpoint in self.endpoints.values():
+            self.manager_select(endpoint)
 
         # Create the loadbalancer connections.
         # NOTE: Any old loadbalancer object should be cleaned
@@ -225,154 +244,185 @@ class ScaleManager(object):
             if manager in self.managers:
                 del self.managers[manager]
 
-        # Recompute all service owners.
-        for service in self.services.values():
-            self.manager_select(service)
+        # Recompute all endpoint owners.
+        for endpoint in self.endpoints.values():
+            self.manager_select(endpoint)
 
         # Reload all managers IPs.
-        self.manager_ips = self.zk_conn.list_children(paths.manager_ips())
+        self.manager_ips = \
+            map(lambda x: BackendIP(x),
+                self.zk_conn.list_children(paths.manager_ips()))
 
         # Kick the loadbalancer.
         self.reload_loadbalancer()
 
     @locked
-    def create_service(self, service_name):
-        logging.info("New service %s found to be managed." % service_name)
+    def create_endpoint(self, endpoint_name):
+        logging.info("New endpoint %s found to be managed." % endpoint_name)
 
         # Create the object.
-        service_path = paths.service(service_name)
-        service_config = ServiceConfig(self.zk_conn.read(service_path))
-        service = Service(service_name, service_config, self)
-        self.add_service(service,
-                         service_path=service_path,
-                         service_config=service_config)
+        # NOTE: We create all endpoints on this manager with the current
+        # manager config. This means that all manager keys will be inherited
+        # and you can set some sensible defaults either in the local manager
+        # configuration or in the global configuration. 
+        # This does mean however, that the ManagerConfig and EndpointConfig
+        # should have disjoint sections for the most part.
+        endpoint = Endpoint(endpoint_name, str(self.config), self)
+        self.add_endpoint(endpoint)
 
     @locked
-    def add_service(self, service, service_path=None, service_config=''):
-        self.services[service.name] = service
-        service_key = service.key()
-        self.key_to_services[service_key] = \
-            self.key_to_services.get(service.key(), []) + [service.name]
+    def add_endpoint(self, endpoint):
+        self.endpoints[endpoint.name] = endpoint
+        endpoint_key = endpoint.key()
 
-        if service_path:
-            def update_config(value):
-                service.update_config(value)
-                if self.service_owned(service):
-                    service.update()
+        if not(self.key_to_endpoints.has_key(endpoint.key())):
+                self.key_to_endpoints[endpoint.key()] = []
+        if not(endpoint.name in self.key_to_endpoints[endpoint.key()]):
+            self.key_to_endpoints[endpoint.key()].append(endpoint.name)
 
-            # Watch the config for this service.
-            logging.info("Watching service %s." % (service.name))
-            self.zk_conn.watch_contents(service_path,
-                                        update_config,
-                                        str(service_config))
+        def update_state(value):
+            endpoint.update_state(value)
+            if self.endpoint_owned(endpoint):
+                endpoint.update()
+        def update_config(value):
+            endpoint.update_config(value)
+            if self.endpoint_owned(endpoint):
+                endpoint.update()
 
-        # Select the manager for this service.
-        self.manager_select(service)
+        # Watch the config for this endpoint.
+        logging.info("Watching endpoint %s." % (endpoint.name))
+        update_state(
+            self.zk_conn.watch_contents(paths.endpoint_state(endpoint.name),
+                                        update_state, '',
+                                        clean=True))
+        update_config(
+            self.zk_conn.watch_contents(paths.endpoint(endpoint.name),
+                                        update_config, '',
+                                        clean=True))
 
-        # Update the loadbalancer for this service.
-        self.update_loadbalancer(service)
+        # Select the manager for this endpoint.
+        self.manager_select(endpoint)
+
+        # Update the loadbalancer for this endpoint.
+        self.update_loadbalancer(endpoint)
 
     @locked
-    def start_service(self, service):
-        # This service is now being managed by us.
-        service.manage()
-        service.update()
+    def start_endpoint(self, endpoint):
+        # This endpoint is now being managed by us.
+        endpoint.manage()
+        endpoint.update()
 
     @locked
-    def remove_service(self, service_name, unmanage=False):
+    def remove_endpoint(self, endpoint_name, unmanage=False):
         """
-        This removes / unmanages the service.
+        This removes / unmanages the endpoint.
         """
-        logging.info("Removing service %s from manager %s" % (service_name, self.uuid))
-        service = self.services.get(service_name, None)
+        logging.info("Removing endpoint %s from manager %s" % (endpoint_name, self.uuid))
+        endpoint = self.endpoints.get(endpoint_name, None)
 
-        if service:
-            # Update the loadbalancer for this service.
-            self.update_loadbalancer(service, remove=True)
+        if endpoint:
+            # Update the loadbalancer for this endpoint.
+            self.update_loadbalancer(endpoint, remove=True)
 
-            logging.info("Unmanaging service %s" % (service_name))
-            service_names = self.key_to_services.get(service.key(), [])
-            if service_name in service_names:
-                # Remove the service name from the list of services with the
-                # same key. If the service name is not in the list, then it is
-                # fine because we are just removing it anyway.
-                service_names.remove(service_name)
+            logging.info("Unmanaging endpoint %s" % (endpoint_name))
+            endpoint_names = self.key_to_endpoints.get(endpoint.key(), [])
+            if endpoint_name in endpoint_names:
+                endpoint_names.remove(endpoint_name)
+                if len(endpoint_names) == 0:
+                    del self.key_to_endpoints[endpoint.key()]
 
             # Perform a full unmanage if this is required.
-            if unmanage and self.service_owned(service):
-                service.unmanage()
+            if unmanage and self.endpoint_owned(endpoint):
+                endpoint.unmanage()
 
-            self.manager_remove(service)
+            self.manager_remove(endpoint)
 
     @locked
-    def confirmed_ips(self, service_name):
+    def confirmed_ips(self, endpoint_name):
         """
-        Returns a list of all the confirmed ips for the service.
+        Returns a list of all the confirmed ips for the endpoint.
         """
-        ips = self.zk_conn.list_children(paths.confirmed_ips(service_name))
+        ips = self.zk_conn.list_children(paths.confirmed_ips(endpoint_name))
         if ips == None:
             ips = []
         return ips
 
     @locked
-    def active_ips(self, service_name):
+    def active_ips(self, endpoint_name):
         """
-        Returns all confirmed and static ips for the service.
+        Returns all confirmed and static ips for the endpoint.
         """
         ips = []
-        ips += self.confirmed_ips(service_name)
-        if service_name in self.services:
-            ips += self.services[service_name].static_addresses()
-        return ips
+        ips += self.confirmed_ips(endpoint_name)
+        if endpoint_name in self.endpoints:
+            ips += self.endpoints[endpoint_name].static_addresses()
+
+        # Make sure that we return a unique set.
+        return list(set(ips))
 
     @locked
-    def drop_ip(self, service_name, ip_address):
-        self.zk_conn.delete(paths.service_ip_metrics(service_name, ip_address))
-        self.zk_conn.delete(paths.confirmed_ip(service_name, ip_address))
-        self.zk_conn.delete(paths.ip_address(ip_address))
+    def drop_ip(self, endpoint_name, ip):
+        logging.info("Dropping endpoint %s IP %s" % (endpoint_name, ip))
+        self.zk_conn.delete(paths.endpoint_ip_metrics(endpoint_name, ip))
+        self.zk_conn.delete(paths.confirmed_ip(endpoint_name, ip))
+        self.zk_conn.delete(paths.ip_address(ip))
+
+    @locked
+    def confirm_ip(self, endpoint_name, ip):
+        logging.info("Adding endpoint %s IP %s" % (endpoint_name, ip))
+        self.zk_conn.write(paths.confirmed_ip(endpoint_name, ip), "")
+        self.zk_conn.write(paths.ip_address(ip), endpoint_name)
+        self.zk_conn.delete(paths.new_ip(ip))
 
     @locked
     def register_ip(self, ips):
-        def _register_ip(scale_manager, service, ip):
-            logging.info("Service %s found for IP %s" % (service.name, ip))
-            # We found the service that this IP address belongs. Confirm this
-            # IP address and remove it from the new-ip address. Finally update
-            # the loadbalancer.
-            scale_manager.zk_conn.write(paths.confirmed_ip(service.name, ip), "")
-            scale_manager.zk_conn.write(paths.ip_address(ip), service.name)
-            scale_manager.zk_conn.delete(paths.new_ip(ip))
-            scale_manager.update_loadbalancer(service)
-
-        for service in self.services.values():
-            service_ips = service.addresses()
+        for endpoint in self.endpoints.values():
+            endpoint_ips = endpoint.addresses()
+            endpoint_ips.extend(endpoint.static_addresses())
             for ip in ips:
-                if ip in service_ips:
-                    _register_ip(self, service, ip)
+                if ip in endpoint_ips:
+                    self.confirm_ip(endpoint.name, ip)
                     break
+        self.update_loadbalancer(endpoint)
 
     @locked
-    def update_loadbalancer(self, service, remove=False):
+    def collect_endpoint_ips(self, endpoint, public_ips, private_ips):
+        if not(endpoint.enabled()):
+            return
+
+        for ip in self.active_ips(endpoint.name):
+            ip = BackendIP(ip, endpoint.port(), endpoint.weight())
+            if endpoint.public():
+                public_ips.append(ip)
+            else:
+                private_ips.append(ip)
+
+    @locked
+    def fixup_endpoint_ips(self, public_ips, private_ips):
+        if len(public_ips) == 0:
+            return (self.manager_ips, private_ips)
+        else:
+            return (public_ips, private_ips)
+
+    @locked
+    def update_loadbalancer(self, endpoint, remove=False):
         public_ips = []
         private_ips = []
         names = []
 
-        # Go through all services with the same keys.
-        for service_name in self.key_to_services.get(service.key(), []):
-            if remove and (self.services[service_name] == service):
+        # Go through all endpoints with the same keys.
+        for endpoint_name in self.key_to_endpoints.get(endpoint.key(), []):
+            if remove and (self.endpoints[endpoint_name] == endpoint):
                 continue
             else:
-                names.append(service_name)
-                if self.services[service_name].config.public():
-                    public_ips += self.active_ips(service_name)
-                else:
-                    private_ips += self.active_ips(service_name)
+                names.append(endpoint_name)
+                self.collect_endpoint_ips(
+                    self.endpoints[endpoint_name],
+                    public_ips, private_ips)
 
-        logging.info("Updating loadbalancer for url %s with public=%s, private=%s" %
-                     (service.service_url(), public_ips, private_ips))
-        self.load_balancer.change(service.service_url(),
-                                  service.config.port(),
+        (public_ips, private_ips) = self.fixup_endpoint_ips(public_ips, private_ips)
+        self.load_balancer.change(endpoint.url(),
                                   names,
-                                  self.manager_ips,
                                   public_ips,
                                   private_ips)
         self.load_balancer.save()
@@ -380,28 +430,28 @@ class ScaleManager(object):
     @locked
     def reload_loadbalancer(self):
         self.load_balancer.clear()
-        for service in self.services.values():
+
+        for (key, endpoint_names) in self.key_to_endpoints.items():
             public_ips = []
             private_ips = []
             names = []
-            for service_name in self.key_to_services.get(service.key(), []):
-                names.append(service_name)
-                if self.services[service_name].config.public():
-                    public_ips += self.active_ips(service_name)
-                else:
-                    private_ips += self.active_ips(service_name)
 
-            self.load_balancer.change(service.service_url(),
-                                      service.config.port(),
+            for endpoint in map(lambda x: self.endpoints[x], endpoint_names):
+                names.append(endpoint.name)
+                self.collect_endpoint_ips(endpoint, public_ips, private_ips)
+
+            (public_ips, private_ips) = self.fixup_endpoint_ips(public_ips, private_ips)
+            self.load_balancer.change(endpoint.url(),
                                       names,
-                                      self.manager_ips,
                                       public_ips,
                                       private_ips)
+
         self.load_balancer.save()
 
     @locked
     def reload_domain(self, domain):
         self.domain = domain
+        self.reload_loadbalancer()
 
     @locked
     def start_params(self):
@@ -412,19 +462,19 @@ class ScaleManager(object):
         return {}
 
     @locked
-    def marked_instances(self, service_name):
+    def marked_instances(self, endpoint_name):
         """ Return a list of all the marked instances. """
-        marked_instances = self.zk_conn.list_children(paths.marked_instances(service_name))
+        marked_instances = self.zk_conn.list_children(paths.marked_instances(endpoint_name))
         if marked_instances == None:
             marked_instances = []
         return marked_instances
 
     @locked
-    def mark_instance(self, service_name, instance_id, label):
+    def mark_instance(self, endpoint_name, instance_id, label):
         # Increment the mark counter.
         remove_instance = False
         mark_counters = \
-                self.zk_conn.read(paths.marked_instance(service_name, instance_id), '{}')
+                self.zk_conn.read(paths.marked_instance(endpoint_name, instance_id), '{}')
         mark_counters = json.loads(mark_counters)
         mark_counter = mark_counters.get(label, 0)
         mark_counter += 1
@@ -432,47 +482,47 @@ class ScaleManager(object):
         if mark_counter >= self.config.mark_maximum(label):
             # This instance has been marked too many times. There is likely
             # something really wrong with it, so we'll clean it up.
-            logging.warning("Instance %s for service %s has been marked too many times and"
-                         " will be removed. (count=%s)" % (instance_id, service_name, mark_counter))
+            logging.warning("Instance %s for endpoint %s has been marked too many times and"
+                         " will be removed. (count=%s)" % (instance_id, endpoint_name, mark_counter))
             remove_instance = True
-            self.zk_conn.delete(paths.marked_instance(service_name, instance_id))
+            self.zk_conn.delete(paths.marked_instance(endpoint_name, instance_id))
 
         else:
             # Just save the mark counter.
-            logging.info("Instance %s for service %s has been marked (count=%s)" %
-                         (instance_id, service_name, mark_counter))
+            logging.info("Instance %s for endpoint %s has been marked (count=%s)" %
+                         (instance_id, endpoint_name, mark_counter))
             mark_counters[label] = mark_counter
-            self.zk_conn.write(paths.marked_instance(service_name, instance_id),
+            self.zk_conn.write(paths.marked_instance(endpoint_name, instance_id),
                                json.dumps(mark_counters))
 
         return remove_instance
 
     @locked
-    def drop_marked_instance(self, service_name, instance_id):
+    def drop_marked_instance(self, endpoint_name, instance_id):
         """ Delete the marked instance data. """
-        self.zk_conn.delete(paths.marked_instance(service_name, instance_id))
+        self.zk_conn.delete(paths.marked_instance(endpoint_name, instance_id))
 
     @locked
-    def decommission_instance(self, service_name, instance_id, ip_addresses):
+    def decommission_instance(self, endpoint_name, instance_id, ip_addresses):
         """ Mark the instance id as being decommissioned. """
         for ip_address in ip_addresses:
-            self.zk_conn.delete(paths.confirmed_ip(service_name, ip_address))
-        self.zk_conn.write(paths.decommissioned_instance(service_name, instance_id),
+            self.zk_conn.delete(paths.confirmed_ip(endpoint_name, ip_address))
+        self.zk_conn.write(paths.decommissioned_instance(endpoint_name, instance_id),
                            json.dumps(ip_addresses))
 
     @locked
-    def decommissioned_instances(self, service_name):
+    def decommissioned_instances(self, endpoint_name):
         """ Return a list of all the decommissioned instances. """
         decommissioned_instances = self.zk_conn.list_children(\
-            paths.decommissioned_instances(service_name))
+            paths.decommissioned_instances(endpoint_name))
         if decommissioned_instances == None:
             decommissioned_instances = []
         return decommissioned_instances
 
     @locked
-    def decomissioned_instance_ip_addresses(self, service_name, instance_id):
+    def decomissioned_instance_ip_addresses(self, endpoint_name, instance_id):
         """ Return the ip address of a decomissioned instance. """
-        ip_addresses = self.zk_conn.read(paths.decommissioned_instance(service_name, instance_id))
+        ip_addresses = self.zk_conn.read(paths.decommissioned_instance(endpoint_name, instance_id))
         if ip_addresses != None:
             ip_addresses = json.loads(ip_addresses)
             if type(ip_addresses) == str:
@@ -482,12 +532,12 @@ class ScaleManager(object):
         return ip_addresses
 
     @locked
-    def drop_decommissioned_instance(self, service_name, instance_id):
+    def drop_decommissioned_instance(self, endpoint_name, instance_id):
         """ Delete the decommissioned instance """
-        ip_addresses = self.decomissioned_instance_ip_addresses(service_name, instance_id)
+        ip_addresses = self.decomissioned_instance_ip_addresses(endpoint_name, instance_id)
         for ip_address in ip_addresses:
-            self.drop_ip(service_name, ip_address)
-        self.zk_conn.delete(paths.decommissioned_instance(service_name, instance_id))
+            self.drop_ip(endpoint_name, ip_address)
+        self.zk_conn.delete(paths.decommissioned_instance(endpoint_name, instance_id))
 
     def metric_indicates_active(self, metrics):
         """ Returns true if the metrics indicate that there are active connections. """
@@ -506,31 +556,34 @@ class ScaleManager(object):
         the metrics posted by other managers.
         
         returns a tuple (metrics, active_connections) both of which are dictionaries. Metrics
-        is indexed by the service key and active connections is indexed by service name
+        is indexed by the endpoint key and active connections is indexed by endpoint name
         """
-        # Update all the service metrics from the loadbalancer.
+        # Update all the endpoint metrics from the loadbalancer.
         metrics = self.load_balancer.metrics()
 
         logging.debug("Load_balancer returned metrics: %s" % metrics)
         metrics_by_key = {}
-        service_addresses = {}
-        ip_to_service_name = {}
+        endpoint_addresses = {}
+        ip_to_endpoint_name = {}
         active_connections = {}
 
         for ip in metrics:
-            for service in self.services.values():
-                if not service.name in service_addresses:
-                    service_addresses[service.name] = self.active_ips(service.name)
-                service_ips = service_addresses[service.name]
-                if not(service.key() in metrics_by_key):
-                    metrics_by_key[service.key()] = []
-                if not(service.name in active_connections):
-                    active_connections[service.name] = []
-                if ip in service_ips:
-                    metrics_by_key[service.key()].append(metrics[ip])
-                    ip_to_service_name[ip] = service.name
+            for endpoint in self.endpoints.values():
+
+                if not endpoint.name in endpoint_addresses:
+                    endpoint_addresses[endpoint.name] = self.active_ips(endpoint.name)
+
+                endpoint_ips = endpoint_addresses[endpoint.name]
+                if not(endpoint.key() in metrics_by_key):
+                    metrics_by_key[endpoint.key()] = []
+                if not(endpoint.name in active_connections):
+                    active_connections[endpoint.name] = []
+
+                if ip in endpoint_ips:
+                    metrics_by_key[endpoint.key()].append(metrics[ip])
+                    ip_to_endpoint_name[ip] = endpoint.name
                     if self.metric_indicates_active(metrics[ip]):
-                        active_connections[service.name].append(ip)
+                        active_connections[endpoint.name].append(ip)
 
         # Stuff all the metrics into Zookeeper.
         self.zk_conn.write(paths.manager_metrics(self.uuid), \
@@ -566,52 +619,48 @@ class ScaleManager(object):
                 all_metrics[key].extend(manager_metrics[key])
 
             # Merge all the active connection counts
-            for service_name in manager_active_connections:
-                if not(service_name in all_active_connections):
-                    all_active_connections[service_name] = []
-                all_active_connections[service_name].extend(\
-                        manager_active_connections[service_name])
+            for endpoint_name in manager_active_connections:
+                if not(endpoint_name in all_active_connections):
+                    all_active_connections[endpoint_name] = []
+                all_active_connections[endpoint_name].extend(\
+                        manager_active_connections[endpoint_name])
 
         # Return all available global metrics.
         return (all_metrics, all_active_connections)
 
     @locked
-    def load_metrics(self, service, service_metrics={}):
+    def load_metrics(self, endpoint, endpoint_metrics={}):
         """ 
-        Load the particular metrics for a service and return
+        Load the particular metrics for a endpoint and return
         a tuple (metrics, active_connections) where metrics
-        are the metrics to use for the service and active_connections
+        are the metrics to use for the endpoint and active_connections
         is a list of ip addresses with active connections.
         """
 
-        # Read any default metrics. We can override the source service
+        # Read any default metrics. We can override the source endpoint
         # for metrics here (so, for example, a backend database server
         # can inheret a set of metrics given for the front server).
         # This, like many other things, is specified here by the name
-        # of the service we are inheriting metrics for. If not given,
-        # we default to the current service.
-        source = service.config.source()
-        if source:
-            source_service = self.services.get(source, None)
-            if source_service:
-                metrics = service_metrics.get(source_service.key(), [])
-            else:
-                metrics = []
+        # of the endpoint we are inheriting metrics for. If not given,
+        # we default to the current endpoint.
+        source_key = endpoint.source_key()
+        if source_key:
+            metrics = endpoint_metrics.get(source_key, [])
         else:
-            metrics = service_metrics.get(service.key(), [])
+            metrics = endpoint_metrics.get(endpoint.key(), [])
 
-        default_metrics = self.zk_conn.read(paths.service_custom_metrics(service.name))
+        default_metrics = self.zk_conn.read(paths.endpoint_custom_metrics(endpoint.name))
         if default_metrics:
             try:
                 # This should be a dictionary { "name" : (weight, value) }
                 metrics.append(json.loads(default_metrics))
             except ValueError:
-                logging.warn("Invalid custom metrics for %s." % (service.name))
+                logging.warn("Invalid custom metrics for %s." % (endpoint.name))
 
         # Read other metrics for given hosts.
         active_connections = []
-        for ip_address in self.active_ips(service.name):
-            ip_metrics = self.zk_conn.read(paths.service_ip_metrics(service.name, ip_address))
+        for ip_address in self.active_ips(endpoint.name):
+            ip_metrics = self.zk_conn.read(paths.endpoint_ip_metrics(endpoint.name, ip_address))
             if ip_metrics:
                 try:
                     # This should be a dictionary { "name" : (weight, value) }
@@ -620,13 +669,14 @@ class ScaleManager(object):
                     if self.metric_indicates_active(ip_metrics):
                         active_connections.append(ip_address)
                 except ValueError:
-                    logging.warn("Invalid instance metrics for %s:%s." % (service.name, ip_address))
+                    logging.warn("Invalid instance metrics for %s:%s." % \
+                                 (endpoint.name, ip_address))
 
-        for instance_id in self.decommissioned_instances(service.name):
+        for instance_id in self.decommissioned_instances(endpoint.name):
             # Also check the metrics of decommissioned instances looking for any active counts.
-            for ip_address in self.decomissioned_instance_ip_addresses(service.name, instance_id):
+            for ip_address in self.decomissioned_instance_ip_addresses(endpoint.name, instance_id):
                 if ip_address:
-                    ip_metrics = self.zk_conn.read(paths.service_ip_metrics(service.name, ip_address))
+                    ip_metrics = self.zk_conn.read(paths.endpoint_ip_metrics(endpoint.name, ip_address))
                     if ip_metrics:
                         try:
                             ip_metrics = json.loads(ip_metrics)
@@ -634,7 +684,7 @@ class ScaleManager(object):
                                 active_connections.append(ip_address)
                         except ValueError:
                             logging.warn("Invalid instance metrics for %s:%s."
-                                         % (service.name, ip_address))
+                                         % (endpoint.name, ip_address))
 
         # Return the metrics.
         return metrics, active_connections
@@ -642,37 +692,38 @@ class ScaleManager(object):
     @locked
     def health_check(self):
         # Save and load the current metrics.
-        service_metrics, active_connections = self.update_metrics()
+        endpoint_metrics, active_connections = self.update_metrics()
 
-        # Does a health check on all the services that are being managed.
-        for service in self.services.values():
-            # Do not kick the service if it is not currently owned by us.
-            if not(self.service_owned(service)):
+        # Does a health check on all the endpoints that are being managed.
+        for endpoint in self.endpoints.values():
+            # Do not kick the endpoint if it is not currently owned by us.
+            if not(self.endpoint_owned(endpoint)):
                 continue
 
             try:
-                metrics, service_active_connections = self.load_metrics(service, service_metrics)
-                connections = list(set(active_connections.get(service.name, []) + \
-                                       service_active_connections))
+                metrics, endpoint_active_connections = \
+                    self.load_metrics(endpoint, endpoint_metrics)
+                connections = list(set(active_connections.get(endpoint.name, []) + \
+                                       endpoint_active_connections))
                 metrics = calculate_weighted_averages(metrics)
 
                 # Update the live metrics and connections.
-                logging.debug("Metrics for service %s: %s" % (service.name, metrics))
-                self.zk_conn.write(paths.service_live_metrics(service.name), \
+                logging.debug("Metrics for endpoint %s: %s" % (endpoint.name, metrics))
+                self.zk_conn.write(paths.endpoint_live_metrics(endpoint.name), \
                                    json.dumps(metrics), \
                                    ephemeral=True)
-                self.zk_conn.write(paths.service_live_connections(service.name), \
+                self.zk_conn.write(paths.endpoint_live_connections(endpoint.name), \
                                    json.dumps(connections), \
                                    ephemeral=True)
 
-                # Run a health check on this service.
-                service.health_check(connections)
+                # Run a health check on this endpoint.
+                endpoint.health_check(connections)
 
-                # Do the service update.
-                service.update(reconfigure=False, metrics=metrics)
+                # Do the endpoint update.
+                endpoint.update(reconfigure=False, metrics=metrics)
             except:
                 error = traceback.format_exc()
-                logging.error("Error updating service %s: %s" % (service.name, error))
+                logging.error("Error updating endpoint %s: %s" % (endpoint.name, error))
 
     def run(self):
         # Note that we are running.
