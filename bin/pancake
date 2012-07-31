@@ -56,7 +56,11 @@ def usage():
     print "    ips <endpoint>         Displays all of the IP addresses associated with"
     print "                           the endpoint."
     print ""
-    print "    state <endpoint> [action] See or update the endpoint state."
+    print "    state <endpoint>       Get the endpoint state."
+    print ""
+    print "    start <endpoint>       "
+    print "    stop  <endpoint>       Update the endpoint state."
+    print "    pause <endpoint>       "
     print ""
     print "    get-metrics <endpoint> Get custom endpoint metrics."
     print ""
@@ -224,12 +228,12 @@ try:
     elif command == "state":
         api_client = get_api_client()
         endpoint_name = get_arg(1)
+        print json.dumps(api_client.get_endpoint_state(endpoint_name))
 
-        if len(args) > 2:
-            action = get_arg(2)
-            api_client.endpoint_action(endpoint_name, action)
-        else:
-            print json.dumps(api_client.get_endpoint_state(endpoint_name))
+    elif command == "start" or command == "stop" or command == "pause": 
+        api_client = get_api_client()
+        endpoint_name = get_arg(1)
+        api_client.endpoint_action(endpoint_name, command)
 
     elif command == "get-metrics":
         endpoint_name = get_arg(1)
