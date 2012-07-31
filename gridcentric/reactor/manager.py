@@ -47,8 +47,8 @@ class ReactorScaleManager(ScaleManager):
             paths.manager_configs(), self.setup_iptables))
 
         # Ensure it is being served.
-        if not(self.api_endpoint.name in self.endpoints):
-            self.create_endpoint(self.api_endpoint.name)
+        if not("api" in self.endpoints):
+            self.create_endpoint("api")
 
     @locked
     def create_endpoint(self, endpoint_name):
@@ -65,12 +65,9 @@ class ReactorScaleManager(ScaleManager):
 
     @locked
     def remove_endpoint(self, endpoint_name, unmanage=False):
-        super(ReactorScaleManager, self).remove_endpoint(endpoint_name, unmanage=unmanage)
-
-        # We don't allow users to remove the API endpoint,
-        # so whenever it's gone it's simply recreated.
-        if endpoint_name == "api":
-            self.create_endpoint(endpoint_name)
+        # We don't allow users to remove the API endpoint.
+        if endpoint_name != "api":
+            super(ReactorScaleManager, self).remove_endpoint(endpoint_name, unmanage=unmanage)
 
     @locked
     def reload_domain(self, domain):
