@@ -124,7 +124,7 @@ def decommissioned_instance(name, instance_id):
     return "%s/%s" % (decommissioned_instances(name), instance_id)
 
 # New IPs currently not associated with any endpoint are logged here.
-NEW_IPS = "%s/new-ips" % (ROOT)
+NEW_IPS = "%s/new_ips" % (ROOT)
 def new_ips():
     return NEW_IPS
 

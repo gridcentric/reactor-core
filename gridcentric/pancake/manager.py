@@ -381,14 +381,24 @@ class ScaleManager(object):
 
     @locked
     def register_ip(self, ips):
+        if len(ips) == 0:
+            return
+
+        ip_map = {}
+
         for endpoint in self.endpoints.values():
             endpoint_ips = endpoint.addresses()
             endpoint_ips.extend(endpoint.static_addresses())
-            for ip in ips:
-                if ip in endpoint_ips:
-                    self.confirm_ip(endpoint.name, ip)
-                    self.update_loadbalancer(endpoint)
-                    break
+            for ip in endpoint_ips:
+                ip_map[ip] = endpoint
+
+        for ip in ips:
+            endpoint = ip_map.get(ip, None)
+            if endpoint:
+                self.confirm_ip(endpoint.name, ip)
+                self.update_loadbalancer(endpoint)
+            else:
+                self.zk_conn.delete(paths.new_ip(ip))
 
     @locked
     def collect_endpoint_ips(self, endpoint, public_ips, private_ips):
