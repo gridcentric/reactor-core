@@ -238,9 +238,9 @@ class Endpoint(object):
 
         # Delete instances until we reach the max setting value.
         instances_to_delete = []
-        while len(instances) > 0 and \
-               target < num_instances and action_count < ramp_limit:
+        while target < num_instances and action_count < ramp_limit:
             instances_to_delete.append(instances.pop())
+            num_instances -= 1
             action_count += 1
 
         self.decommission_instances(instances_to_delete,
