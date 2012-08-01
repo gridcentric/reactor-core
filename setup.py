@@ -13,7 +13,8 @@ setup(
     description='Reactor virtual appliance server.',
     entry_points={
         'console_scripts': [
-            'reactor = gridcentric.reactor.server:main'
+            'reactor-server = gridcentric.reactor.server:main',
+            'reactor = gridcentric.pancake.cli:main'
         ]
     },
 )
