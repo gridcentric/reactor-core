@@ -90,7 +90,7 @@ class BaseNovaConfig(SubConfig):
         return self._get("apikey", "admin")
 
     def project(self):
-        return self._get("apikey", "admin")
+        return self._get("project", "admin")
 
     def authurl(self):
         return self._get("authurl", "http://localhost:8774/v1.1/")
