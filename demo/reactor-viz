@@ -79,7 +79,7 @@ def query_state(client):
         ips = client.list_endpoint_ips(endpoint)
         try:
             info = client.get_endpoint_info(endpoint)
-            active = info["connections"]
+            active = info["active"]
             metrics = info["metrics"]
         except:
             active = []
