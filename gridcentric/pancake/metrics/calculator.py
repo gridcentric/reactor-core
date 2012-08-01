@@ -93,7 +93,7 @@ def calculate_ideal_uniform(endpoint_spec, metric_averages, num_instances):
                     (c.metric_key(), c.lower_bound(), c.upper_bound()))
 
             if c.metric_key() == 'instances':
-                (metric_min, metric_max) = (c.lower_bound(), c.upper_bound)
+                (metric_min, metric_max) = (c.lower_bound(), c.upper_bound())
             else:
                 avg = metric_averages.get(c.metric_key(), 0)
                 (metric_min, metric_max) = \
