@@ -61,8 +61,8 @@ class PancakeClient(object):
             else:
                 return blob
 
-    def get_endpoint_connections(self, endpoint_name):
-        blob = self.zk_conn.read(paths.endpoint_live_connections(endpoint_name))
+    def get_endpoint_active(self, endpoint_name):
+        blob = self.zk_conn.read(paths.endpoint_live_active(endpoint_name))
         if blob:
             return json.loads(blob)
         else:

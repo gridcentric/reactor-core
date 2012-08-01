@@ -711,8 +711,8 @@ class ScaleManager(object):
             try:
                 metrics, endpoint_active_connections = \
                     self.load_metrics(endpoint, endpoint_metrics)
-                connections = list(set(active_connections.get(endpoint.name, []) + \
-                                       endpoint_active_connections))
+                active = list(set(active_connections.get(endpoint.name, []) + \
+                                  endpoint_active_connections))
                 metrics = calculate_weighted_averages(metrics)
 
                 # Update the live metrics and connections.
@@ -720,12 +720,12 @@ class ScaleManager(object):
                 self.zk_conn.write(paths.endpoint_live_metrics(endpoint.name), \
                                    json.dumps(metrics), \
                                    ephemeral=True)
-                self.zk_conn.write(paths.endpoint_live_connections(endpoint.name), \
-                                   json.dumps(connections), \
+                self.zk_conn.write(paths.endpoint_live_active(endpoint.name), \
+                                   json.dumps(active), \
                                    ephemeral=True)
 
                 # Run a health check on this endpoint.
-                endpoint.health_check(connections)
+                endpoint.health_check(active)
 
                 # Do the endpoint update.
                 endpoint.update(reconfigure=False, metrics=metrics)

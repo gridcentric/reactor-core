@@ -430,12 +430,13 @@ class PancakeApi:
             config = self.client.get_endpoint_config(endpoint_name)
 
             if config != None:
-                state = self.client.get_endpoint_state(endpoint_name) or State.default
-                connections = self.client.get_endpoint_connections(endpoint_name)
+                state   = self.client.get_endpoint_state(endpoint_name) or State.default
+                active  = self.client.get_endpoint_active(endpoint_name)
                 manager = self.client.get_endpoint_manager(endpoint_name)
+
                 value = {
-                    'state' : state,
-                    'connections' : connections or [],
+                    'state'   : state,
+                    'active'  : active or [],
                     'manager' : manager or None,
                 }
                 response = Response(body=json.dumps(value))

@@ -90,8 +90,8 @@ def endpoint_live_metrics(name):
     return "%s/live_metrics" % (endpoint(name))
 
 # The updated connections for a particular endpoint (posted by the manager).
-def endpoint_live_connections(name):
-    return "%s/live_connections" % (endpoint(name))
+def endpoint_live_active(name):
+    return "%s/live_active" % (endpoint(name))
 
 # The ips that have been confirmed by the system for a particular endpoint. An
 # ip is confirmed once it sends a message to a pancake.
