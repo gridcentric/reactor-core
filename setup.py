@@ -27,5 +27,9 @@ setup(
     package_data={'gridcentric.pancake.loadbalancer':\
             ["nginx.template", "dnsmasq.template", "pancake.conf"]},
     include_package_data=True,
-    scripts=["bin/pancake"]
+    entry_points={
+        'console_scripts': [
+            'pancake = gridcentric.pancake.cli:main'
+        ]
+    }
 )
