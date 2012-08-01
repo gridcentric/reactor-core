@@ -387,8 +387,8 @@ class ScaleManager(object):
             for ip in ips:
                 if ip in endpoint_ips:
                     self.confirm_ip(endpoint.name, ip)
+                    self.update_loadbalancer(endpoint)
                     break
-        self.update_loadbalancer(endpoint)
 
     @locked
     def collect_endpoint_ips(self, endpoint, public_ips, private_ips):
