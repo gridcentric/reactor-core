@@ -137,9 +137,9 @@ class Endpoint(object):
         # Do nothing.
         logging.info("Unmanaging endpoint %s" % (self.name))
 
-    def update(self, reconfigure=True, metrics={}):
+    def update(self, reconfigure=True, metrics={}, metric_instances=None):
         try:
-            self._update(reconfigure, metrics)
+            self._update(reconfigure, metrics, metric_instances)
         except:
             logging.error("Error updating endpoint %s: %s" % \
                 (self.name, traceback.format_exc()))
@@ -190,7 +190,7 @@ class Endpoint(object):
 
         return (target_min, target_max)
 
-    def _update(self, reconfigure, metrics):
+    def _update(self, reconfigure, metrics, metric_instances=None):
         if self.state == State.paused:
             # Do nothing while paused, this will keep the current
             # instances alive and continue to process requests.
@@ -198,12 +198,13 @@ class Endpoint(object):
 
         instances = self.instances()
         num_instances = len(instances)
-        num_confirmed_instances = len(self.scale_manager.confirmed_ips(self.name))
+        if not(metric_instances):
+            metric_instances = len(self.scale_manager.confirmed_ips(self.name))
         ramp_limit = self.config.ramp_limit()
 
         if self.state == State.running:
             (target_min, target_max) = \
-                self._determine_target_instances_range(metrics, num_confirmed_instances)
+                self._determine_target_instances_range(metrics, metric_instances)
 
             if (num_instances >= target_min and num_instances <= target_max) \
                 or (target_min > target_max):

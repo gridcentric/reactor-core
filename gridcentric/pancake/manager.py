@@ -566,30 +566,32 @@ class ScaleManager(object):
         returns a tuple (metrics, active_connections) both of which are dictionaries. Metrics
         is indexed by the endpoint key and active connections is indexed by endpoint name
         """
+
         # Update all the endpoint metrics from the loadbalancer.
         metrics = self.load_balancer.metrics()
-
         logging.debug("Load balancer returned metrics: %s" % metrics)
+
+        # The metrics_by_key dictionary maps to a tuple (active, metrics).
+        # The active value is a list of all IPs used to generate the metrics.
+        # That is to say, if one or more of the value was used in to generate
+        # the aggregated metrics that corresponds to that IP then it will be
+        # present in the active set.
         metrics_by_key = {}
-        endpoint_addresses = {}
-        ip_to_endpoint_name = {}
         active_connections = {}
 
         for ip in metrics:
             for endpoint in self.endpoints.values():
 
-                if not endpoint.name in endpoint_addresses:
-                    endpoint_addresses[endpoint.name] = self.active_ips(endpoint.name)
-
-                endpoint_ips = endpoint_addresses[endpoint.name]
                 if not(endpoint.key() in metrics_by_key):
-                    metrics_by_key[endpoint.key()] = []
+                    metrics_by_key[endpoint.key()] = ([], [])
                 if not(endpoint.name in active_connections):
                     active_connections[endpoint.name] = []
 
+                endpoint_ips = self.active_ips(endpoint.name)
                 if ip in endpoint_ips:
-                    metrics_by_key[endpoint.key()].append(metrics[ip])
-                    ip_to_endpoint_name[ip] = endpoint.name
+                    metrics_by_key[endpoint.key()][0].append(ip)
+                    metrics_by_key[endpoint.key()][1].append(metrics[ip])
+
                     if self.metric_indicates_active(metrics[ip]):
                         active_connections[endpoint.name].append(ip)
 
@@ -597,14 +599,14 @@ class ScaleManager(object):
         self.zk_conn.write(paths.manager_metrics(self.uuid), \
                            json.dumps(metrics_by_key), \
                            ephemeral=True)
-
         self.zk_conn.write(paths.manager_active_connections(self.uuid), \
                            json.dumps(active_connections), \
                            ephemeral=True)
 
-        # Load all metrics.
+        # Load all metrics (from other managers).
         all_metrics = {}
-        # A listing of all the active connections
+
+        # A listing of all the active connections.
         all_active_connections = {}
 
         # Read the keys for all other managers.
@@ -623,13 +625,16 @@ class ScaleManager(object):
             # Merge into the all_metrics dictionary.
             for key in manager_metrics:
                 if not(key in all_metrics):
-                    all_metrics[key] = []
-                all_metrics[key].extend(manager_metrics[key])
+                    all_metrics[key] = ([], [])
 
-            # Merge all the active connection counts
+                all_metrics[key][0].extend(manager_metrics[key][0])
+                all_metrics[key][1].extend(manager_metrics[key][1])
+
+            # Merge all the active connection counts.
             for endpoint_name in manager_active_connections:
                 if not(endpoint_name in all_active_connections):
                     all_active_connections[endpoint_name] = []
+
                 all_active_connections[endpoint_name].extend(\
                         manager_active_connections[endpoint_name])
 
@@ -645,17 +650,17 @@ class ScaleManager(object):
         is a list of ip addresses with active connections.
         """
 
-        # Read any default metrics. We can override the source endpoint
-        # for metrics here (so, for example, a backend database server
-        # can inheret a set of metrics given for the front server).
-        # This, like many other things, is specified here by the name
-        # of the endpoint we are inheriting metrics for. If not given,
-        # we default to the current endpoint.
+        # Read any default metrics. We can override the source endpoint for
+        # metrics here (so, for example, a backend database server can inheret
+        # a set of metrics given for the front server).  This, like many other
+        # things, is specified here by the name of the endpoint we are
+        # inheriting metrics for. If not given, we default to the current
+        # endpoint.
         source_key = endpoint.source_key()
         if source_key:
-            metrics = endpoint_metrics.get(source_key, [])
+            (metric_ips, metrics) = endpoint_metrics.get(source_key, ([], []))
         else:
-            metrics = endpoint_metrics.get(endpoint.key(), [])
+            (metric_ips, metrics) = endpoint_metrics.get(endpoint.key(), ([], []))
 
         default_metrics = self.zk_conn.read(paths.endpoint_custom_metrics(endpoint.name))
         if default_metrics:
@@ -674,6 +679,7 @@ class ScaleManager(object):
                     # This should be a dictionary { "name" : (weight, value) }
                     ip_metrics = json.loads(ip_metrics)
                     metrics.append(ip_metrics)
+                    metric_ips.add(ip_address)
                     if self.metric_indicates_active(ip_metrics):
                         active_connections.append(ip_address)
                 except ValueError:
@@ -687,7 +693,10 @@ class ScaleManager(object):
                     ip_metrics = self.zk_conn.read(paths.endpoint_ip_metrics(endpoint.name, ip_address))
                     if ip_metrics:
                         try:
+                            # As above, this should be a dictionary.
                             ip_metrics = json.loads(ip_metrics)
+                            metrics.append(ip_metrics)
+                            metric_ips.add(ip_address)
                             if self.metric_indicates_active(ip_metrics):
                                 active_connections.append(ip_address)
                         except ValueError:
@@ -695,7 +704,7 @@ class ScaleManager(object):
                                          (endpoint.name, ip_address))
 
         # Return the metrics.
-        return metrics, active_connections
+        return metrics, list(set(metric_ips)), active_connections
 
     @locked
     def health_check(self):
@@ -709,14 +718,20 @@ class ScaleManager(object):
                 continue
 
             try:
-                metrics, endpoint_active_connections = \
+                metrics, metric_ips, endpoint_connections = \
                     self.load_metrics(endpoint, endpoint_metrics)
-                active = list(set(active_connections.get(endpoint.name, []) + \
-                                  endpoint_active_connections))
+
+                # Compute the active set (including custom metrics, etc.).
+                active = active_connections.get(endpoint.name, [])
+                active.extend(endpoint_connections)
+                active = list(set(active))
+
+                # Compute the globally weighted averages.
                 metrics = calculate_weighted_averages(metrics)
 
                 # Update the live metrics and connections.
-                logging.debug("Metrics for endpoint %s: %s" % (endpoint.name, metrics))
+                logging.debug("Metrics for endpoint %s from %s: %s" % \
+                              (endpoint.name, str(metric_ips), metrics))
                 self.zk_conn.write(paths.endpoint_live_metrics(endpoint.name), \
                                    json.dumps(metrics), \
                                    ephemeral=True)
@@ -728,7 +743,7 @@ class ScaleManager(object):
                 endpoint.health_check(active)
 
                 # Do the endpoint update.
-                endpoint.update(reconfigure=False, metrics=metrics)
+                endpoint.update(reconfigure=False, metrics=metrics, metric_instances=len(metric_ips))
             except:
                 error = traceback.format_exc()
                 logging.error("Error updating endpoint %s: %s" % (endpoint.name, error))
