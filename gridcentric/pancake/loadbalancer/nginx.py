@@ -284,6 +284,6 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
                 active = active_connections.get((ip, port), 0)
                 if not(ip in records):
                     records[ip] = {}
-                records[ip]["active"] = (1, active) if active > 0 else (0, 0)
+                records[ip]["active"] = (1, active)
 
         return records
