@@ -100,8 +100,8 @@ def calculate_ideal_uniform(endpoint_spec, metric_averages, num_instances):
                     calculate_server_range(avg * num_instances,
                                            c.lower_bound(), c.upper_bound())
 
-            logging.debug("Ideal instances for metric %s: %s" % \
-                          (c.metric_key(), (metric_min, metric_max)))
+            logging.debug("Ideal instances for metric %s: [%s,%s]" % \
+                          (c.metric_key(), metric_min, metric_max))
 
             if ideal_instances == (-1, -1):
                 # First time through the loop so we just set it to the first ideal values.
@@ -113,8 +113,13 @@ def calculate_ideal_uniform(endpoint_spec, metric_averages, num_instances):
                 # completely disjoint, we disregard the later section.
                 new_min = max(ideal_instances[0], metric_min)
                 new_max = min(ideal_instances[1], metric_max)
+
                 if new_min <= new_max:
                     ideal_instances = (new_min, new_max)
+                elif metric_max < ideal_instances[0]:
+                    ideal_instances = (ideal_instances[0], ideal_instances[0])
+                elif metric_min > ideal_instances[1]:
+                    ideal_instances = (ideal_instances[1], ideal_instances[1])
 
             logging.debug("Returning ideal instances [%s,%s]" % (ideal_instances))
 
