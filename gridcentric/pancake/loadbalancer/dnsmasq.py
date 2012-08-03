@@ -68,7 +68,8 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
         # Write out our hosts file.
         hosts = open(self.config.hosts_path(), 'wb')
         for (address, names) in ipmap.items():
-            hosts.write("%s %s\n" % (address, " ".join(set(names))))
+            for name in set(names):
+                hosts.write("%s %s\n" % (address, name))
         hosts.close()
 
         # Make sure we have a domain.
