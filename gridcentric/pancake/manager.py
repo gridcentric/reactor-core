@@ -32,6 +32,10 @@ NODOMAIN = "example.com"
 
 class ManagerConfig(Config):
 
+    def ips(self):
+        """ The IPs on the public interface. """
+        return self._getlist("manager", "ips")
+
     def loadbalancer_names(self):
         """ The name of the loadbalancer. """
         return self._getlist("manager", "loadbalancer")
@@ -177,6 +181,7 @@ class ScaleManager(object):
         self.config = ManagerConfig(config_str)
 
         # Watch for future updates to our configuration, and recall update_config.
+        self.zk_conn.clear_watches(self.update_config)
         global_config = self.zk_conn.watch_contents(paths.config(), self.update_config)
         if global_config:
             self.config.reload(global_config)
@@ -186,7 +191,7 @@ class ScaleManager(object):
         # We read in each of the configuration blocks in turn, and hope that
         # they are not somehow mutually incompatible.
         if global_ips:
-            for ip in global_ips:
+            def load_ip_config(ip):
                 # Reload our local config.
                 local_config = self.zk_conn.watch_contents(
                                     paths.manager_config(ip),
@@ -194,8 +199,24 @@ class ScaleManager(object):
                 if local_config:
                     self.config.reload(local_config)
 
+            # Read all configured IPs.
+            for ip in global_ips:
+                load_ip_config(ip)
+            configured_ips = self.config.ips()
+            for ip in configured_ips:
+                load_ip_config(ip)
+
+            def register_ip(ip):
                 # Register our IP.
                 self.zk_conn.write(paths.manager_ip(ip), self.uuid, ephemeral=True)
+
+            # Register configured IPs if available.
+            if configured_ips:
+                for ip in configured_ips:
+                    register_ip(ip)
+            else:
+                for ip in global_ips:
+                    register_ip(ip)
 
         # Generate keys.
         while len(self.manager_keys) < self.config.keys():
@@ -401,10 +422,11 @@ class ScaleManager(object):
                 self.zk_conn.delete(paths.new_ip(ip))
 
     @locked
-    def collect_endpoint_ips(self, endpoint, public_ips, private_ips):
+    def collect_endpoint(self, endpoint, public_ips, private_ips, redirects):
         if not(endpoint.enabled()):
             return
 
+        # Collect all availble IPs.
         for ip in self.active_ips(endpoint.name):
             ip = BackendIP(ip, endpoint.port(), endpoint.weight())
             if endpoint.public():
@@ -412,10 +434,34 @@ class ScaleManager(object):
             else:
                 private_ips.append(ip)
 
+        # Collect all available redirects.
+        redirect = endpoint.redirect()
+        if redirect:
+            redirects.append(redirect)
+
+    @locked
+    def collect_update_loadbalancer(self, url, names,
+                                    public_ips, private_ips, redirects):
+
+        if len(public_ips) > 0 or \
+           len(private_ips) > 0 or \
+           len(redirects) == 0:
+            self.load_balancer.change(url,
+                                      names,
+                                      public_ips,
+                                      self.manager_ips,
+                                      private_ips)
+        else:
+            self.load_balancer.redirect(url,
+                                        names,
+                                        redirects[0],
+                                        self.manager_ips)
+
     @locked
     def update_loadbalancer(self, endpoint, remove=False):
         public_ips = []
         private_ips = []
+        redirects = []
         names = []
 
         # Go through all endpoints with the same keys.
@@ -424,15 +470,12 @@ class ScaleManager(object):
                 continue
             else:
                 names.append(endpoint_name)
-                self.collect_endpoint_ips(
+                self.collect_endpoint(
                     self.endpoints[endpoint_name],
-                    public_ips, private_ips)
+                    public_ips, private_ips, redirects)
 
-        self.load_balancer.change(endpoint.url(),
-                                  names,
-                                  public_ips,
-                                  self.manager_ips,
-                                  private_ips)
+        self.collect_update_loadbalancer(endpoint.url(), names,
+                                         public_ips, private_ips, redirects)
         self.load_balancer.save()
 
     @locked
@@ -443,16 +486,13 @@ class ScaleManager(object):
             public_ips = []
             private_ips = []
             names = []
+            redirects = []
 
             for endpoint in map(lambda x: self.endpoints[x], endpoint_names):
                 names.append(endpoint.name)
-                self.collect_endpoint_ips(endpoint, public_ips, private_ips)
-
-            self.load_balancer.change(endpoint.url(),
-                                      names,
-                                      public_ips,
-                                      self.manager_ips,
-                                      private_ips)
+                self.collect_endpoint(endpoint, public_ips, private_ips, redirects)
+            self.collect_update_loadbalancer(endpoint.url(), names,
+                                             public_ips, private_ips, redirects)
 
         self.load_balancer.save()
 

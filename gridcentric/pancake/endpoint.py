@@ -37,6 +37,9 @@ class EndpointConfig(Config):
     def port(self):
         return self._getint("endpoint", "port", 0)
 
+    def redirect(self):
+        return self._get("endpoint", "redirect", '')
+
     def public(self):
         return self._getbool("endpoint", "public", True)
 
@@ -111,6 +114,9 @@ class Endpoint(object):
 
     def port(self):
         return self.config.port()
+
+    def redirect(self):
+        return self.config.redirect()
 
     def public(self):
         return self.config.public()
@@ -259,6 +265,7 @@ class Endpoint(object):
         old_public = self.config.public()
         old_enabled = self.config.enabled()
         old_weight = self.config.weight()
+        old_redirect = self.config.redirect()
 
         new_config = EndpointConfig(config_str)
         new_url = new_config.url()
@@ -268,6 +275,7 @@ class Endpoint(object):
         new_public = new_config.public()
         new_enabled = new_config.enabled()
         new_weight = new_config.weight()
+        new_redirect = new_config.redirect()
 
         # Drop all removed static addresses.
         for ip in old_static_addresses:
@@ -295,7 +303,8 @@ class Endpoint(object):
              old_port != new_port or \
              old_public != new_public or \
              old_enabled != new_enabled or \
-             old_weight != new_weight:
+             old_weight != new_weight or \
+             old_redirect != new_redirect:
             self._update_loadbalancer()
 
     def decommission_instances(self, instances, reason):

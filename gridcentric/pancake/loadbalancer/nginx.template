@@ -1,17 +1,21 @@
+% if not(redirect):
 upstream ${id} {
-
     % for ipspec in ipspecs:
     server ${ipspec};
     % endfor
 ${extra}
 }
- 
+% endif
+
 server {
     access_log /var/log/nginx/access.log pancake;
 
     listen ${listen};
     server_name ${netloc};
     location ${path} {
+% if redirect:
+      return 301 ${redirect};
+% else:
       proxy_pass ${scheme}://${id};
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header Host $host;
@@ -20,5 +24,6 @@ server {
       proxy_connect_timeout 10;
       proxy_send_timeout    30;
       proxy_read_timeout    30;
+% endif
     }
 }

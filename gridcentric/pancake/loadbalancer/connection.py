@@ -42,6 +42,10 @@ class LoadBalancers(list):
         for lb in self:
             lb.clear()
 
+    def redirect(self, url, names, other_url, manager_ips):
+        for lb in self:
+            lb.redirect(url, names, other_url, manager_ips)
+
     def change(self, url, names, public_ips, manager_ips, private_ips):
         for lb in self:
             lb.change(url, names, public_ips, manager_ips, private_ips)
