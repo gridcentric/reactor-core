@@ -181,7 +181,10 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # Remove all tracked connections.
         self.tracked = {}
 
-    def change(self, url, names, public_ips, manager_ips, private_ips):
+    def redirect(self, url, names, other, manager_ips):
+        self.change(url, names, [], [], [], redirect=other)
+
+    def change(self, url, names, public_ips, manager_ips, private_ips, redirect=False):
         # We use a simple hash of the URL as the file name for the
         # configuration file.
         uniq_id = hashlib.md5(url).hexdigest()
@@ -193,7 +196,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         ips = public_ips + private_ips
 
         # Check for a removal.
-        if len(ips) == 0:
+        if not(redirect) and len(ips) == 0:
             # Remove the connection from our tracking list.
             if uniq_id in self.tracked:
                 del self.tracked[uniq_id]
@@ -220,7 +223,10 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
             elif scheme == "https":
                 listen = 443
         else:
-            listen = int(w_port[1])
+            try:
+                listen = int(w_port[1])
+            except ValueError:
+                return
 
         # Ensure that there is a path.
         path = path or "/"
@@ -232,18 +238,22 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
         # compute the specification for the template.
         ipspecs = []
         self.tracked[uniq_id] = []
-        for backend in ips:
-            if not(backend.port):
-                backend.port = listen
-            ipspecs.append("%s:%d weight=%d" % (backend.ip, backend.port, backend.weight))
-            self.tracked[uniq_id].append((backend.ip, backend.port))
-
-        # Compute any extra bits for the template.
         extra = ''
-        if self.config.sticky_sessions():
-            extra += '    sticky;\n'
-        if self.config.keepalive():
-            extra += '    keepalive %d single;\n' % self.config.keepalive()
+
+        if not(redirect):
+            for backend in ips:
+                if not(backend.port):
+                    port = listen
+                else:
+                    port = backend.port
+                ipspecs.append("%s:%d weight=%d" % (backend.ip, port, backend.weight))
+                self.tracked[uniq_id].append((backend.ip, port))
+
+            # Compute any extra bits for the template.
+            if self.config.sticky_sessions():
+                extra += '    sticky;\n'
+            if self.config.keepalive():
+                extra += '    keepalive %d single;\n' % self.config.keepalive()
 
         # Render our given template.
         conf = self.template.render(id=uniq_id,
@@ -253,6 +263,7 @@ class NginxLoadBalancerConnection(LoadBalancerConnection):
                                     scheme=scheme,
                                     listen=str(listen),
                                     ipspecs=ipspecs,
+                                    redirect=redirect,
                                     extra=extra)
 
         # Write out the config file.

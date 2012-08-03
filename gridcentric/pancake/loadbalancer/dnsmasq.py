@@ -22,7 +22,7 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
         self.scale_manager = scale_manager
         template_file = os.path.join(os.path.dirname(__file__),'dnsmasq.template')
         self.template = Template(filename=template_file)
-        self.mappings = {}
+        self.ipmappings = {}
 
     def _determine_dnsmasq_pid(self):
         if os.path.exists("/var/run/dnsmasq/dnsmasq.pid"):
@@ -34,7 +34,14 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
             return None
 
     def clear(self):
-        self.mappings = {}
+        self.ipmappings = {}
+
+    def redirect(self, url, names, other_url, manager_ips):
+        # We simply serve up the public servers as our DNS
+        # records. It's very difficult to implement CNAME
+        # records or even parse what is being specified in 
+        # the other_url.
+        self.change(url, names, [], manager_ips, [])
 
     def change(self, url, names, public_ips, manager_ips, private_ips):
         # If there are no public IPs to serve up for this endpoint,
@@ -44,7 +51,7 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
 
         # Save the mappings.
         for name in names:
-            self.mappings[name] = public_ips
+            self.ipmappings[name] = public_ips
 
     def save(self):
         # Compute the address mapping.
@@ -52,7 +59,7 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
         # for dns-based loadbalancer. This may be implemented in
         # the future -- but for now this parameter is ignored.
         ipmap = {}
-        for (name, backends) in self.mappings.items():
+        for (name, backends) in self.ipmappings.items():
             for backend in backends:
                 if not(backend.ip in ipmap):
                     ipmap[backend.ip] = []
@@ -70,7 +77,8 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
             domain = "example.com"
 
         # Write out our configuration template.
-        conf = self.template.render(domain=domain, hosts=self.config.hosts_path())
+        conf = self.template.render(domain=domain,
+                                    hosts=self.config.hosts_path())
 
         # Write out the config file.
         config_file = file(os.path.join(self.config.config_path(), "pancake.conf"), 'wb')
