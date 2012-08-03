@@ -33,7 +33,11 @@ class Config(object):
         return self._get(section, key, default).lower() == "true"
 
     def _getlist(self, section, key):
-        return self._get(section, key, "").split(",")
+        value = self._get(section, key, "").strip()
+        if value:
+            return value.split(",")
+        else:
+            return []
 
     def _set(self, section, key, value):
         if not(self.config.has_section(section)):

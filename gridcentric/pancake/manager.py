@@ -199,18 +199,24 @@ class ScaleManager(object):
                 if local_config:
                     self.config.reload(local_config)
 
+            # Read all configured IPs.
+            for ip in global_ips:
+                load_ip_config(ip)
+            configured_ips = self.config.ips()
+            for ip in configured_ips:
+                load_ip_config(ip)
+
+            def register_ip(ip):
                 # Register our IP.
                 self.zk_conn.write(paths.manager_ip(ip), self.uuid, ephemeral=True)
 
-            for ip in global_ips:
-                if ip:
-                    load_ip_config(ip)
-
-            # Read all configured IPs.
-            configured_ips = self.config.ips()
-            for ip in configured_ips:
-                if ip:
-                    load_ip_config(ip)
+            # Register configured IPs if available.
+            if configured_ips:
+                for ip in configured_ips:
+                    register_ip(ip)
+            else:
+                for ip in global_ips:
+                    register_ip(ip)
 
         # Generate keys.
         while len(self.manager_keys) < self.config.keys():
