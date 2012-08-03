@@ -28,7 +28,7 @@ class APIEndpoint(Endpoint):
         api_config._set("endpoint", "enabled", "true")
 
         # Update the static IPs in the configuration.
-        addresses = self.scale_manager.zk_conn.list_children(paths.manager_ips())
+        addresses = self.scale_manager.zk_servers
         addresses.sort()
         address_str = ",".join(addresses)
         api_config._set("endpoint", "static_instances", address_str)
