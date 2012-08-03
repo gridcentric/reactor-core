@@ -229,3 +229,14 @@ class ZookeeperConnection(object):
                             logging.exception("Error executing watch for %s." % path)
         finally:
             self.cond.release()
+
+    @wrap_exceptions
+    def clear_watches(self, fn):
+        self.cond.acquire()
+        try:
+            for path in self.watches:
+                fns = self.watches[path]
+                if fn in fns:
+                    fns.remove(fn)
+        finally:
+            self.cond.release()

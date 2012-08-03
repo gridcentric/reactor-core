@@ -32,6 +32,10 @@ NODOMAIN = "example.com"
 
 class ManagerConfig(Config):
 
+    def ips(self):
+        """ The IPs on the public interface. """
+        return self._getlist("manager", "ips")
+
     def loadbalancer_names(self):
         """ The name of the loadbalancer. """
         return self._getlist("manager", "loadbalancer")
@@ -177,6 +181,7 @@ class ScaleManager(object):
         self.config = ManagerConfig(config_str)
 
         # Watch for future updates to our configuration, and recall update_config.
+        self.zk_conn.clear_watches(self.update_config)
         global_config = self.zk_conn.watch_contents(paths.config(), self.update_config)
         if global_config:
             self.config.reload(global_config)
@@ -186,7 +191,7 @@ class ScaleManager(object):
         # We read in each of the configuration blocks in turn, and hope that
         # they are not somehow mutually incompatible.
         if global_ips:
-            for ip in global_ips:
+            def load_ip_config(ip):
                 # Reload our local config.
                 local_config = self.zk_conn.watch_contents(
                                     paths.manager_config(ip),
@@ -196,6 +201,16 @@ class ScaleManager(object):
 
                 # Register our IP.
                 self.zk_conn.write(paths.manager_ip(ip), self.uuid, ephemeral=True)
+
+            for ip in global_ips:
+                if ip:
+                    load_ip_config(ip)
+
+            # Read all configured IPs.
+            configured_ips = self.config.ips()
+            for ip in configured_ips:
+                if ip:
+                    load_ip_config(ip)
 
         # Generate keys.
         while len(self.manager_keys) < self.config.keys():
