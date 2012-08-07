@@ -77,7 +77,7 @@ image-%: image/local/local.tgz \
 	 image/local/reactor.tgz \
 	 image/contrib/python-zookeeper-3.4.3.tgz \
 	 image/contrib/nginx-1.2.1.tgz
-	@sudo make -C image build-$*
+	@sudo make -C image build-$* VERSION=$(VERSION)
 
 $(RPMBUILD):
 	@$(INSTALL_DIR) $(RPMBUILD)

@@ -7,6 +7,7 @@ HOSTNAME   := reactor
 DOMAINNAME := gridcentric.com
 USERNAME   := reactor
 PASSWORD   := p4nc4k3gr1d
+VERSION    ?= unknown
 
 # NOTE: The python zookeeper bindings are installed separately
 # via a generated contrib package. This is due to several problems
@@ -63,3 +64,4 @@ build-%: chroot-$(FLAVOR)
 	    --destdir=$(CURDIR)/dist-$* \
 	    --existing-chroot=chroot-$(FLAVOR) \
 	    $(ARGS)
+	@mv dist-$*/*.qcow2 dist-$*/reactor-$(VERSION).qcow2
