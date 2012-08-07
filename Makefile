@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-VERSION := $(shell date "+%Y%m%d.%H%M%S")
+VERSION ?= $(shell date "+%Y%m%d.%H%M%S")
 PANCAKE_PATH :=
 
 RPMBUILD := rpmbuild
