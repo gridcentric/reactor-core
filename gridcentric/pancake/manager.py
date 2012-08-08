@@ -307,16 +307,28 @@ class ScaleManager(object):
         if not(endpoint.name in self.key_to_endpoints[endpoint.key()]):
             self.key_to_endpoints[endpoint.key()].append(endpoint.name)
 
+        def local_lock(fn):
+            def wrapped_fn(*args, **kwargs):
+                try:
+                    self.cond.acquire()
+                    return fn(*args, **kwargs)
+                finally:
+                    self.cond.release()
+            return wrapped_fn
+
+        @local_lock
         def update_state(value):
             endpoint.update_state(value)
             if self.endpoint_owned(endpoint):
                 endpoint.update()
 
+        @local_lock
         def update_config(value):
             endpoint.update_config(value)
             if self.endpoint_owned(endpoint):
                 endpoint.update()
 
+        @local_lock
         def update_confirmed(ips):
             if ips:
                 self.confirmed[endpoint.name] = ips
