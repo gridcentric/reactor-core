@@ -6,6 +6,7 @@ import hashlib
 import bisect
 import json
 import traceback
+import socket
 from StringIO import StringIO
 
 from gridcentric.pancake.config import Config
@@ -65,7 +66,9 @@ def locked(fn):
 
 class ScaleManager(object):
 
-    def __init__(self, zk_servers):
+    def __init__(self, zk_servers, names=[]):
+
+        self.names      = names
         self.zk_servers = zk_servers
         self.zk_conn    = None
         self.running    = False
@@ -80,6 +83,7 @@ class ScaleManager(object):
 
         self.managers = {}        # Forward map of manager keys.
         self.manager_ips = []     # List of all manager IPs.
+        self.registered_ips = []  # List of registered IPs.
         self.manager_keys = []    # Our local manager keys.
         self.key_to_manager = {}  # Reverse map for manager keys.
         self.key_to_owned = {}    # Endpoint to ownership.
@@ -174,8 +178,7 @@ class ScaleManager(object):
     @locked
     def manager_register(self, config_str=''):
         # Figure out our global IPs.
-        global_ips = ips.find_global()
-        logging.info("Manager %s has key %s." % (str(global_ips), self.uuid))
+        logging.info("Manager %s has key %s." % (str(self.names), self.uuid))
 
         # Load our given configuration.
         self.config = ManagerConfig(config_str)
@@ -186,11 +189,18 @@ class ScaleManager(object):
         if global_config:
             self.config.reload(global_config)
 
+        # We remove all existing registered IPs.
+        for ip in self.registered_ips:
+            if self.zk_conn.read(paths.manager_ip(ip)) == self.uuid:
+                logging.info("Clearing IP '%s'." % ip)
+                self.zk_conn.delete(paths.manager_ip(ip))
+        self.registered_ips = []
+
         # NOTE: We may have multiple global IPs (especially in the case of
         # provisioning a cluster that could have floating IPs that move around.
         # We read in each of the configuration blocks in turn, and hope that
         # they are not somehow mutually incompatible.
-        if global_ips:
+        if self.names:
             def load_ip_config(ip):
                 # Reload our local config.
                 local_config = self.zk_conn.watch_contents(
@@ -200,23 +210,29 @@ class ScaleManager(object):
                     self.config.reload(local_config)
 
             # Read all configured IPs.
-            for ip in global_ips:
+            for ip in self.names:
                 load_ip_config(ip)
             configured_ips = self.config.ips()
             for ip in configured_ips:
                 load_ip_config(ip)
 
-            def register_ip(ip):
-                # Register our IP.
-                self.zk_conn.write(paths.manager_ip(ip), self.uuid, ephemeral=True)
+            def register_ip(name):
+                try:
+                    # Register our IP.
+                    ip = socket.gethostbyname(name)
+                    self.zk_conn.write(paths.manager_ip(ip), self.uuid, ephemeral=True)
+                    logging.info("Registered IP '%s'." % ip)
+                    self.registered_ips.append(ip)
+                except socket.error:
+                    logging.error("Skipping registration of '%s'." % name)
 
             # Register configured IPs if available.
             if configured_ips:
                 for ip in configured_ips:
                     register_ip(ip)
             else:
-                for ip in global_ips:
-                    register_ip(ip)
+                for name in self.names:
+                    register_ip(name)
 
         # Generate keys.
         while len(self.manager_keys) < self.config.keys():
