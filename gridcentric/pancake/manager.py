@@ -109,6 +109,7 @@ class ScaleManager(object):
 
         # Watch all IPs.
         self.register_ip(self.zk_conn.watch_children(paths.new_ips(), self.register_ip))
+        self.unregister_ip(self.zk_conn.watch_children(paths.drop_ips(), self.unregister_ip))
 
     @locked
     def manager_select(self, endpoint):
@@ -424,10 +425,9 @@ class ScaleManager(object):
         logging.info("Adding endpoint %s IP %s" % (endpoint_name, ip))
         self.zk_conn.write(paths.confirmed_ip(endpoint_name, ip), "")
         self.zk_conn.write(paths.ip_address(ip), endpoint_name)
-        self.zk_conn.delete(paths.new_ip(ip))
 
     @locked
-    def register_ip(self, ips):
+    def update_ips(self, ips, add=True):
         if len(ips) == 0:
             return
 
@@ -441,11 +441,26 @@ class ScaleManager(object):
 
         for ip in ips:
             endpoint = ip_map.get(ip, None)
-            if endpoint:
+
+            if not(endpoint):
+                continue
+
+            if add:
                 self.confirm_ip(endpoint.name, ip)
-                self.update_loadbalancer(endpoint)
             else:
-                self.zk_conn.delete(paths.new_ip(ip))
+                self.drop_ip(endpoint.name, ip)
+
+    @locked
+    def register_ip(self, ips):
+        self.update_ips(ips, add=True)
+        for ip in ips:
+            self.zk_conn.delete(paths.new_ip(ip))
+
+    @locked
+    def unregister_ip(self, ips):
+        self.update_ips(ips, add=False)
+        for ip in ips:
+            self.zk_conn.delete(paths.drop_ip(ip))
 
     @locked
     def collect_endpoint(self, endpoint, public_ips, private_ips, redirects):
