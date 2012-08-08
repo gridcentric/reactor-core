@@ -314,6 +314,8 @@ class ScaleManager(object):
             endpoint.update_config(value)
             if self.endpoint_owned(endpoint):
                 endpoint.update()
+        def update_ips(ips):
+            self.update_loadbalancer(endpoint)
 
         # Watch the config for this endpoint.
         logging.info("Watching endpoint %s." % (endpoint.name))
@@ -330,6 +332,9 @@ class ScaleManager(object):
         self.manager_select(endpoint)
 
         # Update the loadbalancer for this endpoint.
+        self.zk_conn.watch_children(paths.confirmed_ips(endpoint.name),
+                                    update_ips,
+                                    clean=True)
         self.update_loadbalancer(endpoint)
 
     @locked
