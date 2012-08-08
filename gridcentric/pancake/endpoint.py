@@ -312,7 +312,6 @@ class Endpoint(object):
         Drop the instances from the system. Note: a reason should be given for why
         the instances are being dropped.
         """
-
         # It might be good to wait a little bit for the servers to clear out
         # any requests they are currently serving.
         for instance in instances:
