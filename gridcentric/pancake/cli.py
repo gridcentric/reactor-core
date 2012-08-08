@@ -72,7 +72,7 @@ def usage():
     print ""
     print "    domain [domain]        Get or set the domain."
     print ""
-    print "    runserver              Run the scale manager server."
+    print "    runserver [names...]   Run the scale manager server."
     print ""
     print "    runapi                 Runs the API server."
     print ""
@@ -118,7 +118,9 @@ def main():
             usage()
             sys.exit(1)
         return args[n]
-    
+    def get_args():
+        return args[1:]
+
     command = get_arg(0)
     
     def get_api_client():
@@ -271,7 +273,7 @@ def main():
             from gridcentric.pancake.manager import ScaleManager
     
             log.configure(loglevel, logfile)
-            manager = ScaleManager(zk_servers)
+            manager = ScaleManager(zk_servers, get_args())
             manager.run()
     
         elif command == "runapi":
