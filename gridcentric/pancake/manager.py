@@ -502,7 +502,7 @@ class ScaleManager(object):
         self.reload_loadbalancer()
 
     @locked
-    def start_params(self):
+    def start_params(self, endpoint=None):
         # FIXME: If the user is running the Pancake server manually, then there
         # is no real way to pass in a valid set of start parameters here. This
         # should be extracted and implemented in a more flexible way at some
