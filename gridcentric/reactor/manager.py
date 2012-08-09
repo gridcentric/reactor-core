@@ -1,14 +1,14 @@
-#!/usr/bin/env python 
-
 import logging
 
 from gridcentric.pancake.manager import ManagerConfig
 from gridcentric.pancake.manager import ScaleManager
 from gridcentric.pancake.manager import locked
+from gridcentric.pancake.config import ConfigView
 import gridcentric.pancake.zookeeper.paths as paths
 
 from gridcentric.reactor.endpoint import APIEndpoint
 import gridcentric.reactor.iptables as iptables
+import gridcentric.reactor.windows as windows
 
 class ReactorScaleManager(ScaleManager):
     def __init__(self, zk_servers):
@@ -17,9 +17,20 @@ class ReactorScaleManager(ScaleManager):
         # The implicit API endpoint.
         self.api_endpoint = None
 
-    def start_params(self):
+        # The Windows domain connection.
+        self.windows = windows.WindowsConnection()
+
+    def start_params(self, endpoint=None):
         # Parameters passed to guests launched.
-        return {"reactor" : "api.%s" % self.domain}
+        params = {"reactor" : "api.%s" % self.domain}
+
+        # If a Windows connection is available, get start params for this service.
+        # This will generally create the appropriate accounts on the Windows domain,
+        # and give them back to the VMs for the agent to use in configuration.
+        if endpoint and self.windows:
+            params.update(self.windows.start_params(ConfigView(endpoint.config, "windows")))
+
+        return params
 
     @locked
     def setup_iptables(self, managers=[]):
@@ -34,7 +45,7 @@ class ReactorScaleManager(ScaleManager):
     def manager_register(self, config_str=''):
         # Ensure that the default loadbalancers are available.
         new_config = ManagerConfig(config_str)
-        new_config._set("manager", "loadbalancer", "dnsmasq,nginx")
+        new_config._set("manager", "loadbalancer", "dnsmasq,nginx,tcp")
         super(ReactorScaleManager, self).manager_register(str(new_config))
 
     @locked

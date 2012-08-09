@@ -1,5 +1,3 @@
-#!/usr/bin/env python 
-
 from gridcentric.pancake.endpoint import EndpointConfig
 from gridcentric.pancake.endpoint import Endpoint
 from gridcentric.pancake.endpoint import State

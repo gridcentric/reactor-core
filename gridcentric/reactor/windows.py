@@ -1,0 +1,222 @@
+import time
+import datetime
+import re
+import random
+import uuid
+
+import ldap
+import ldap.modlist as modlist
+
+from gridcentric.pancake.config import SubConfig
+
+COMPUTER_ATTRS = [
+    "operatingsystem",
+    "countrycode",
+    "cn",
+    "lastlogoff",
+    "dscorepropagationdata",
+    "usncreated",
+    "objectguid",
+    "iscriticalsystemobject",
+    "serviceprincipalname",
+    "whenchanged",
+    "localpolicyflags",
+    "accountexpires",
+    "primarygroupid",
+    "badpwdcount",
+    "objectclass",
+    "instancetype",
+    "objectcategory",
+    "whencreated",
+    "lastlogon",
+    "useraccountcontrol",
+    "samaccountname",
+    "operatingsystemversion",
+    "samaccounttype",
+    "adspath",
+    "serverreferencebl",
+    "dnshostname",
+    "pwdlastset",
+    "ridsetreferences",
+    "logoncount",
+    "codepage",
+    "name",
+    "usnchanged",
+    "badpasswordtime",
+    "objectsid",
+    "distinguishedname",
+]
+
+COMPUTER_RECORD = {
+    'objectclass' : ['top', 'computer'],
+}
+
+class LdapConnection:
+    def __init__(self, domain, username, password):
+        self.domain   = domain
+        self.username = username
+        self.password = password
+        self.con      = None
+
+    def _open(self):
+        if not(self.con):
+            self.con = ldap.initialize("ldap://%s" % self.domain)
+            self.con.set_option(ldap.OPT_REFERRALS, 0)
+            self.con.simple_bind_s("%s@%s" % (self.username, self.domain), self.password)
+        return self.con
+
+    def __del__(self):
+        try:
+            if self.con:
+                self.con.unbind()
+        except:
+            pass
+
+    def list_machines(self):
+        dom      = ",".join(map(lambda x: 'dc=%s' % x, self.domain.split(".")))
+        filter   = '(objectclass=computer)'
+        machines = self._open().search_s(dom, ldap.SCOPE_SUBTREE, filter, COMPUTER_ATTRS)
+        rval     = {}
+
+        # Synthesize the machines into a simple form.
+        for machine in machines:
+            if machine[0]:
+                for cn in machine[1]['cn']:
+                    rval[cn.lower()] = machine[1]
+        return rval
+
+    def check_logged_on(self, machine):
+        lastLogoff = int(machine.get('lastLogoff', ['0'])[0])
+        lastLogon  = int(machine.get('lastLogon', ['0'])[0])
+        if lastLogon > lastLogoff:
+            return True
+        else:
+            return False
+
+    def check_dead(self, machine):
+        # Compute expiry (one month in the past).
+        now = datetime.datetime.now()
+        expiry = datetime.datetime(now.year, now.month-1, now.day,
+                                   now.hour, now.minute, now.second)
+
+        # Check the last update time.
+        changed = machine.get('whenChanged', [''])[0]
+        m = re.match("(\d\d\d\d)(\d\d)(\d\d)(\d\d)(\d\d)(\d\d).\d*Z", changed)
+        if m:
+            dt = datetime.datetime(int(m.group(1)),
+                                   int(m.group(2)),
+                                   int(m.group(3)),
+                                   int(m.group(4)),
+                                   int(m.group(5)),
+                                   int(m.group(6)))
+
+            if dt > expiry:
+                return False
+
+        # Check the last logon time.
+        lastLogon = int(machine.get('lastLogon', ['0'])[0])
+        dt = datetime.datetime.fromtimestamp(lastLogon / 1000000)
+        if dt > expiry:
+            return False
+
+        return True
+
+    def clean_machines(self, template):
+        template.replace("#", "\d")
+        machines = self.list_machines()
+
+        for (name, machine) in machines.items():
+            if re.match(template, name):
+                if not(self.check_logged_on(machine)) or \
+                    self.check_dead(machine):
+                    self.remove_machine(name)
+
+    def create_machine(self, template):
+        machines = self.list_machines()
+        index = template.find("#")
+        if index < 0:
+            return False
+
+        # Extract a maximum substring.
+        size = 1
+        while template[index:index+size] == ("#" * size):
+            size += 1
+        size -= 1
+
+        # Compute an integer in the range we want.
+        fmt = "%%0%sd" % size
+        maximum = pow(10, size)
+        while True:
+            # Create the random name.
+            n = random.randint(0, maximum-1)
+            name = template.replace("#" * size, fmt % n)
+            if not(name.lower() in machines):
+                break
+
+        # Generate a password.
+        password = str(uuid.uuid4())
+
+        # Actually add the machine account.
+        new_record = {}
+        new_record.update(COMPUTER_RECORD.items())
+        new_record['cn']           = name
+        new_record['userPassword'] = password
+        new_record['description']  = ''
+
+        dom   = ",".join(map(lambda x: 'dc=%s' % x, self.domain.split(".")))
+        descr = "cn=%s,%s" % (name, dom)
+        print descr, new_record
+        print modlist.addModlist(new_record)
+        self._open().add_s(descr, modlist.addModlist(new_record))
+
+        return (name, password)
+
+class WindowsConfig(SubConfig):
+
+    def domain(self):
+        return self._get("domain", '')
+
+    def username(self):
+        return self._get("username", '')
+
+    def password(self):
+        return self._get("password", '')
+
+    def template(self):
+        return self._get("template", "gc#############")
+
+class WindowsConnection:
+
+    def __init__(self):
+        self.connections = {}
+
+    def _get_connection(self, config):
+        if not(config.domain()) or \
+           not(config.username()) or \
+           not(config.password()):
+            return False
+
+        # Retrieve the cached connection.
+        key = (config.domain(), config.username(), config.password())
+        if not(self.connections.has_key(key)):
+            self.connections[key] = \
+                LdapConnection(config.domain(), 
+                               config.username(),
+                               config.password())
+        return self.connections(key)
+
+    def start_params(self, config_view):
+        config = WindowsConfig(config_view)
+
+        connection = self._get_connection(config)
+        if not(connection):
+            return {}
+
+        # Clean existing machines and create a new one.
+        connection.clean_machines(config.template())
+        info = connection.create_machine(config.template())
+        if info:
+            # Return the relevant information about the machine.
+            return { "name" : info[0], "machinepassword" : info[1] }
+        else:
+            return {}
