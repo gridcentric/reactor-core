@@ -6,13 +6,13 @@ import json
 
 from pyramid.response import Response
 
-import gridcentric.pancake.ips as ips
 from gridcentric.pancake.api import PancakeApi
 from gridcentric.pancake.api import connected
 from gridcentric.pancake.api import authorized
 from gridcentric.pancake.api import authorized_admin_only
 
 from gridcentric.reactor.manager import ReactorScaleManager
+import gridcentric.reactor.ips as ips
 import gridcentric.reactor.config as config
 
 class ReactorApi(PancakeApi):

@@ -96,7 +96,10 @@ def setup(hosts=[], extra_ports=[]):
     zookeeper_allow(ZOOKEEPER_LOCAL, extra_ports=extra_ports)
     addresses = []
     for host in hosts:
-        address = socket.gethostbyname(host)
+        try:
+            address = socket.gethostbyname(host)
+        except socket.error:
+            continue
         if not(address in addresses):
             addresses.append(address)
     for address in addresses:
