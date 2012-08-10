@@ -435,6 +435,8 @@ class ScaleManager(object):
         self.zk_conn.delete(paths.endpoint_ip_metrics(endpoint_name, ip))
         self.zk_conn.delete(paths.confirmed_ip(endpoint_name, ip))
         self.zk_conn.delete(paths.ip_address(ip))
+        for name in self.config.loadbalancer_names():
+            self.zk_conn.delete(paths.loadbalancer_ip(name, ip))
 
     @locked
     def confirm_ip(self, endpoint_name, ip):
@@ -559,7 +561,7 @@ class ScaleManager(object):
         self.reload_loadbalancer()
 
     @locked
-    def start_params(self):
+    def start_params(self, endpoint=None):
         # FIXME: If the user is running the Pancake server manually, then there
         # is no real way to pass in a valid set of start parameters here. This
         # should be extracted and implemented in a more flexible way at some
