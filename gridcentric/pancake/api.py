@@ -98,6 +98,11 @@ class PancakeApi:
         self.config.add_route('register', '/v1.0/register')
         self.config.add_view(self.register_ip_address, route_name='register')
 
+        self.config.add_route('unregister-implicit', '/v1.0/unregister')
+        self.config.add_route('unregister', '/v1.0/unregister/{endpoint_ip}')
+        self.config.add_view(self.unregister_ip_address, route_name='unregister-implicit')
+        self.config.add_view(self.unregister_ip_address, route_name='unregister')
+
         self.config.add_route('manager-action', '/v1.0/managers/{manager}')
         self.config.add_route('manager-action-default', '/v1.0/config')
         self.config.add_view(self.handle_manager_action, route_name='manager-action')
@@ -173,7 +178,14 @@ class PancakeApi:
 
     @connected
     def _authorize_endpoint_access(self, context, request, auth_key):
+        # Pull an endpoint name if it is specified.
         endpoint_name = request.matchdict.get('endpoint_name', None)
+    
+        # Pull an endpoint name via the endpoint IP.
+        if endpoint_name == None:
+            endpoint_ip = request.matchdict.get('endpoint_ip', None)
+            if endpoint_ip != None:
+                endpoint_name = self.client.get_ip_address_endpoint(endpoint_ip)
 
         if endpoint_name != None:
             config = self.client.get_endpoint_config(endpoint_name)
@@ -523,7 +535,23 @@ class PancakeApi:
         if request.method == "POST" or request.method == "PUT":
             ip_address = self._extract_remote_ip(context, request)
             logging.info("New IP address %s has been recieved." % (ip_address))
-            self.client.record_new_ipaddress(ip_address)
+            self.client.record_new_ip_address(ip_address)
+            response = Response()
+        else:
+            response = Response(status=403)
+
+        return response
+
+    @connected
+    @authorized
+    def unregister_ip_address(self, context, request):
+        """
+        Publish a new IP from an instance.
+        """
+        if request.method == "POST" or request.method == "PUT":
+            ip_address = request.matchdict.get('endpoint_ip', None)
+            logging.info("Unregister requested for IP address %s." % (ip_address))
+            self.client.drop_ip_address(ip_address)
             response = Response()
         else:
             response = Response(status=403)

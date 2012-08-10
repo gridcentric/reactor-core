@@ -2,6 +2,8 @@
 The generic load balancer interface.
 """
 
+import logging
+
 def get_connection(name, config, scale_manager):
     if name == "nginx":
         from gridcentric.pancake.loadbalancer.nginx import NginxLoadBalancerConfig
@@ -17,10 +19,13 @@ def get_connection(name, config, scale_manager):
         return LoadBalancerConnection()
 
     else:
-        raise Exception("Unknown load balancer: %s" % name)
+        logging.error("Unknown load balancer: %s" % name)
+        return LoadBalancerConnection()
 
 class LoadBalancerConnection(object):
     def clear(self):
+        pass
+    def redirect(self, url, names, other, manager_ips):
         pass
     def change(self, url, names, public_ips, manager_ips, private_ips):
         pass

@@ -312,7 +312,6 @@ class Endpoint(object):
         Drop the instances from the system. Note: a reason should be given for why
         the instances are being dropped.
         """
-
         # It might be good to wait a little bit for the servers to clear out
         # any requests they are currently serving.
         for instance in instances:
@@ -424,7 +423,7 @@ class Endpoint(object):
                 associated_confirmed_ips = associated_confirmed_ips.union(instance_confirmed_ips)
 
             # Check if any of these expected_ips are not in our active set. If
-            # so that this instance is currently considered inactive
+            # so that this instance is currently considered inactive.
             if len(expected_ips.intersection(active_ips)) == 0:
                 inactive_instance_ids += [str(instance['id'])]
 
