@@ -22,8 +22,6 @@ from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
 from gridcentric.pancake.zookeeper.connection import ZookeeperException
 import gridcentric.pancake.zookeeper.paths as paths
 
-import gridcentric.pancake.ips as ips
-
 from gridcentric.pancake.metrics.calculator import calculate_weighted_averages
 
 # We must always specify some domain for the installation.
