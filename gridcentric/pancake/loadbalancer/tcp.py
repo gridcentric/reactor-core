@@ -170,7 +170,7 @@ class TcpLoadBalancerConfig(SubConfig):
 
     def kill(self):
         # Whether or not the server will be killed after use.
-        return self._get("kill", "true").lower() == "true"
+        return self._get("kill", "false").lower() == "true"
 
 class TcpLoadBalancerConnection(LoadBalancerConnection):
 
@@ -258,5 +258,8 @@ class TcpLoadBalancerConnection(LoadBalancerConnection):
         # now not active.
         if self.config.kill():
             self._scale_manager.unregister_ip(stale_active)
+        elif self.config.exclusive():
+            for ip in stale_active:
+                self._forget_ip(ip)
 
         return records
