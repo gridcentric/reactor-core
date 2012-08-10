@@ -47,6 +47,8 @@ def usage():
     print "    ips <endpoint>         Displays all of the IP addresses associated with"
     print "                           the endpoint."
     print ""
+    print "    drop <ip>              Remove the given IP address."
+    print ""
     print "    state <endpoint>       Get the endpoint state."
     print ""
     print "    start <endpoint>       "
@@ -224,6 +226,11 @@ def main():
             for ip in ip_addresses:
                 print ip
     
+        elif command == "drop":
+            ip = get_arg(1)
+            api_client = get_api_client()
+            api_client.drop_endpoint_ip(ip)
+
         elif command == "state":
             api_client = get_api_client()
             endpoint_name = get_arg(1)

@@ -129,6 +129,12 @@ class PancakeApiClient(httplib2.Http):
         self._authenticated_request('/v1.0/endpoints/%s/metrics' %
                                     endpoint_name, 'POST', body=metrics)
 
+    def drop_endpoint_ip(self, ip):
+        """
+        Unregister the given IP.
+        """
+        self._authenticated_request('/v1.0/unregister/%s' % ip, 'POST')
+
     def update_api_key(self, api_key):
         """
         Changes the API key in the system.
