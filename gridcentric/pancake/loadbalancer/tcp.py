@@ -156,12 +156,17 @@ class TcpLoadBalancerConfig(SubConfig):
         # Whether or not the server is exclusive.
         return self._get("exclusive", "true").lower() == "true"
 
+    def kill(self):
+        # Whether or not the server will be killed after use.
+        return self._get("kill", "true").lower() == "true"
+
 class TcpLoadBalancerConnection(LoadBalancerConnection):
 
     def __init__(self, name, scale_manager, config):
         LoadBalancerConnection.__init__(self, name, scale_manager)
-        self.tracked = {}
         self.portmap = {}
+        self.tracked = {}
+        self.active = {}
         self.config = config
 
         self.producer = FlowControlProducer()
@@ -177,6 +182,7 @@ class TcpLoadBalancerConnection(LoadBalancerConnection):
         # Remove all mapping and tracking configuration.
         self.portmap = {}
         self.tracked = {}
+        self.active = {}
 
     def redirect(self, url, names, other, manager_ips):
         pass
@@ -219,10 +225,25 @@ class TcpLoadBalancerConnection(LoadBalancerConnection):
 
         # Grab the active connections.
         active_connections = connection_count()
+        stale_active = []
 
         for connection_list in self.tracked.values():
             for (ip, port) in connection_list:
                 active = active_connections.get((ip, port), 0)
                 records[ip] = { "active" : (1, active) }
+
+                if active:
+                    # Record this server as active.
+                    self.active[ip] = True
+                elif not(active) and self.active.has_key(ip):
+                    # Record this server as stale.
+                    del self.active[ip]
+                    stale_active.append(ip)
+
+        # Remove old active connections, and potentially
+        # kill off servers that were once active and are
+        # now not active.
+        if self.config.kill():
+            self._scale_manager.unregister_ip(stale_active)
 
         return records
