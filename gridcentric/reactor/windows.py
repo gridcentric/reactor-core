@@ -3,6 +3,7 @@ import datetime
 import re
 import random
 import uuid
+import base64
 
 import ldap
 import ldap.modlist as modlist
@@ -51,6 +52,12 @@ COMPUTER_RECORD = {
     'objectclass' : ['top', 'computer'],
 }
 
+def str_to_escutf16(s):
+    result = []
+    for c in s:
+        result.append(c + '\x00')
+    return ''.join(result)
+
 class LdapConnection:
     def __init__(self, domain, username, password):
         self.domain   = domain
@@ -61,7 +68,11 @@ class LdapConnection:
     def _open(self):
         if not(self.con):
             self.con = ldap.initialize("ldap://%s" % self.domain)
+            self.con.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
             self.con.set_option(ldap.OPT_REFERRALS, 0)
+            self.con.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
+            self.con.set_option(ldap.OPT_X_TLS, ldap.OPT_X_TLS_DEMAND)
+            self.con.set_option(ldap.OPT_X_TLS_DEMAND, True)
             self.con.simple_bind_s("%s@%s" % (self.username, self.domain), self.password)
         return self.con
 
@@ -154,22 +165,22 @@ class LdapConnection:
                 break
 
         # Generate a password.
-        password = str(uuid.uuid4())
+        password = str(uuid.uuid4())[:8] + '!'
+        quoted_password  = base64.b64encode(str_to_escutf16('"%s"' % password))
+        encoded_password = base64.b64encode(str_to_escutf16(password))
 
         # Actually add the machine account.
         new_record = {}
         new_record.update(COMPUTER_RECORD.items())
-        new_record['cn']           = name
-        new_record['userPassword'] = password
-        new_record['description']  = ''
+        new_record['cn']          = name
+        new_record['unicodePwd']  = quoted_password
+        new_record['description'] = ''
 
         dom   = ",".join(map(lambda x: 'dc=%s' % x, self.domain.split(".")))
         descr = "cn=%s,%s" % (name, dom)
-        print descr, new_record
-        print modlist.addModlist(new_record)
         self._open().add_s(descr, modlist.addModlist(new_record))
 
-        return (name, password)
+        return (name, encoded_password)
 
 class WindowsConfig(SubConfig):
 
@@ -203,7 +214,7 @@ class WindowsConnection:
                 LdapConnection(config.domain(), 
                                config.username(),
                                config.password())
-        return self.connections(key)
+        return self.connections[key]
 
     def start_params(self, config_view):
         config = WindowsConfig(config_view)
