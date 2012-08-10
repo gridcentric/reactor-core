@@ -392,6 +392,8 @@ class ScaleManager(object):
         self.zk_conn.delete(paths.endpoint_ip_metrics(endpoint_name, ip))
         self.zk_conn.delete(paths.confirmed_ip(endpoint_name, ip))
         self.zk_conn.delete(paths.ip_address(ip))
+        for name in self.config.loadbalancer_names():
+            self.zk_conn.delete(paths.loadbalancer_ip(name, ip))
 
     @locked
     def confirm_ip(self, endpoint_name, ip):

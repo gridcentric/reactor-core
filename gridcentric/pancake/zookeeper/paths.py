@@ -20,48 +20,47 @@ CONFIG = "%s/config" % (ROOT)
 def config():
     return CONFIG
 
-# The subtree for managers.
+#
+# Manager information.
+#
 MANAGERS = "%s/managers" % (ROOT)
 
-# All available manager ips.
-MANAGER_IPS = "%s/ips" % (MANAGERS)
 def manager_ips():
-    return MANAGER_IPS
+    return "%s/ips" % MANAGERS
 
 # The IP node for a particular manager.
 def manager_ip(ip):
-    return "%s/%s" % (MANAGER_IPS, ip)
+    return "%s/%s" % (manager_ips(), ip)
 
 # All available manager configurations.
-MANAGER_CONFIGS = "%s/configs" % (MANAGERS)
 def manager_configs():
-    return MANAGER_CONFIGS
+    return "%s/configs" % (MANAGERS)
 
 # The node for a particular manager.
 def manager_config(ip):
-    return "%s/%s" % (MANAGER_CONFIGS, ip)
+    return "%s/%s" % (manager_configs(), ip)
 
-# All available manager keys / metrics.
-MANAGER_KEYS = "%s/keys" % (MANAGERS)
-MANAGER_METRICS = "%s/metrics" % (MANAGERS)
+# All available manageri.
 def managers():
-    return MANAGER_KEYS
+    return "%s/keys" % (MANAGERS)
 
 # The keys for a particular manager.
 def manager_keys(name):
-    return "%s/%s" % (MANAGER_KEYS, name)
+    return "%s/keys/%s" % (MANAGERS, name)
 
 # The metrics for a particular manager.
 def manager_metrics(name):
-    return "%s/%s" % (MANAGER_METRICS, name)
+    return "%s/metrics/%s" % (MANAGERS, name)
 
 # The mappings of endpoint to ip address that have no connections
 def manager_active_connections(name):
     return "%s/active_connections/%s" % (MANAGERS, name)
 
-# The endpoints subtree. Basically anything related to a particular endpoint
-# should be rooted here.
+#
+# Endpoint information.
+#
 ENDPOINTS = "%s/endpoint" % (ROOT)
+
 def endpoints():
     return ENDPOINTS
 
@@ -123,8 +122,23 @@ def decommissioned_instances(name):
 def decommissioned_instance(name, instance_id):
     return "%s/%s" % (decommissioned_instances(name), instance_id)
 
+#
+# The loadbalancer subtree.
+#
+LOADBALANCERS = "%s/loadbalancers" % (ROOT)
+
+def loadbalancer_ips(name):
+    return "%s/%s" % (LOADBALANCERS, name)
+
+# Metadata for a particular IP.
+def loadbalancer_ip(name, ip):
+    return "%s/%s" % (loadbalancer_ips(name), ip)
+
+#
 # New IPs currently not associated with any endpoint are logged here.
+#
 NEW_IPS = "%s/new_ips" % (ROOT)
+
 def new_ips():
     return NEW_IPS
 
@@ -132,7 +146,11 @@ def new_ips():
 def new_ip(ip_address):
     return "%s/%s" % (NEW_IPS, ip_address)
 
+#
+# IP Address mappings.
+#
 IP_ADDRESSES = "%s/ip_addresses" % (ROOT)
+
 def ip_addresses():
     return IP_ADDRESSES
 
