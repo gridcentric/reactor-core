@@ -91,9 +91,11 @@ class FlowControlProducer(threading.Thread):
         self.cond    = threading.Condition()
 
     def stop(self):
+        self.cond.acquire()
         self.execute = False
         del self.monitor
         flowcontrol.daemon.stop()
+        self.cond.release()
 
     def set(self, ports):
         # Set the appropriate ports.
@@ -137,16 +139,22 @@ class FlowControlProducer(threading.Thread):
 
     def run(self):
         # Process connections from monitor.
-        for req in self.monitor:
+        while True:
+            req = self.monitor.next(timeout=1000)
             self.cond.acquire()
 
             # Check if we should continue executing.
             if not(self.execute):
                 self.cond.notifyAll()
-                return
+                self.cond.release()
+                break
+            if not(req):
+                self.cond.release()
+                continue
 
             # Push the request into the queue.
             self.pending.append(req)
+            print "REQUEST %s is now PENDING" % req.src[0]
             self.cond.notifyAll()
             self.cond.release()
 
