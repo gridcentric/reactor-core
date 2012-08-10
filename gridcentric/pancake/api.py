@@ -95,7 +95,9 @@ class PancakeApi:
         self.config.add_route('domain-action', '/v1.0/domain')
         self.config.add_view(self.handle_domain_action, route_name='domain-action')
 
-        self.config.add_route('register', '/v1.0/register')
+        self.config.add_route('register-implicit', '/v1.0/register')
+        self.config.add_view(self.register_ip_implicit, route_name='register-implicit')
+        self.config.add_route('register', '/v1.0/register/{endpoint_ip}')
         self.config.add_view(self.register_ip_address, route_name='register')
 
         self.config.add_route('unregister-implicit', '/v1.0/unregister')
@@ -528,7 +530,24 @@ class PancakeApi:
         return response
 
     @connected
+    @authorized_admin_only
     def register_ip_address(self, context, request):
+        """
+        Publish a new IP explicitly.
+        """
+        if request.method == "POST" or request.method == "PUT":
+            ip_address = request.matchdict.get('endpoint_ip', None)
+            if ip_address:
+                logging.info("New IP address %s has been recieved." % (ip_address))
+                self.client.record_new_ip_address(ip_address)
+            response = Response()
+        else:
+            response = Response(status=403)
+
+        return response
+
+    @connected
+    def register_ip_implicit(self, context, request):
         """
         Publish a new IP from an instance.
         """
@@ -550,8 +569,9 @@ class PancakeApi:
         """
         if request.method == "POST" or request.method == "PUT":
             ip_address = request.matchdict.get('endpoint_ip', None)
-            logging.info("Unregister requested for IP address %s." % (ip_address))
-            self.client.drop_ip_address(ip_address)
+            if ip_address:
+                logging.info("Unregister requested for IP address %s." % (ip_address))
+                self.client.drop_ip_address(ip_address)
             response = Response()
         else:
             response = Response(status=403)

@@ -44,10 +44,9 @@ def usage():
     print ""
     print "    show <endpoint>        Show the current configuration for the endpoint."
     print ""
-    print "    ips <endpoint>         Displays all of the IP addresses associated with"
-    print "                           the endpoint."
-    print ""
+    print "    register <ip>          Register the given IP address."
     print "    drop <ip>              Remove the given IP address."
+    print "    ips <endpoint>         Displays all of the confirmed IP addresses."
     print ""
     print "    state <endpoint>       Get the endpoint state."
     print ""
@@ -226,6 +225,11 @@ def main():
             for ip in ip_addresses:
                 print ip
     
+        elif command == "register":
+            ip = get_arg(1)
+            api_client = get_api_client()
+            api_client.register_endpoint_ip(ip)
+
         elif command == "drop":
             ip = get_arg(1)
             api_client = get_api_client()
