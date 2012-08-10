@@ -159,7 +159,6 @@ class FlowControlProducer(threading.Thread):
 
             # Push the request into the queue.
             self.pending.append(req)
-            print "REQUEST %s is now PENDING" % req.src[0]
             self.cond.notifyAll()
             self.cond.release()
 
