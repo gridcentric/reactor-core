@@ -220,7 +220,9 @@ class PancakeApi:
         # necessarily trust the X-Forwarded-For header that the client passes,
         # but if we've been forwarded from an active manager then we can assume
         # that this header has been placed by a trusted middleman.
-        if forwarded_for and ip_address in self.client.get_managers_active(full=False):
+        if forwarded_for and \
+            (ip_address == "127.0.0.1" or \
+             ip_address in self.client.get_managers_active(full=False)):
             ip_address = forwarded_for
 
         return ip_address
