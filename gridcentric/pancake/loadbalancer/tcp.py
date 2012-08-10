@@ -24,7 +24,6 @@ class ConnectionConsumer(threading.Thread):
         self.cond.acquire()
         self.ports = ports
         self.cond.release()
-        self.flush()
 
     def stop(self):
         self.execute = False
@@ -35,8 +34,9 @@ class ConnectionConsumer(threading.Thread):
             # Index by the destination port.
             port = req.dst[1]
             if not(self.ports.has_key(port)):
+                self.cond.notifyAll()
                 req.drop()
-                return False
+                return True
 
             # Create a map of the IPs.
             backends = self.ports[req.dst[1]]
@@ -52,6 +52,7 @@ class ConnectionConsumer(threading.Thread):
 
             # Either redirect or drop the connection.
             if ip:
+                self.cond.notifyAll()
                 req.redirect(ip, ipmap[ip])
                 return True
             else:
@@ -71,16 +72,20 @@ class ConnectionConsumer(threading.Thread):
         while self.execute:
             req = self.producer.next()
 
-            if self.handle(req):
-                # If we can handle this request,
-                # make sure that the queue is flushed.
-                self.flush()
-            else:
-                # If we can't handle this request right
-                # now, we wait and will try it again on
-                # the next round.
-                self.producer.push(req)
-                time.sleep(5.0)
+            self.cond.acquire()
+            try:
+                if self.handle(req):
+                    # If we can handle this request,
+                    # make sure that the queue is flushed.
+                    self.flush()
+                else:
+                    # If we can't handle this request right
+                    # now, we wait and will try it again on
+                    # the next round.
+                    self.producer.push(req)
+                    self.cond.wait()
+            finally:
+                self.cond.release()
 
 class FlowControlProducer(threading.Thread):
     def __init__(self):
@@ -227,6 +232,7 @@ class TcpLoadBalancerConnection(LoadBalancerConnection):
     def save(self):
         self.producer.set(self.portmap.keys())
         self.consumer.set(self.portmap)
+        self.consumer.flush()
 
     def metrics(self):
         records = {}
