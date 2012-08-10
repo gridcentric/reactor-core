@@ -1,7 +1,8 @@
 #!/usr/bin/make -f
 
 VERSION ?= $(shell date "+%Y%m%d.%H%M%S")
-PANCAKE_PATH :=
+PANCAKE_PATH     ?= not-defined
+FLOWCONTROL_PATH ?= not-defined
 
 RPMBUILD := rpmbuild
 DEBBUILD := debbuild
@@ -12,14 +13,22 @@ default:
 	@echo "Nothing to be done."
 .PHONY: default
 
-prep:
-ifeq ($(PANCAKE_PATH),)
-	@echo "You must define PANCAKE_PATH to call prep." && false
-else
+prep: prep-pancake prep-flowcontrol
+.PHONY: prep
+
+prep-pancake:
+	@[ -d $(PANCAKE_PATH) ] || (echo "You must define PANCAKE_PATH to call prep." && false)
 	@mkdir -p image/local
 	@cp -a $(PANCAKE_PATH)/dist/* image/local
-endif
-.PHONY: prep
+.PHONY: prep-pancake
+
+prep-flowcontrol:
+	@[ -d $(FLOWCONTROL_PATH) ] || (echo "You must define FLOWCONTROL_PATH to call prep." && false)
+	@mkdir -p flowcontrol-install
+	@make -C $(FLOWCONTROL_PATH) install DESTDIR=$(CURDIR)/flowcontrol-install/usr/local
+	@cd flowcontrol-install && fakeroot tar -cvzf ../image/local/flowcontrol.tgz .
+	@rm -rf flowcontrol-install
+.PHONY: prep-flowcontrol
 
 # Install the latest package (for python bindings).
 contrib/zookeeper-3.4.3: contrib/zookeeper-3.4.3.tar.gz Makefile
