@@ -52,12 +52,6 @@ COMPUTER_RECORD = {
     'objectclass' : ['top', 'computer'],
 }
 
-def str_to_escutf16(s):
-    result = []
-    for c in s:
-        result.append(c + '\x00')
-    return ''.join(result)
-
 class LdapConnection:
     def __init__(self, domain, username, password):
         self.domain   = domain
