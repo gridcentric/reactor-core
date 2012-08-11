@@ -67,8 +67,8 @@ class LdapConnection:
 
     def _open(self):
         if not(self.con):
-            self.con = ldap.initialize("ldap://%s" % self.domain)
-            self.con.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
+            ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
+            self.con = ldap.initialize("ldaps://%s:636" % self.domain)
             self.con.set_option(ldap.OPT_REFERRALS, 0)
             self.con.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
             self.con.set_option(ldap.OPT_X_TLS, ldap.OPT_X_TLS_DEMAND)
