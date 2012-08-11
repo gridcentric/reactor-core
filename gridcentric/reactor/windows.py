@@ -164,23 +164,37 @@ class LdapConnection:
             if not(name.lower() in machines):
                 break
 
-        # Generate a password.
-        password = str(uuid.uuid4())[:8] + '!'
-        quoted_password  = base64.b64encode(str_to_escutf16('"%s"' % password))
-        encoded_password = base64.b64encode(str_to_escutf16(password))
+        # Generate a password.  
 
-        # Actually add the machine account.
+        # TODO: We need some way to deal with password strength
+        # requirements. We'll probably need to pass in a password
+        # schema through the configs since the strength requirements
+        # will vary between deployments. For now we ensure the
+        # generated password will meet the default strength
+        # requirements.
+        password = '"' + str(uuid.uuid4())[:8] + '!' + '"'
+        utf_password = password.encode('utf-16-le')
+        base64_password = base64.b64encode(utf_password)
+
+        # Generate the queries for creating the account and setting
+        # the password.
         new_record = {}
         new_record.update(COMPUTER_RECORD.items())
         new_record['cn']          = name
-        new_record['unicodePwd']  = quoted_password
         new_record['description'] = ''
+
+        password_change_attr = [(ldap.MOD_REPLACE, 'unicodePwd', utf_password)]
 
         dom   = ",".join(map(lambda x: 'dc=%s' % x, self.domain.split(".")))
         descr = "cn=%s,%s" % (name, dom)
-        self._open().add_s(descr, modlist.addModlist(new_record))
 
-        return (name, encoded_password)
+        connection = self._open()
+        # Create the new account.
+        connection.add_s(descr, modlist.addModlist(new_record))
+        # Set the account password.
+        connection.modify_s(descr, password_change_attr)
+        connection.unbind_s()
+        return (name, base64_password)
 
 class WindowsConfig(SubConfig):
 
