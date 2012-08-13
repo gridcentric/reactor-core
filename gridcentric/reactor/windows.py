@@ -173,12 +173,10 @@ class LdapConnection:
                 break
 
         # Generate a password.  
-
-        # TODO: We need some way to deal with password strength
-        # requirements. We'll probably need to pass in a password
-        # schema through the configs since the strength requirements
-        # will vary between deployments. For now we ensure the
-        # generated password will meet the default strength
+        # TODO: We need some way to deal with password strength requirements.
+        # We'll probably need to pass in a password schema through the configs
+        # since the strength requirements will vary between deployments. For
+        # now we ensure the generated password will meet the default strength
         # requirements.
         password = str(uuid.uuid4())[:8] + '!'
         quoted_password = '"' + password + '"'
@@ -186,21 +184,30 @@ class LdapConnection:
         utf_quoted_password = quoted_password.encode('utf-16-le')
         base64_password = base64.b64encode(utf_password)
 
-        # Generate the queries for creating the account and setting
-        # the password.
+        # Generate the queries for creating the account.
         new_record = {}
         new_record.update(COMPUTER_RECORD.items())
-        new_record['cn']          = name
-        new_record['description'] = ''
-        new_record['dNSHostName'] = '%s.%s' % (name, self.domain)
+        new_record['cn']             = name.upper()
+        new_record['description']    = ''
+        new_record['dNSHostName']    = '%s.%s' % (name, self.domain)
+        new_record['sAMAccountName'] = '%s$' % name
+        new_record['servicePrincipalName'] = [
+            'HOST/%s' % name.upper(),
+            'HOST/%s.%s' % (name, self.domain),
+            'TERMSRV/%s' % name.upper(),
+            'TERMSRV/%s.%s' % (name, self.domain),
+            'RestrictedKrbHost/%s' % name.upper(),
+            'RestrictedKrbHost/%s.%s' % (name, self.domain)
+        ]
 
         password_change_attr = [(ldap.MOD_REPLACE, 'unicodePwd', utf_quoted_password)]
         account_enabled_attr = [(ldap.MOD_REPLACE, 'userAccountControl', '4096')]
 
         dom   = ",".join(map(lambda x: 'dc=%s' % x, self.domain.split(".")))
-        descr = "cn=%s,%s" % (name, dom)
+        descr = "cn=%s,cn=Computers,%s" % (name, dom)
 
         connection = self._open()
+
         # Create the new account.
         connection.add_s(descr, modlist.addModlist(new_record))
         # Set the account password.
