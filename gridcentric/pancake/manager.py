@@ -437,9 +437,6 @@ class ScaleManager(object):
 
     @locked
     def collect_endpoint(self, endpoint, public_ips, private_ips, redirects):
-        if not(endpoint.enabled()):
-            return
-
         # Collect all availble IPs.
         for ip in self.active_ips(endpoint.name):
             ip = BackendIP(ip, endpoint.port(), endpoint.weight())
