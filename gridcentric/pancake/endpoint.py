@@ -43,9 +43,6 @@ class EndpointConfig(Config):
     def public(self):
         return self._getbool("endpoint", "public", True)
 
-    def enabled(self):
-        return self._getbool("endpoint", "enabled", True)
-
     def weight(self):
         return self._getint("endpoint", "weight", 1)
 
@@ -120,9 +117,6 @@ class Endpoint(object):
 
     def public(self):
         return self.config.public()
-
-    def enabled(self):
-        return self.config.enabled()
 
     def weight(self):
         return self.config.weight()
@@ -263,7 +257,6 @@ class Endpoint(object):
         old_port = self.config.port()
         old_cloud_config = self.config.cloud_config()
         old_public = self.config.public()
-        old_enabled = self.config.enabled()
         old_weight = self.config.weight()
         old_redirect = self.config.redirect()
 
@@ -273,7 +266,6 @@ class Endpoint(object):
         new_port = new_config.port()
         new_cloud_config = new_config.cloud_config()
         new_public = new_config.public()
-        new_enabled = new_config.enabled()
         new_weight = new_config.weight()
         new_redirect = new_config.redirect()
 
@@ -302,7 +294,6 @@ class Endpoint(object):
         elif old_static_addresses != new_static_addresses or \
              old_port != new_port or \
              old_public != new_public or \
-             old_enabled != new_enabled or \
              old_weight != new_weight or \
              old_redirect != new_redirect:
             self._update_loadbalancer()
