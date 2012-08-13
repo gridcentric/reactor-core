@@ -261,5 +261,6 @@ class TcpLoadBalancerConnection(LoadBalancerConnection):
         elif self.config.exclusive():
             for ip in stale_active:
                 self._forget_ip(ip)
+            self.consumer.flush()
 
         return records
