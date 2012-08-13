@@ -46,7 +46,7 @@ class ConnectionConsumer(threading.Thread):
 
             # Find a backend IP (exclusive or not).
             if self.exclusive:
-                ip = self.connection._find_ip(ips)
+                ip = self.connection._find_unused_ip(ips)
             else:
                 ip = ips[random.randint(0, len(ips)-1)]
 

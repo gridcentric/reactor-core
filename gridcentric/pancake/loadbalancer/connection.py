@@ -47,11 +47,18 @@ class LoadBalancerConnection(object):
         # Returns { host : (weight, value) }
         return {}
 
+    # FIXME: The following functions provide a wrapper around the ScaleManager
+    # to access shared per-IP metadata. These functions belong in a better
+    # location than here, but don't necessary belong as simple member functions
+    # of the ScaleManager itself (as they require a name and other data). They
+    # will remain here for the time-being, but as they evolve, they should be
+    # moved to a new more appropriate location / abstraction.
+
     def _list_ips(self):
         return self._scale_manager.zk_conn.list_children(
                 paths.loadbalancer_ips(self._name))
 
-    def _find_ip(self, ips, data=''):
+    def _find_unused_ip(self, ips, data=''):
         locked = self._list_ips() or []
         for ip in ips:
             if not(ip in locked):
@@ -117,8 +124,7 @@ class LoadBalancers(list):
                     (oldweight, oldvalue) = results[host][key]
                     (newweight, newvalue) = value[key]
                     weight = (oldweight + newweight)
-                    value = ((oldvalue * oldweight) \
-                          + (newvalue * newweight)) / weight
+                    value = ((oldvalue * oldweight) + (newvalue * newweight)) / weight
                     results[host][key] = (weight, value)
 
         return results
