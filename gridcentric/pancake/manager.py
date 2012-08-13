@@ -78,6 +78,7 @@ class ScaleManager(object):
 
         self.endpoints = {}        # Endpoint map (name -> endpoint)
         self.key_to_endpoints = {} # Endpoint map (key() -> [names...])
+        self.confirmed = {}        # Endpoint map (name -> confirmed IPs)
 
         self.managers = {}        # Forward map of manager keys.
         self.manager_ips = []     # List of all manager IPs.
@@ -110,6 +111,7 @@ class ScaleManager(object):
 
         # Watch all IPs.
         self.register_ip(self.zk_conn.watch_children(paths.new_ips(), self.register_ip))
+        self.unregister_ip(self.zk_conn.watch_children(paths.drop_ips(), self.unregister_ip))
 
     @locked
     def manager_select(self, endpoint):
@@ -182,7 +184,7 @@ class ScaleManager(object):
         self.config = ManagerConfig(config_str)
 
         # Watch for future updates to our configuration, and recall update_config.
-        self.zk_conn.clear_watches(self.update_config)
+        self.zk_conn.clear_watch_fn(self.update_config)
         global_config = self.zk_conn.watch_contents(paths.config(), self.update_config)
         if global_config:
             self.config.reload(global_config)
@@ -320,14 +322,36 @@ class ScaleManager(object):
         if not(endpoint.name in self.key_to_endpoints[endpoint.key()]):
             self.key_to_endpoints[endpoint.key()].append(endpoint.name)
 
+        def local_lock(fn):
+            def wrapped_fn(*args, **kwargs):
+                try:
+                    self.cond.acquire()
+                    return fn(*args, **kwargs)
+                finally:
+                    self.cond.release()
+            return wrapped_fn
+
+        @local_lock
         def update_state(value):
             endpoint.update_state(value)
             if self.endpoint_owned(endpoint):
                 endpoint.update()
+
+        @local_lock
         def update_config(value):
             endpoint.update_config(value)
             if self.endpoint_owned(endpoint):
                 endpoint.update()
+
+        @local_lock
+        def update_confirmed(ips):
+            if ips:
+                self.confirmed[endpoint.name] = ips
+            elif endpoint.name in self.confirmed:
+                del self.confirmed[endpoint.name]
+
+            # Kick off a loadbalancer update.
+            self.update_loadbalancer(endpoint)
 
         # Watch the config for this endpoint.
         logging.info("Watching endpoint %s." % (endpoint.name))
@@ -344,7 +368,10 @@ class ScaleManager(object):
         self.manager_select(endpoint)
 
         # Update the loadbalancer for this endpoint.
-        self.update_loadbalancer(endpoint)
+        update_confirmed(
+            self.zk_conn.watch_children(paths.confirmed_ips(endpoint.name),
+                                        update_confirmed,
+                                        clean=True))
 
     @locked
     def start_endpoint(self, endpoint):
@@ -361,6 +388,10 @@ class ScaleManager(object):
         endpoint = self.endpoints.get(endpoint_name, None)
 
         if endpoint:
+            self.zk_conn.clear_watch_path(paths.endpoint_state(endpoint.name))
+            self.zk_conn.clear_watch_path(paths.endpoint(endpoint.name))
+            self.zk_conn.clear_watch_path(paths.confirmed_ips(endpoint.name))
+
             # Update the loadbalancer for this endpoint.
             self.update_loadbalancer(endpoint, remove=True)
 
@@ -382,18 +413,14 @@ class ScaleManager(object):
         """
         Returns a list of all the confirmed ips for the endpoint.
         """
-        ips = self.zk_conn.list_children(paths.confirmed_ips(endpoint_name))
-        if ips == None:
-            ips = []
-        return ips
+        return self.confirmed.get(endpoint_name, [])
 
     @locked
     def active_ips(self, endpoint_name):
         """
         Returns all confirmed and static ips for the endpoint.
         """
-        ips = []
-        ips += self.confirmed_ips(endpoint_name)
+        ips = self.confirmed.get(endpoint_name, [])
         if endpoint_name in self.endpoints:
             ips += self.endpoints[endpoint_name].static_addresses()
 
@@ -412,10 +439,9 @@ class ScaleManager(object):
         logging.info("Adding endpoint %s IP %s" % (endpoint_name, ip))
         self.zk_conn.write(paths.confirmed_ip(endpoint_name, ip), "")
         self.zk_conn.write(paths.ip_address(ip), endpoint_name)
-        self.zk_conn.delete(paths.new_ip(ip))
 
     @locked
-    def register_ip(self, ips):
+    def update_ips(self, ips, add=True):
         if len(ips) == 0:
             return
 
@@ -429,11 +455,26 @@ class ScaleManager(object):
 
         for ip in ips:
             endpoint = ip_map.get(ip, None)
-            if endpoint:
+
+            if not(endpoint):
+                continue
+
+            if add:
                 self.confirm_ip(endpoint.name, ip)
-                self.update_loadbalancer(endpoint)
             else:
-                self.zk_conn.delete(paths.new_ip(ip))
+                self.drop_ip(endpoint.name, ip)
+
+    @locked
+    def register_ip(self, ips):
+        self.update_ips(ips, add=True)
+        for ip in ips:
+            self.zk_conn.delete(paths.new_ip(ip))
+
+    @locked
+    def unregister_ip(self, ips):
+        self.update_ips(ips, add=False)
+        for ip in ips:
+            self.zk_conn.delete(paths.drop_ip(ip))
 
     @locked
     def collect_endpoint(self, endpoint, public_ips, private_ips, redirects):

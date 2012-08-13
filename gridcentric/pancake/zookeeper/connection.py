@@ -231,7 +231,16 @@ class ZookeeperConnection(object):
             self.cond.release()
 
     @wrap_exceptions
-    def clear_watches(self, fn):
+    def clear_watch_path(self, path):
+        self.cond.acquire()
+        try:
+            if path in self.watches:
+                del self.watches[path]
+        finally:
+            self.cond.release()
+
+    @wrap_exceptions
+    def clear_watch_fn(self, fn):
         self.cond.acquire()
         try:
             for path in self.watches:

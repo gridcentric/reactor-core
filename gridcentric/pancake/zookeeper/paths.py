@@ -132,9 +132,20 @@ def new_ips():
 def new_ip(ip_address):
     return "%s/%s" % (NEW_IPS, ip_address)
 
+# IPs that are to be explicitly dropped.
+DROP_IPS = "%s/drop_ips" % (ROOT)
+def drop_ips():
+    return DROP_IPS
+
+# A particular IP to be dropped.
+def drop_ip(ip_address):
+    return "%s/%s" % (DROP_IPS, ip_address)
+
+# Mapping of IP addresses to endpoints.
 IP_ADDRESSES = "%s/ip_addresses" % (ROOT)
 def ip_addresses():
     return IP_ADDRESSES
 
+# Mapping for a particular IP.
 def ip_address(ip):
     return "%s/%s" % (ip_addresses(), ip)

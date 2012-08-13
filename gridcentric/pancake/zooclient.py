@@ -113,9 +113,12 @@ class PancakeClient(object):
 
         return ip_addresses
 
-    def record_new_ipaddress(self, ip_address):
+    def record_new_ip_address(self, ip_address):
         self.zk_conn.delete(paths.new_ip(ip_address))
         self.zk_conn.write(paths.new_ip(ip_address), "")
+
+    def drop_ip_address(self, ip_address):
+        self.zk_conn.write(paths.drop_ip(ip_address), "")
 
     def get_ip_address_endpoint(self, ip_address):
         """
