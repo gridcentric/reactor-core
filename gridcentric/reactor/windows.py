@@ -49,7 +49,7 @@ COMPUTER_ATTRS = [
 ]
 
 COMPUTER_RECORD = {
-    'objectclass' : ['top', 'computer'],
+    'objectclass' : ['top', 'person', 'organizationalPerson', 'user', 'computer'],
 }
 
 class LdapConnection:
@@ -58,6 +58,17 @@ class LdapConnection:
         self.username = username
         self.password = password
         self.con      = None
+
+    def _wrap_and_retry(fn):
+        def _wrapped_fn(self, *args, **kwargs):
+            try:
+                return fn(self, *args, **kwargs)
+            except ldap.LDAPError:
+                self.con = None
+                return fn(self, *args, **kwargs)
+        _wrapped_fn.__name__ = fn.__name__
+        _wrapped_fn.__doc__ = fn.__doc__
+        return _wrapped_fn
 
     def _open(self):
         if not(self.con):
@@ -77,6 +88,7 @@ class LdapConnection:
         except:
             pass
 
+    @_wrap_and_retry
     def list_machines(self):
         dom      = ",".join(map(lambda x: 'dc=%s' % x, self.domain.split(".")))
         filter   = '(objectclass=computer)'
@@ -126,6 +138,7 @@ class LdapConnection:
 
         return True
 
+    @_wrap_and_retry
     def clean_machines(self, template):
         template.replace("#", "\d")
         machines = self.list_machines()
@@ -136,6 +149,7 @@ class LdapConnection:
                     self.check_dead(machine):
                     self.remove_machine(name)
 
+    @_wrap_and_retry
     def create_machine(self, template):
         machines = self.list_machines()
         index = template.find("#")
@@ -166,8 +180,10 @@ class LdapConnection:
         # will vary between deployments. For now we ensure the
         # generated password will meet the default strength
         # requirements.
-        password = '"' + str(uuid.uuid4())[:8] + '!' + '"'
+        password = str(uuid.uuid4())[:8] + '!'
+        quoted_password = '"' + password + '"'
         utf_password = password.encode('utf-16-le')
+        utf_quoted_password = quoted_password.encode('utf-16-le')
         base64_password = base64.b64encode(utf_password)
 
         # Generate the queries for creating the account and setting
@@ -176,8 +192,10 @@ class LdapConnection:
         new_record.update(COMPUTER_RECORD.items())
         new_record['cn']          = name
         new_record['description'] = ''
+        new_record['dNSHostName'] = '%s.%s' % (name, self.domain)
 
-        password_change_attr = [(ldap.MOD_REPLACE, 'unicodePwd', utf_password)]
+        password_change_attr = [(ldap.MOD_REPLACE, 'unicodePwd', utf_quoted_password)]
+        account_enabled_attr = [(ldap.MOD_REPLACE, 'userAccountControl', '4096')]
 
         dom   = ",".join(map(lambda x: 'dc=%s' % x, self.domain.split(".")))
         descr = "cn=%s,%s" % (name, dom)
@@ -187,7 +205,9 @@ class LdapConnection:
         connection.add_s(descr, modlist.addModlist(new_record))
         # Set the account password.
         connection.modify_s(descr, password_change_attr)
-        connection.unbind_s()
+        # Enable the computer account.
+        connection.modify_s(descr, account_enabled_attr)
+
         return (name, base64_password)
 
 class WindowsConfig(SubConfig):
