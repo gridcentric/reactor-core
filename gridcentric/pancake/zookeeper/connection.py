@@ -190,7 +190,7 @@ class ZookeeperConnection(object):
         Try to write to the path in an exclusive way.
         """
         return self.write(path, default_value,
-                          ephemeral=False, exclusive=True)
+                          ephemeral=True, exclusive=True)
 
     @wrap_exceptions
     def watch_contents(self, path, fn, default_value="", clean=False):

@@ -239,8 +239,10 @@ class TcpLoadBalancerConnection(LoadBalancerConnection):
         # Grab the active connections.
         active_connections = connection_count()
         stale_active = []
+        locked_ips = self._list_ips()
 
         for connection_list in self.tracked.values():
+
             for (ip, port) in connection_list:
                 active = active_connections.get((ip, port), 0)
                 records[ip] = { "active" : (1, active) }
@@ -248,9 +250,10 @@ class TcpLoadBalancerConnection(LoadBalancerConnection):
                 if active:
                     # Record this server as active.
                     self.active[ip] = True
-                elif not(active) and self.active.has_key(ip):
+                elif not(active) and (self.active.has_key(ip) or ip in locked_ips):
                     # Record this server as stale.
-                    del self.active[ip]
+                    if self.active.has_key(ip):
+                        del self.active[ip]
                     stale_active.append(ip)
 
         # Remove old active connections, and potentially
