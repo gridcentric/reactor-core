@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-FLAVOR     := oneiric
+FLAVOR     := precise
 ROOTSIZE   := 4096
 SWAPSIZE   := 1024
 HOSTNAME   := reactor
