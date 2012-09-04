@@ -95,6 +95,12 @@ class BaseNovaConfig(SubConfig):
     def authurl(self):
         return self._get("authurl", "http://localhost:8774/v1.1/")
 
+    def region(self):
+        region = self._get("region", '')
+        if region == '':
+            region = None
+        return region
+
 class NovaConfig(BaseNovaConfig):
 
     def instance_name(self):
@@ -122,7 +128,8 @@ class NovaConnector(BaseNovaConnector):
             novaclient = NovaClient(self.config.user(),
                                     self.config.apikey(),
                                     self.config.project(),
-                                    self.config.authurl())
+                                    self.config.authurl(),
+                                    region_name=self.config.region())
             return novaclient.servers
         except Exception, e:
             traceback.print_exc()
@@ -180,7 +187,8 @@ class NovaVmsConnector(BaseNovaConnector):
                                                self.config.user(),
                                                self.config.apikey(),
                                                self.config.project(),
-                                               'v1.1')
+                                               'v1.1',
+                                               region=self.config.region())
             return novaclient
         except Exception, e:
             traceback.print_exc()
