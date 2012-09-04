@@ -2,11 +2,11 @@ import logging
 import traceback
 from httplib import HTTPException
 
+from novaclient import shell
 from novaclient.v1_1.client import Client as NovaClient
 
 from gridcentric.pancake.config import SubConfig
 import gridcentric.pancake.cloud.connection as cloud_connection
-from gridcentric.pancake.cloud.nova.client.client import NovaClient as GridcentricNovaClient
 
 class BaseNovaConnector(cloud_connection.CloudConnection):
 
@@ -22,12 +22,27 @@ class BaseNovaConnector(cloud_connection.CloudConnection):
         """
         return []
 
+    def _novaclient(self):
+        try:
+            extensions = shell.OpenStackComputeShell()._discover_extensions("1.1")
+            novaclient = NovaClient(self.config.user(),
+                                    self.config.apikey(),
+                                    self.config.project(),
+                                    self.config.authurl(),
+                                    region_name=self.config.region(),
+                                    extensions=extensions)
+            return novaclient
+        except Exception, e:
+            traceback.print_exc()
+            logging.error("Error creating nova client: %s" % str(e))
+
     def list_instances(self):
         """
         Lists the instances related to a endpoint. The identifier is used to 
         identify the related instances in the respective clouds.
         """
-        instances = self._list_instances()
+        # Pull out the _info dictionary from the Server object
+        instances = [instance._info for instance in self._list_instances()]
         non_deleted_instances = []
         instance_ids_still_deleting = []
         for instance in instances:
@@ -56,7 +71,7 @@ class BaseNovaConnector(cloud_connection.CloudConnection):
             logging.error("Error starting instance: %s" % str(e))
 
     def _delete_instance(self, instance_id):
-        pass
+        self._novaclient().servers._delete("/servers/%s" % (instance_id))
 
     def delete_instance(self, instance_id):
         """
@@ -123,18 +138,6 @@ class NovaConnector(BaseNovaConnector):
     def __init__(self, config):
         super(NovaConnector, self).__init__(config)
 
-    def _novaclient(self):
-        try:
-            novaclient = NovaClient(self.config.user(),
-                                    self.config.apikey(),
-                                    self.config.project(),
-                                    self.config.authurl(),
-                                    region_name=self.config.region())
-            return novaclient.servers
-        except Exception, e:
-            traceback.print_exc()
-            logging.error("Error creating nova client: %s" % str(e))
-
     def _list_instances(self):
         """ 
         Returns a  list of instances from the endpoint.
@@ -145,27 +148,17 @@ class NovaConnector(BaseNovaConnector):
             'image':  self.config.image()
         }
 
-        instances = self._novaclient().list(search_opts=search_opts)
-
-        # The novaclient essentially wraps it instances in a server resource object.
-        # We need to get at the raw object and return that.
-        raw_instances = []
-        for instance in instances:
-            raw_instances.append(instance._info)
-
-        return raw_instances
+        instances = self._novaclient().servers.list(search_opts=search_opts)
+        return instances
 
     def _start_instance(self, params={}):
         # TODO: We can pass in the pancake parameter here via 
         # CloudStart or some other standard support mechanism.
-        self._novaclient().create(self.config.instance_name(),
+        self._novaclient().servers.create(self.config.instance_name(),
                                   self.config.image(),
                                   self.config.flavor(),
                                   security_groups=self.config.security_groups(),
                                   key_name=self.config.key_name())
-
-    def _delete_instance(self, instance_id):
-        self._novaclient()._delete("/servers/%s" % (instance_id))
 
 class NovaVmsConfig(BaseNovaConfig):
 
@@ -181,28 +174,15 @@ class NovaVmsConnector(BaseNovaConnector):
     def __init__(self, config):
         super(NovaVmsConnector, self).__init__(config)
 
-    def _novaclient(self):
-        try:
-            novaclient = GridcentricNovaClient(self.config.authurl(),
-                                               self.config.user(),
-                                               self.config.apikey(),
-                                               self.config.project(),
-                                               'v1.1',
-                                               region=self.config.region())
-            return novaclient
-        except Exception, e:
-            traceback.print_exc()
-            logging.error("Error creating nova client: %s" % str(e))
-
     def _list_instances(self):
         """ 
         Returns a list of instances from the endpoint.
         """
-        return self._novaclient().list_launched_instances(self.config.instance_id())
+        return self._novaclient().gridcentric.list_launched(self.config.instance_id())
 
     def _start_instance(self, params={}):
         launch_params = { 'target' : self.config.target(), 'guest' : params }
-        self._novaclient().launch_instance(self.config.instance_id(), params=launch_params)
+        self._novaclient().gridcentric.launch(self.config.instance_id(),
+                                              target=self.config.target(),
+                                              guest_params=params)
 
-    def _delete_instance(self, instance_id):
-        self._novaclient().delete_instance(instance_id)
