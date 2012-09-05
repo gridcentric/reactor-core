@@ -17,9 +17,9 @@ class DnsmasqLoadBalancerConfig(SubConfig):
 
 class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
     
-    def __init__(self, config, scale_manager):
+    def __init__(self, name, scale_manager, config):
+        LoadBalancerConnection.__init__(self, name, scale_manager)
         self.config = config
-        self.scale_manager = scale_manager
         template_file = os.path.join(os.path.dirname(__file__),'dnsmasq.template')
         self.template = Template(filename=template_file)
         self.ipmappings = {}
@@ -73,7 +73,7 @@ class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
         hosts.close()
 
         # Make sure we have a domain.
-        domain = self.scale_manager.domain
+        domain = self._scale_manager.domain
         if not(domain):
             domain = "example.com"
 

@@ -94,10 +94,14 @@ class ZookeeperConnection(object):
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_ERROR)
 
     @wrap_exceptions
-    def write(self, path, contents, ephemeral=False):
+    def write(self, path, contents, ephemeral=False, exclusive=False):
         """ 
         Writes the contents to the path in zookeeper. It will create the path in
         zookeeper if it does not already exist.
+
+        This method will return True if the value is written, False otherwise.
+        (The value will not be written if the exclusive is True and the node
+        already exists.)
         """
         partial_path = ''
 
@@ -116,6 +120,10 @@ class ZookeeperConnection(object):
 
         exists = zookeeper.exists(self.handle, path)
 
+        # Don't create it if we're exclusive.
+        if exists and exclusive:
+            return False
+
         # We make sure that we have the creation flags for ephemeral nodes,
         # otherwise they could be associated with previous connections that
         # have not yet timed out.
@@ -128,14 +136,20 @@ class ZookeeperConnection(object):
 
         if exists:
             zookeeper.set(self.handle, path, contents)
+            return True
         else:
             flags = (ephemeral and zookeeper.EPHEMERAL or 0)
             try:
                 zookeeper.create(self.handle, path, contents, [self.acl], flags)
+                return True
             except zookeeper.NodeExistsException:
-                # Woah, something happened between the top and here.
-                # We just restart and retry the whole routine.
-                self.write(path, contents, ephemeral=ephemeral)
+                if not(exclusive):
+                    # Woah, something happened between the top and here.
+                    # We just restart and retry the whole routine.
+                    self.write(path, contents, ephemeral=ephemeral)
+                    return True
+                else:
+                    return False
 
     @wrap_exceptions
     def read(self, path, default=None):
@@ -174,6 +188,14 @@ class ZookeeperConnection(object):
                 zookeeper.delete(self.handle, path)
             except zookeeper.NoNodeException:
                 pass
+
+    @wrap_exceptions
+    def trylock(self, path, default_value=""):
+        """
+        Try to write to the path in an exclusive way.
+        """
+        return self.write(path, default_value,
+                          ephemeral=True, exclusive=True)
 
     @wrap_exceptions
     def watch_contents(self, path, fn, default_value="", clean=False):

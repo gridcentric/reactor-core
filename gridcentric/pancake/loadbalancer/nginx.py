@@ -150,7 +150,8 @@ class NginxLoadBalancerConfig(SubConfig):
 
 class NginxLoadBalancerConnection(LoadBalancerConnection):
 
-    def __init__(self, config):
+    def __init__(self, name, scale_manager, config):
+        LoadBalancerConnection.__init__(self, name, scale_manager)
         self.tracked = {}
         self.config = config
         template_file = os.path.join(os.path.dirname(__file__), 'nginx.template')

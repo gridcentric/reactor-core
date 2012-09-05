@@ -80,7 +80,7 @@ class ConfigView(object):
 
     def __str__(self):
         return str(self.config)
-        
+
 class SubConfig(object):
 
     def __init__(self, view):
