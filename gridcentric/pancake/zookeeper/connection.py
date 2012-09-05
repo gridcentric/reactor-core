@@ -98,6 +98,10 @@ class ZookeeperConnection(object):
         """ 
         Writes the contents to the path in zookeeper. It will create the path in
         zookeeper if it does not already exist.
+
+        This method will return True if the value is written, False otherwise.
+        (The value will not be written if the exclusive is True and the node
+        already exists.)
         """
         partial_path = ''
 
