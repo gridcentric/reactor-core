@@ -147,6 +147,7 @@ class ZookeeperConnection(object):
                     # Woah, something happened between the top and here.
                     # We just restart and retry the whole routine.
                     self.write(path, contents, ephemeral=ephemeral)
+                    return True
                 else:
                     return False
 
