@@ -36,9 +36,9 @@ contrib/zookeeper-3.4.3: contrib/zookeeper-3.4.3.tar.gz Makefile
 	@cd contrib/zookeeper-3.4.3/src/c && autoreconf -if && ./configure
 
 # Build the appropriate python bindings.
-image/contrib/python-zookeeper-3.4.3.tgz: contrib/zookeeper-3.4.3 Makefile
+image/local/python-zookeeper-3.4.3.tgz: contrib/zookeeper-3.4.3 Makefile
 	@mkdir -p dist-zookeeper
-	@mkdir -p image/contrib
+	@mkdir -p image/local
 	@cd contrib/zookeeper-3.4.3/src/c && make install DESTDIR=$$PWD/../../../../dist-zookeeper/
 	@cd contrib/zookeeper-3.4.3/src/contrib/zkpython && ant tar-bin
 	@cd dist-zookeeper && tar zxf ../contrib/zookeeper-3.4.3/build/contrib/zkpython/dist/*.tar.gz
@@ -61,9 +61,9 @@ contrib/nginx-1.2.1: contrib/nginx-1.2.1.tar.gz Makefile
 	    --http-log-path=/var/log/nginx/access.log
 
 # Build the appropriate nginx packages.
-image/contrib/nginx-1.2.1.tgz: contrib/nginx-1.2.1 Makefile
+image/local/nginx-1.2.1.tgz: contrib/nginx-1.2.1 Makefile
 	@mkdir -p dist-nginx
-	@mkdir -p image/contrib
+	@mkdir -p image/local
 	@cd contrib/nginx-1.2.1 && $(MAKE) install DESTDIR=$$PWD/../../dist-nginx/
 	@rm -rf dist-nginx/usr/html
 	@rm -rf dist-nginx/etc/
@@ -84,8 +84,8 @@ image/local/reactor.tgz: Makefile
 # Build a virtual machine image for the given hypervisor.
 image-%: image/local/local.tgz \
 	 image/local/reactor.tgz \
-	 image/contrib/python-zookeeper-3.4.3.tgz \
-	 image/contrib/nginx-1.2.1.tgz
+	 image/local/python-zookeeper-3.4.3.tgz \
+	 image/local/nginx-1.2.1.tgz
 	@sudo make -C image build-$* VERSION=$(VERSION)
 
 $(RPMBUILD):

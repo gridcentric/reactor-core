@@ -1,5 +1,4 @@
 syntax: glob
-image/contrib/*
 image/local/*
 image/dist-*
 image/chroot-*
