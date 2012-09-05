@@ -115,16 +115,16 @@ class LoadBalancers(list):
         results = {}
         for lb in self:
             result = lb.metrics()
-            for (host, value) in result.items():
+            for (host, metrics) in result.items():
                 if not(host in results):
-                    results[host] = value
+                    results[host] = metrics
                     continue
 
-                for key in value:
+                for key in metrics:
                     (oldweight, oldvalue) = results[host][key]
-                    (newweight, newvalue) = value[key]
+                    (newweight, newvalue) = metrics[key]
                     weight = (oldweight + newweight)
-                    value = ((oldvalue * oldweight) + (newvalue * newweight)) / weight
+                    value  = ((oldvalue * oldweight) + (newvalue * newweight)) / weight
                     results[host][key] = (weight, value)
 
         return results
