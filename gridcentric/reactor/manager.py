@@ -8,11 +8,14 @@ import gridcentric.pancake.zookeeper.paths as paths
 
 from gridcentric.reactor.endpoint import APIEndpoint
 import gridcentric.reactor.iptables as iptables
+import gridcentric.reactor.ips as ips
 import gridcentric.reactor.windows as windows
 
 class ReactorScaleManager(ScaleManager):
     def __init__(self, zk_servers):
-        ScaleManager.__init__(self, zk_servers)
+        # Grab the list of global IPs.
+        names = ips.find_global()
+        ScaleManager.__init__(self, zk_servers, names)
 
         # The implicit API endpoint.
         self.api_endpoint = None
