@@ -24,6 +24,7 @@ PACKAGES += python-mako
 PACKAGES += python-novaclient
 PACKAGES += python-pyramid
 PACKAGES += python-netifaces
+PACKAGES += python-ldap
 PACKAGES += dnsmasq
 PACKAGES += graphviz
 PACKAGES += curl
