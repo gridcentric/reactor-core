@@ -10,10 +10,8 @@ cd $1
 for src in contrib local; do
     # Install all given packages.
     if ls $ORIG_PWD/$src/*.deb >/dev/null 2>&1; then
-        for file in $ORIG_PWD/$src/*.deb; do
-            echo "Installing $src package `basename $file` ..."
-            dpkg --root=$1 -i $file
-        done 
+        # Install all files (to resolve dependencies).
+        dpkg --root=$1 -i $ORIG_PWD/$src/*.deb
     fi
 
     # Unroll all given tarballs.
