@@ -26,6 +26,8 @@ prep-flowcontrol:
 	@[ -d $(FLOWCONTROL_PATH) ] || (echo "You must define FLOWCONTROL_PATH to call prep." && false)
 	@mkdir -p flowcontrol-install
 	@make -C $(FLOWCONTROL_PATH) install DESTDIR=$(CURDIR)/flowcontrol-install/usr/local
+	@mv $(CURDIR)/flowcontrol-install/usr/local/lib/python2.7/site-packages \
+            $(CURDIR)/flowcontrol-install/usr/local/lib/python2.7/dist-packages
 	@cd flowcontrol-install && fakeroot tar -cvzf ../image/local/flowcontrol.tgz .
 	@rm -rf flowcontrol-install
 .PHONY: prep-flowcontrol
