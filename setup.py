@@ -22,8 +22,7 @@ setup(
               "gridcentric.pancake.zookeeper",
               "gridcentric.pancake.metrics",
               "gridcentric.pancake.cloud",
-              "gridcentric.pancake.cloud.nova",
-              "gridcentric.pancake.cloud.nova.client"],
+              "gridcentric.pancake.cloud.nova"],
     package_data={'gridcentric.pancake.loadbalancer':\
             ["nginx.template", "dnsmasq.template", "pancake.conf"]},
     include_package_data=True,
