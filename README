@@ -1,0 +1,7 @@
+To build reactor, the build machine needs to be running Ubuntu 12.04 (Precise)
+and have the following packages installed:
+- expect
+- libcppunit-dev
+- libtool
+- python-dev
+- ubuntu-vm-builder
