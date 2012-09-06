@@ -172,14 +172,14 @@ class TcpLoadBalancerConfig(SubConfig):
         # Whether or not the server will be killed after use.
         return self._get("kill", "false").lower() == "true"
 
-class TcpLoadBalancerConnection(LoadBalancerConnection):
+class Connection(LoadBalancerConnection):
 
     def __init__(self, name, scale_manager, config):
         LoadBalancerConnection.__init__(self, name, scale_manager)
         self.portmap = {}
         self.tracked = {}
         self.active = {}
-        self.config = config
+        self.config = TcpLoadBalancerConfig(config)
 
         self.producer = FlowControlProducer()
         self.producer.start()

@@ -15,11 +15,11 @@ class DnsmasqLoadBalancerConfig(SubConfig):
     def hosts_path(self):
         return self._get("hosts_path", "/etc/hosts.pancake")
 
-class DnsmasqLoadBalancerConnection(LoadBalancerConnection):
+class Connection(LoadBalancerConnection):
     
     def __init__(self, name, scale_manager, config):
         LoadBalancerConnection.__init__(self, name, scale_manager)
-        self.config = config
+        self.config = DnsmasqLoadBalancerConfig(config)
         template_file = os.path.join(os.path.dirname(__file__),'dnsmasq.template')
         self.template = Template(filename=template_file)
         self.ipmappings = {}

@@ -8,12 +8,15 @@ from novaclient.v1_1.client import Client as NovaClient
 from gridcentric.pancake.config import SubConfig
 import gridcentric.pancake.cloud.connection as cloud_connection
 
-class BaseNovaConnector(cloud_connection.CloudConnection):
+class BaseNovaConnection(cloud_connection.CloudConnection):
 
     def __init__(self, config):
-        super(BaseNovaConnector, self).__init__()
+        super(BaseNovaConnection, self).__init__(config)
         self.deleted_instance_ids = []
-        self.config = config
+        self.config = self.create_config(config)
+
+    def create_config(self, config):
+        return BaseNovaConfig(config)
 
     def _list_instances(self):
         """ 
@@ -96,7 +99,7 @@ class BaseNovaConnector(cloud_connection.CloudConnection):
             # we just want that id to not be in the deleted_instance_ids list.
             pass
 
-class BaseNovaConfig(SubConfig):
+class BaseNovaConfig(cloud_connection.CloudConnectionConfig):
 
     def user(self):
         return self._get("user", "admin")
@@ -133,10 +136,13 @@ class NovaConfig(BaseNovaConfig):
     def key_name(self):
         return self._get("key_name", "") or None
 
-class NovaConnector(BaseNovaConnector):
+class Connection(BaseNovaConnection):
 
     def __init__(self, config):
-        super(NovaConnector, self).__init__(config)
+        super(Connection, self).__init__(config)
+
+    def create_config(self, config):
+        return NovaConfig(config)
 
     def _list_instances(self):
         """ 
@@ -159,30 +165,3 @@ class NovaConnector(BaseNovaConnector):
                                   self.config.flavor(),
                                   security_groups=self.config.security_groups(),
                                   key_name=self.config.key_name())
-
-class NovaVmsConfig(BaseNovaConfig):
-
-    def instance_id(self):
-        return self._get("instance_id", "0")
-
-    def target(self):
-        return self._get("target", "0")
-
-class NovaVmsConnector(BaseNovaConnector):
-    """ Connects to a nova cloud that has the Gridcentric VMS extension enabled. """
-
-    def __init__(self, config):
-        super(NovaVmsConnector, self).__init__(config)
-
-    def _list_instances(self):
-        """ 
-        Returns a list of instances from the endpoint.
-        """
-        return self._novaclient().gridcentric.list_launched(self.config.instance_id())
-
-    def _start_instance(self, params={}):
-        launch_params = { 'target' : self.config.target(), 'guest' : params }
-        self._novaclient().gridcentric.launch(self.config.instance_id(),
-                                              target=self.config.target(),
-                                              guest_params=params)
-

@@ -148,12 +148,12 @@ class NginxLoadBalancerConfig(SubConfig):
         except:
             return 0
 
-class NginxLoadBalancerConnection(LoadBalancerConnection):
+class Connection(LoadBalancerConnection):
 
     def __init__(self, name, scale_manager, config):
         LoadBalancerConnection.__init__(self, name, scale_manager)
         self.tracked = {}
-        self.config = config
+        self.config = NginxLoadBalancerConfig(config)
         template_file = os.path.join(os.path.dirname(__file__), 'nginx.template')
         self.template = Template(filename=template_file)
         self.log_reader = NginxLogWatcher("/var/log/nginx/access.log")

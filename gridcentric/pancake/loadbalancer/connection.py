@@ -1,6 +1,8 @@
 """
 The generic load balancer interface.
 """
+from gridcentric.pancake import utils
+from gridcentric.pancake.config import SubConfig
 
 import logging
 
@@ -8,30 +10,23 @@ import gridcentric.pancake.zookeeper.paths as paths
 
 def get_connection(name, config, scale_manager):
 
-    if name == "nginx":
-        from gridcentric.pancake.loadbalancer.nginx import NginxLoadBalancerConfig
-        from gridcentric.pancake.loadbalancer.nginx import NginxLoadBalancerConnection
-        return NginxLoadBalancerConnection(name, scale_manager, NginxLoadBalancerConfig(config))
+    if name == "none" or name == "":
+        return LoadBalancerConnection(name, scale_manager, config)
 
-    elif name == "dnsmasq":
-        from gridcentric.pancake.loadbalancer.dnsmasq import DnsmasqLoadBalancerConfig
-        from gridcentric.pancake.loadbalancer.dnsmasq import DnsmasqLoadBalancerConnection
-        return DnsmasqLoadBalancerConnection(name, scale_manager, DnsmasqLoadBalancerConfig(config))
+    lb_config = LoadBalancerConfig(config)
+    lb_class = lb_config.loadbalancer_class()
+    if lb_class == '':
+        lb_class = "gridcentric.pancake.loadbalancer.%s.Connection" % (name)
+    lb_conn_class = utils.import_class(lb_class)
+    return lb_conn_class(name, scale_manager, config)
 
-    elif name == "tcp":
-        from gridcentric.pancake.loadbalancer.tcp import TcpLoadBalancerConfig
-        from gridcentric.pancake.loadbalancer.tcp import TcpLoadBalancerConnection
-        return TcpLoadBalancerConnection(name, scale_manager, TcpLoadBalancerConfig(config))
+class LoadBalancerConfig(SubConfig):
 
-    elif name == "none" or name == "":
-        return LoadBalancerConnection()
-
-    else:
-        logging.error("Unknown load balancer: %s" % name)
-        return LoadBalancerConnection()
+    def loadbalancer_class(self):
+        return self._get("class", '')
 
 class LoadBalancerConnection(object):
-    def __init__(self, name, scale_manager):
+    def __init__(self, name, scale_manager, config):
         self._name          = name
         self._scale_manager = scale_manager
 

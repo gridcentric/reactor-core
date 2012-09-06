@@ -2,22 +2,29 @@
 The generic cloud connection interface.
 """
 
+from gridcentric.pancake import utils
+from gridcentric.pancake.config import SubConfig
+
 def get_connection(cloud_type, config):
-    if cloud_type == 'nova-vms':
-        import gridcentric.pancake.cloud.nova.connection as nova_cloud
-        return nova_cloud.NovaVmsConnector(nova_cloud.NovaVmsConfig(config))
+    if cloud_type == 'none':
+        return CloudConnection(config)
 
-    elif cloud_type == 'nova':
-        import gridcentric.pancake.cloud.nova.connection as nova_cloud
-        return nova_cloud.NovaConnector(nova_cloud.NovaConfig(config))
+    cloud_config = CloudConnectionConfig(config)
+    cloud_class = cloud_config.cloud_class()
+    if cloud_class == '':
+        cloud_class = "gridcentric.pancake.cloud.%s.Connection" % (cloud_type)
+    cloud_conn_class = utils.import_class(cloud_class)
+    return cloud_conn_class(config)
 
-    elif cloud_type == 'none':
-        return CloudConnection()
+class CloudConnectionConfig(SubConfig):
 
-    else:
-        raise Exception("Unsupported cloud type: %s." % (cloud_type))
+    def cloud_class(self):
+        return self._get("class", '')
 
 class CloudConnection(object):
+
+    def __init__(self, config):
+        pass
 
     def list_instances(self):
         """
