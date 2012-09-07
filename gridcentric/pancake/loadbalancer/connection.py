@@ -26,7 +26,7 @@ class LoadBalancerConfig(SubConfig):
         return self._get("class", '')
 
 class LoadBalancerConnection(object):
-    def __init__(self, name, scale_manager, config):
+    def __init__(self, name, scale_manager):
         self._name          = name
         self._scale_manager = scale_manager
 
