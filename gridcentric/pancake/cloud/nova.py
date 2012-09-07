@@ -33,6 +33,7 @@ class BaseNovaConnection(cloud_connection.CloudConnection):
                                     self.config.project(),
                                     self.config.authurl(),
                                     region_name=self.config.region(),
+                                    service_type=self.config.service_type(),
                                     extensions=extensions)
             return novaclient
         except Exception, e:
@@ -118,6 +119,9 @@ class BaseNovaConfig(cloud_connection.CloudConnectionConfig):
         if region == '':
             region = None
         return region
+
+    def service_type(self):
+        return self._get('service_type', 'compute')
 
 class NovaConfig(BaseNovaConfig):
 
