@@ -1,1 +1,41 @@
-../clone.d/90_reactor
+#!/usr/bin/env python
+
+import sys
+import httplib
+import time
+import socket
+
+# Since we're booting the api url would've been passed in via the OpenStack
+# metadata service.
+conn = httplib.HTTPConnection("169.254.169.254")
+conn.request("GET", "/latest/user-data", "", {})
+resp = conn.getresponse()
+if resp.status != 200:
+    # No user data set, nothing to do.
+    sys.exit(0)
+data = resp.read()
+if not data.startswith("reactor="):
+    # Not the data we're looking for.
+    sys.exit(0)
+
+api_url = (''.join(data.split("=")[1:])).strip()
+
+# Post to a reactor URL if given.
+if len(api_url) > 0:
+    rest_time = 0.01 # Start at 10ms.
+
+    while True:
+        try:
+            conn = httplib.HTTPConnection(api_url)
+            conn.request("POST", "/v1.0/register", "", {})
+            resp = conn.getresponse()
+            if resp.status == 200:
+                break
+        except socket.error:
+            pass
+
+        # If we were not successful, do an exponential backoff,
+        # but keep retrying every minute until we are successful.
+        time.sleep(rest_time)
+        if rest_time < 60.0:
+            rest_time = (rest_time * 1.5)
