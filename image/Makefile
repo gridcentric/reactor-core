@@ -29,6 +29,7 @@ PACKAGES += dnsmasq
 PACKAGES += graphviz
 PACKAGES += curl
 PACKAGES += iptables
+PACKAGES += irqbalance
 
 PACKAGE_CMDLINE := $(PACKAGES:%=--addpkg=%)
 
