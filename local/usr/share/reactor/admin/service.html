@@ -1,47 +1,25 @@
 <!DOCTYPE HTML>
 <script type="text/javascript">
-    var options = {
-        lines: { show: true },
-        points: { show: true },
-        xaxis: { show: false },
-        yaxis: { show: true },
-    };
-
-    function updateGraph(elem, name, data, metrics) {
-        function onData(result) {
-            var x = new Date();
-            $.each(result["metrics"], function(metric, value) {
-                if( !metrics[metric] ) {
-                    metrics[metric] = { "label" : metric, "data" : [] };
-                    data.push(metrics[metric]);
-                }
-                metrics[metric]["data"].push([x, value]);
-                while( metrics[metric]["data"].length > 60 ) {
-                    metrics[metric]["data"].shift();
-                }
-            });
-            if( elem.is(":visible") ) {
-                $.plot(elem, data, options);
-            }
-            setTimeout(function() {
-                updateGraph(elem, name, data, metrics);
-            }, 5000);
-        }
-        $.ajax({
-            url: "/v1.0/services/" + name + "/info?auth_key=${auth_key}",
-            method: 'GET',
-            dataType: 'json',
-            success: onData,
-        });
-    }
-
-    var elem = $("#serviceGraph-${service}");
-    var data = [];
-    var metrics = {};
-    $.plot(elem, data, options);
-    updateGraph(elem, "${service}", data, metrics);
+    $("#servicePanel-${service}").kendoPanelBar({
+        expandMode: "single",
+        contentUrls: [
+            '/reactor/admin/service-info.html?auth_key=${auth_key}&service=${service}',
+            '/reactor/admin/service-plot.html?auth_key=${auth_key}&service=${service}',
+            '/reactor/admin/service-servers.html?auth_key=${auth_key}&service=${service}',
+            '/reactor/admin/service-config.html?auth_key=${auth_key}&service=${service}',
+            '/reactor/admin/service-remove.html?auth_key=${auth_key}&service=${service}',
+        ]
+    });
+    var panelbar = $("#servicePanel-${service}").data("kendoPanelBar");
+    panelbar.expand(panelbar.element.children("li:first"));
 </script>
 
-<div style="position: relative; width: 100%; height: 100%">
-    <div id="serviceGraph-${service}" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"/>
+<div class="wrapper">
+    <ul id="servicePanel-${service}">
+         <li>Info<div></div></li>
+         <li>Metrics<div></div></li>
+         <li>Servers<div></div></li>
+         <li>Config<div></div></li>
+         <li>Remove<div></div></li>
+     </ul>
 </div>

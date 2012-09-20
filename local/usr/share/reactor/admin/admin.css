@@ -1,0 +1,86 @@
+/*
+ * admin.css
+ */
+
+body {
+    font-family: helvetica, arial, sans-serif;
+    font-size: 10pt;
+    margin: 0;
+}
+
+
+/* the <content> div is the main box. */
+#content {
+    position: relative;
+    width: 450px;
+    top: 100px;
+
+    background: #e3e3e3;
+
+    border-width: 1px;
+    border-style: solid;
+    border-color: #c5c5c5;
+    /* border-color: #1f74a7; */
+}
+
+/* the <tabs> div is the main tab panel. */
+#tabs {
+}
+
+/* <h1> is used for the main title. */
+h1 {
+    font-size: 14pt;
+    margin-left: 20px;
+}
+
+/* tab coloring. */
+.k-state-active, .k-active-filter, .k-state-active:hover
+{
+    border-color: #96c23c;
+}
+
+/* wrapper is the container inside each tab. */
+.wrapper {
+    margin: auto;
+    padding: 3px;
+    overflow: hidden;
+}
+
+/* plain text is always wrapped in <p> tags. */
+p {
+    margin: 10px;
+}
+
+/* each configuration option is wrapped in a <form>. */
+form {
+    position: relative;
+    text-align: center;
+    margin: 5px;
+}
+form span {
+    text-align: left;
+}
+
+/* each label for an <input> is wrapped. */
+label {
+    display: inline-block;
+    width: 75px;
+    text-align: right;
+    font-size: 10pt;
+}
+input {
+    margin: 3px;
+}
+select {
+    margin: 3px;
+}
+
+/* each <form> generally has a <popup> for confirmations. */
+.popupholder {
+    position: relative;
+}
+.popup {
+    position: absolute;
+    right: 0;
+    top: 8px;
+}

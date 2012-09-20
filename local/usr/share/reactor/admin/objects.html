@@ -21,56 +21,36 @@
         dataSource: ${object_type}List,
     });
 
-    function objectOpen(name) {
-        if( !windows["${object_type}-" + name] ) {
-            var objectDiv = "${object_type}Window-" + randomId();
-            $("#${object_type}Content").append("<div id='" + objectDiv + "' style='padding: 0;'/>");
-            $("#" + objectDiv).kendoWindow({
-                title: name,
-                content: "/reactor/admin/${object_type}.html?auth_key=${auth_key}&${object_type}=" + name,
-                actions: ["Maximize", "Minimize", "Close"],
-                width: "500px",
-                height: "300px",
-                modal: false,
-                resizable: true,
-                draggable: true,
-            });
-            windows["${object_type}-" + name] = $("#" + objectDiv);
-        } else {
-            windows["${object_type}-" + name].data("kendoWindow").open();
-        }
-    }
-
     $("#${object_type}Text").submit(function(e) {
         e.preventDefault();
         var name = document.forms["${object_type}Text"].elements[0].value;
-        objectOpen(name);
+        windowOpen("${object_type}", name);
     });
     $("#${object_type}List").submit(function(e) {
         e.preventDefault();
         var name = document.forms["${object_type}List"].elements[0].value;
-        objectOpen(name);
+        windowOpen("${object_type}", name);
     });
 
-    function showList() {
+    function ${object_type}ShowList() {
         $("#${object_type}ListButton").hide();
         $("#${object_type}TextButton").show();
         $("#${object_type}Text").hide();
         $("#${object_type}List").show();
     }
-    function showText() {
+    function ${object_type}ShowText() {
         $("#${object_type}ListButton").show();
         $("#${object_type}TextButton").hide();
         $("#${object_type}Text").show();
         $("#${object_type}List").hide();
     }
     $("#${object_type}ListButton").click(function() {
-        showList();
+        ${object_type}ShowList();
     });
     $("#${object_type}TextButton").click(function () {
-        showText();
+        ${object_type}ShowText();
     });
-    showText();
+    ${object_type}ShowText();
 </script>
 
 <div class="wrapper">

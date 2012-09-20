@@ -1,0 +1,18 @@
+<!DOCTYPE HTML>
+<script type="text/javascript">
+    function update(result, timestamp, data, metrics) {
+       if( !metrics["count"] ) {
+            metrics["count"] = { "label" : "count", "data" : [] };
+            data.push(metrics["count"]);
+       }
+       metrics["count"]["data"].push([timestamp, result["ip_addresses"].length]);
+       while( metrics["count"]["data"].length > 60 ) {
+            metrics["count"]["data"].shift();
+       }
+    }
+    setupGraph($("#serviceServers-${service}"), "services/${service}/ips", update);
+</script>
+
+<div style="position: relative; width: 494px; height: 198px;">
+    <div id="serviceServers-${service}" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"/>
+</div>

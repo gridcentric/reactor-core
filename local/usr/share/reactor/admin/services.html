@@ -1,0 +1,23 @@
+<!DOCTYPE HTML>
+<script type="text/javascript">
+    setupDataSource("service", "services", "services");
+    setupSelect("service");
+</script>
+
+<div class="wrapper">
+    <form id="serviceText">
+        <input id="serviceAutoComplete"/>
+        <input type="submit" value="Show">
+        &nbsp;|&nbsp;
+        <a href="#" id="serviceListButton">List</a>
+    </form>
+    <form id="serviceList">
+        <select id="serviceDropDown"/>
+        <input type="submit" value="Show">
+        &nbsp;|&nbsp;
+        <a href="#" id="serviceTextButton">Find</a>
+    </form>
+</div>
+
+<div id="serviceContent">
+</div>

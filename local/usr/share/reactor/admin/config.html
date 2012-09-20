@@ -1,4 +1,24 @@
 <!DOCTYPE HTML>
+<script type="text/javascript">
+    setupConfig("configDomain", "configDomainValue",
+                "configDomainSave", "configDomainPopup",
+                "domain", true);
+    setupConfig("configAuthKey", "configAuthKeyValue",
+                "configAuthKeySave", "configAuthKeyPopup",
+                "auth_key", false, function () { window.location.reload(); });
+</script>
+
 <div class="wrapper">
-    <p>Sorry, general configuration is not available.</p>
+    <form class="config" id="configDomain">
+        <label>Domain</label>
+        <input id="configDomainValue" value=""/>
+        <input id="configDomainSave" type="submit" value="Save"/>
+        <div id="configDomainPopup" class="popup">Saved.</div>
+    </form>
+    <form class="config" id="configAuthKey">
+        <label>Auth-Key</label>
+        <input id="configAuthKeyValue" value="" type="password"/>
+        <input id="configAuthKeySave" type="submit" value="Save"/>
+        <div id="configAuthKeyPopup" class="popup">Saved.</div>
+    </form>
 </div>

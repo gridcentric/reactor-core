@@ -58,8 +58,7 @@ class APIService(Service):
             def auth_info(self):
                 return None
             def static_ips(self):
-                client = zooclient.PancakeClient(self.scale_manager.zk_servers)
-                return client.get_managers_active()
+                return self.scale_manager.zk_conn.list_children(paths.manager_ips())
             def cloud_type(self):
                 return "none"
             def cloud_config(self):
@@ -151,15 +150,26 @@ class PancakeAutoApi(PancakeApi):
         Render a page from the admin directory and write it back.
         """
         if request.method == 'GET':
+            # Read the page_name from the request.
             page_name = request.matchdict.get('page_name', 'index.html')
-            filename = os.path.join(os.path.dirname(__file__), "../share/reactor/admin/", page_name)
+            filename = os.path.join(os.path.dirname(__file__), \
+                                    "../share/reactor/admin/", page_name)
             template = Template(filename=filename)
+
+            # Process the request with all params.
             auth_key = get_auth_key(request)
             kwargs = {}
             kwargs.update(request.params.items())
             kwargs["auth_key"] = auth_key
             page_data = template.render(**kwargs)
-            return Response(body=page_data)
+
+            # Check for special types.
+            ext = page_name.split('.')[-1]
+            mimemap = { "js" : "application/json",
+                        "html" : "text/html",
+                        "css" : "text/css" }
+            return Response(body=page_data,
+                            headers={"Content-type" : mimemap[ext]})
         else:
             return Response(status=403)
 

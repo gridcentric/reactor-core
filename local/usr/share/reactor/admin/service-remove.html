@@ -1,0 +1,17 @@
+<!DOCTYPE HTML>
+<script type="text/javascript">
+    setupConfig("configService-${service}", "configServiceValue-${service}",
+                "configServiceSave-${service}", "configServicePopup-${service}",
+                "services/${service}", false, function() {}, "config");
+</script>
+
+<div class="wrapper">
+    <form class="config" id="configService-${service}">
+        <textarea id="configServiceValue-${service}"
+                  style="width: 470px; height: 149px;" value=""/><br/>
+        <div class="popupholder">
+            <input id="configServiceSave-${service}" type="submit" value="Save"/>
+            <div id="configServicePopup-${service}" class="popup">Saved.</div>
+        </div>
+    </form>
+</div>
