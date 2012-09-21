@@ -1,0 +1,23 @@
+<!DOCTYPE HTML>
+<script type="text/javascript">
+    $("#endpointPanel-${endpoint}").kendoPanelBar({
+        expandMode: "single",
+        contentUrls: [
+            '/reactor/admin/endpoint-info.html?auth_key=${auth_key}&endpoint=${endpoint}',
+            '/reactor/admin/endpoint-plot.html?auth_key=${auth_key}&endpoint=${endpoint}',
+            '/reactor/admin/endpoint-servers.html?auth_key=${auth_key}&endpoint=${endpoint}',
+            '/reactor/admin/endpoint-config.html?auth_key=${auth_key}&endpoint=${endpoint}',
+        ]
+    });
+    var panelbar = $("#endpointPanel-${endpoint}").data("kendoPanelBar");
+    panelbar.expand(panelbar.element.children("li:first"));
+</script>
+
+<div class="wrapper">
+    <ul id="endpointPanel-${endpoint}">
+         <li>Endpoint<div></div></li>
+         <li>Metrics<div></div></li>
+         <li>Servers<div></div></li>
+         <li>Config<div></div></li>
+     </ul>
+</div>

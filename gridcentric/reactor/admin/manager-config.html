@@ -1,0 +1,19 @@
+<!DOCTYPE HTML>
+<script type="text/javascript">
+    setupConfig("configManager-${manager.replace('.','_')}",
+                "configManagerValue-${manager.replace('.','_')}",
+                "configManagerSave-${manager.replace('.','_')}",
+                "configManagerPopup-${manager.replace('.','_')}",
+                "managers/${manager}", false, function() {}, "config");
+</script>
+
+<div class="wrapper">
+    <form class="config" id="configManager-${manager.replace('.','_')}">
+        <textarea id="configManagerValue-${manager.replace('.','_')}"
+                  style="width: 470px; height: 149px;" value=""/><br/>
+        <div class="popupholder">
+            <input id="configManagerSave-${manager.replace('.','_')}" type="submit" value="Save"/>
+            <div id="configManagerPopup-${manager.replace('.','_')}" class="popup">Saved.</div>
+        </div>
+    </form>
+</div>

@@ -1,13 +1,16 @@
 import threading
 import logging
 import json
+import os
 
 from pyramid.response import Response
+from mako.template import Template
 
 from gridcentric.pancake.api import PancakeApi
 from gridcentric.pancake.api import connected
 from gridcentric.pancake.api import authorized
 from gridcentric.pancake.api import authorized_admin_only
+from gridcentric.pancake.api import get_auth_key
 
 from gridcentric.reactor.manager import ReactorScaleManager
 import gridcentric.reactor.ips as ips
@@ -21,8 +24,58 @@ class ReactorApi(PancakeApi):
         self.config.add_route('api-servers', '/reactor/api_servers')
         self.config.add_view(self.set_api_servers, route_name='api-servers')
 
+        self.config.add_route('admin-home', '/reactor/admin')
+        self.config.add_route('admin-page', '/reactor/admin/{page_name}')
+        self.config.add_view(self.admin, route_name='admin-home')
+        self.config.add_view(self.admin, route_name='admin-page')
+        self.config.add_route('admin-lib', '/reactor/admin/lib/{page_name:.*}')
+        self.config.add_view(self.admin_lib, route_name='admin-lib')
+
         # Check the endpoint.
         self.check(zk_servers)
+
+    @connected
+    def admin(self, context, request, is_lib=False):
+        """
+        Render a page from the admin directory and write it back.
+        """
+        if request.method == 'GET':
+            # Read the page_name from the request.
+            page_name = request.matchdict.get('page_name', 'index.html')
+            filename = os.path.join(os.path.dirname(__file__), "admin", page_name)
+
+            if is_lib:
+                page_data = open(filename).read()
+            else:
+                # Process the request with all params.
+                # This allows us to generate pages that include
+                # arbitrary parameters (for convenience).
+                template = Template(filename=filename)
+                auth_key = get_auth_key(request)
+                kwargs = {}
+                kwargs.update(request.params.items())
+                kwargs["auth_key"] = auth_key
+                page_data = template.render(**kwargs)
+
+            # Check for special types.
+            ext = page_name.split('.')[-1]
+            mimemap = { "js" : "application/json",
+                        "png" : "image/png",
+                        "html" : "text/html",
+                        "css" : "text/css" }
+
+            return Response(body=page_data,
+                            headers={"Content-type" : mimemap[ext]})
+        else:
+            return Response(status=403)
+
+    def admin_lib(self, context, request):
+        # Make sure the page_name contains the lib page.
+        page_name = request.matchdict['page_name']
+        request.matchdict['page_name'] = 'lib/' + page_name
+
+        # Process using the normal mechanism.
+        return self.admin(context, request, is_lib=True)
 
     @connected
     @authorized_admin_only

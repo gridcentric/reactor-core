@@ -1,0 +1,93 @@
+<!DOCTYPE HTML>
+<html dir="ltr" lang="en-US">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+
+<title>Reactor Administration</title>
+
+<!-- Pull in local libraries. -->
+<script src="/reactor/admin/lib/jquery.min.js"></script>
+<link href="/reactor/admin/lib/kendo.common.min.css" rel="stylesheet"/>
+<link href="/reactor/admin/lib/kendo.default.min.css" rel="stylesheet"/>
+<script src="/reactor/admin/lib/kendo.web.min.js"></script>
+<script src="/reactor/admin/lib/jquery.flot.js"></script>
+
+<!-- Pull in templated libraries. -->
+<script src="/reactor/admin/ui.js?auth_key=${auth_key}"></script>
+<script src="/reactor/admin/graph.js?auth_key=${auth_key}"></script>
+<script src="/reactor/admin/config.js?auth_key=${auth_key}"></script>
+<link rel="stylesheet" type="text/css" href="/reactor/admin/admin.css" media="screen"/>
+
+</style>
+
+<script type="text/javascript">
+    function showFullInterface() {
+        var tabstrip = $("#tabs").data("kendoTabStrip");
+
+        /* Remove the login tab. */
+        tabstrip.remove("#login");
+
+        /* Show the normal endpoints tabs. */
+        tabstrip.append([
+            {
+                text: "Endpoints",
+                contentUrl: "/reactor/admin/endpoints.html?auth_key=${auth_key}",
+            },
+            {
+                text: "Managers",
+                contentUrl: "/reactor/admin/managers.html?auth_key=${auth_key}"
+            },
+            {
+                text: "Config",
+                contentUrl: "/reactor/admin/config.html?auth_key=${auth_key}",
+            },
+            {
+                text: "About",
+                contentUrl: "/reactor/admin/about.html?auth_key=${auth_key}",
+            }
+        ]);
+        tabstrip.select(tabstrip.tabGroup.children("li:first"));
+    }
+
+    function showAuthenticationInterface() {
+        $("#tabs").kendoTabStrip({
+            dataTextField: "text",
+            dataUrlField: "url",
+            dataContentUrlField: "contentUrl",
+        });
+    }
+
+    $(document).ready(function() {
+        showAuthenticationInterface();
+        $.ajax({
+            url: "/v1.0/domain?auth_key=${auth_key}",
+            type: 'GET',
+            dataType: 'json',
+            success: showFullInterface,
+        });
+    });
+</script>
+
+</head>
+
+<body>
+<div class="wrapper" id="content">
+    <h1>Reactor Administration Panel</h1>
+    <div id="tabs">
+        <ul>
+            <li id="login" class="k-state-active">Login</li>
+        </ul>
+
+        <div>
+            <p>This interface requires an authentication key.</p>
+            <form method="GET" action="/reactor/admin">
+                <label for="auth_key" value="Auth-Key">Auth-Key</label>
+                <input name="auth_key" type="password"/>
+                <input type="submit" value="Submit"/>
+            </form>
+        </div>
+    </div>
+</div>
+</body>
+
+</html>
