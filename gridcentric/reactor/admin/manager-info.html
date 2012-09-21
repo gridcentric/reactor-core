@@ -1,13 +1,22 @@
 <!DOCTYPE HTML>
 
+<div id="managerUuid-${uuid}">
+</div>
+
 <div id="managerConfig-${uuid}">
 </div>
 
 <script type="text/javascript">
+    setupConfig($("#managerUuid-${uuid}"),
+                "Uuid",                // Name.
+                false,                 // Textarea.
+                "managers/${manager}", // Path.
+                "uuid",                // Field.
+                true);                 // Readonly.
+
     setupConfig($("#managerConfig-${uuid}"),
-                false,
-                "managers/${manager}",
-                false,
-                function() {},
-                "config");
+                "Config",              // Name.
+                true,                  // Textarea.
+                "managers/${manager}", // Path.
+                "config");             // Field.
 </script>

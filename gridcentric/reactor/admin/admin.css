@@ -67,16 +67,24 @@ form {
 form span {
     text-align: left;
 }
+form.action {
+    display: inline;
+}
 
 /* each label for an <input> is wrapped. */
 label {
     display: inline-block;
     width: 75px;
-    text-align: right;
+    text-align: center;
     font-size: 10pt;
+    margin-top: 5px;
+    margin-bottom: 5px;
 }
+
 input {
     margin: 3px;
+    margin-top: 5px;
+    margin-bottom: 5px;
 }
 select {
     margin: 3px;
@@ -92,8 +100,8 @@ select {
     top: 8px;
 }
 textarea {
-    width: 470px;
-    height: 149px;
+    width: 100%;
+    height: 150px;
 }
 
 /* disabled links. */

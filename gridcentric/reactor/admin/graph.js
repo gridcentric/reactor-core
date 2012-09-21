@@ -50,7 +50,13 @@ function updateGraph(elem, path, data, metrics, callback) {
 
 function setupGraph(elem, path, callback) {
     var data = [];
+
     // Do an initial plot on screen.
     try_plot(elem, data);
+
+    // Replot when a resize occurs.
+    elem.resize(function() { try_plot(elem, data); });
+
+    // Start the update cycle.
     updateGraph(elem, path, data, {}, callback);
 }

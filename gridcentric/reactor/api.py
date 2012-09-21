@@ -27,9 +27,9 @@ class ReactorApi(PancakeApi):
 
         self.config.add_route('admin-home', '/reactor/admin')
         self.config.add_route('admin-page', '/reactor/admin/{page_name}')
+        self.config.add_route('admin-lib', '/reactor/admin/lib/{page_name:.*}')
         self.config.add_view(self.admin, route_name='admin-home')
         self.config.add_view(self.admin, route_name='admin-page')
-        self.config.add_route('admin-lib', '/reactor/admin/lib/{page_name:.*}')
         self.config.add_view(self.admin_lib, route_name='admin-lib')
 
         # Check the endpoint.
@@ -43,9 +43,11 @@ class ReactorApi(PancakeApi):
         if request.method == 'GET':
             # Read the page_name from the request.
             page_name = request.matchdict.get('page_name', 'index.html')
-            filename = os.path.join(os.path.dirname(__file__), "admin", page_name)
+            filename = os.path.join(os.path.dirname(__file__),
+                                    "admin", page_name)
 
             if is_lib:
+                # Just open the page and write it out.
                 page_data = open(filename).read()
             else:
                 # Process the request with all params.
@@ -59,7 +61,7 @@ class ReactorApi(PancakeApi):
                 kwargs["uuid"]     = str(uuid.uuid4())
                 page_data = template.render(**kwargs)
 
-            # Check for special types.
+            # Check for supported types.
             ext = page_name.split('.')[-1]
             mimemap = { "js"   : "application/json",
                         "png"  : "image/png",

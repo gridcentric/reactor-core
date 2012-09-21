@@ -30,11 +30,11 @@ function windowOpen(object_type, name, cleanup) {
          title: name,
          content: "/reactor/admin/" + object_type + ".html" +
                   "?auth_key=${auth_key}&" + object_type + "=" + name,
-         actions: ["Maximize", "Close"],
-         minWidth:  540,
+         actions: ["Minimize", "Maximize", "Close"],
+         minWidth:  400,
          minHeight: 100,
-         width:     540,
-         height:    270,
+         width:     520,
+         height:    260,
          resizable: true,
          draggable: true,
          close: on_close,
@@ -107,6 +107,7 @@ function setupListSelect(object_type, cleanup) {
 }
 
 function generateSelect(object_type, elem) {
+    elem.html("");
     elem.append('                                                           \
 <div class="wrapper">                                                       \
     <form id="' + object_type + 'Text">                                     \

@@ -7,12 +7,17 @@
 
 <script type="text/javascript">
     setupConfig($("#configDomain"),
-                "Domain",
-                "domain",
-                true);
+                "Domain",  // Name.
+                false,     // Textarea.
+                "domain",  // Path.
+                "domain"); // Field.
+                 
     setupConfig($("#configAuthKey"),
-                "AuthKey",
-                "auth_key",
-                false,
+                "AuthKey",  // Name.
+                false,      // Textarea.
+                "auth_key", // Path.
+                "auth_key", // Field.
+                false,      // Read-only.
+                true,       // Noload.
                 function () { window.location.reload(); });
 </script>
