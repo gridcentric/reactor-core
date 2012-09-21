@@ -1,0 +1,85 @@
+<!DOCTYPE HTML>
+
+<div style="position: relative; height: 100%;">
+    <div id="endpointPlot-${uuid}"
+         style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"/>
+</div>
+
+<script type="text/javascript">
+
+    var scales = [ ' (n)', ' (u)', ' (m)', '', ' (K)', ' (M)', ' (G)' ];
+
+    function normalize(data, timestamp, last) {
+        var scale       = data["scale"];
+        var delta_scale = 1.0;
+        var scale_idx   = data["scale_idx"];
+        var avg         = data["average"];
+
+        // Grab the old scales.
+        if( !scale || !scale_idx ) {
+            scale = 1.0;
+            scale_idx = 3;
+        }
+        last = last * scale;
+
+        // Compute the new average.
+        if( !avg ) {
+            avg = 0.0;
+        }
+        avg = (avg * data["data"].length + last) / (data["data"].length + 1)
+        data["average"] = avg;
+
+        // Figure out the up scale.
+        var count = 0;
+        while( avg < 1 && avg > 0 ) {
+            delta_scale = delta_scale * 1000;
+            avg = avg * 1000;
+            scale_idx -= 1;
+        }
+
+        // Figure out the down scale.
+        var count = 0;
+        while( avg > 1000 ) {
+            delta_scale = delta_scale / 1000;
+            avg = avg / 1000;
+            scale_idx += 1;
+        }
+
+        // Apply uniformly.
+        var normalized_data = [];
+        $.each(data["data"], function(index, value) {
+            normalized_data.push([value[0], value[1] * delta_scale]);
+        });
+
+        // Push the new value.
+        normalized_data.push([timestamp, last * delta_scale])
+
+        data["data"]      = normalized_data;
+        data["average"]   = delta_scale * data["average"];
+        data["scale"]     = delta_scale * scale;
+        data["scale_idx"] = scale_idx;
+        data["label"]     = data["name"] + scales[scale_idx];
+    }
+
+    function update(result, timestamp, data, metrics) {
+        $.each(result, function(metric, value) {
+            if( !metrics[metric] ) {
+                metrics[metric] = {
+                    "name" : metric,
+                    "data" : [] };
+                data.push(metrics[metric]);
+            }
+
+            // Normalize the metrics.
+            normalize(metrics[metric], timestamp, value);
+
+            // Limit the size.
+            while( metrics[metric]["data"].length > 60 ) {
+                metrics[metric]["data"].shift();
+            }
+        });
+    }
+
+    // Setup the graph.
+    setupGraph($("#endpointPlot-${uuid}"), "endpoints/${endpoint}/metrics", update);
+</script>

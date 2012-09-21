@@ -1,0 +1,20 @@
+<!DOCTYPE HTML>
+
+<ul id="endpointPanel-${uuid}">
+    <li>Endpoint<div></div></li>
+    <li>Metrics<div></div></li>
+    <li>Servers<div></div></li>
+</ul>
+
+<script type="text/javascript">
+    $("#endpointPanel-${uuid}").kendoTabStrip({
+        animation: false,
+        contentUrls: [
+            '/reactor/admin/endpoint-info.html?auth_key=${auth_key}&endpoint=${endpoint}',
+            '/reactor/admin/endpoint-plot.html?auth_key=${auth_key}&endpoint=${endpoint}',
+            '/reactor/admin/endpoint-servers.html?auth_key=${auth_key}&endpoint=${endpoint}',
+        ]
+    });
+    var tabstrip = $("#endpointPanel-${uuid}").data("kendoTabStrip");
+    tabstrip.select(tabstrip.tabGroup.children("li:first"));
+</script>

@@ -1,0 +1,16 @@
+<!DOCTYPE HTML>
+
+<ul id="managerPanel-${uuid}">
+     <li>Manager<div></div></li>
+ </ul>
+
+<script type="text/javascript">
+    $("#managerPanel-${uuid}").kendoTabStrip({
+        animation: false,
+        contentUrls: [
+            '/reactor/admin/manager-info.html?auth_key=${auth_key}&manager=${manager}',
+        ]
+    });
+    var tabstrip = $("#managerPanel-${uuid}").data("kendoTabStrip");
+    tabstrip.select(tabstrip.tabGroup.children("li:first"));
+</script>
