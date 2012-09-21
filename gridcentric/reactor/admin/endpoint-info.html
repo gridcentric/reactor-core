@@ -1,6 +1,13 @@
 <!DOCTYPE HTML>
-<script type="text/javascript">
-</script>
 
-<div class="wrapper">
+<div id="endpointConfig-${uuid}">
 </div>
+
+<script type="text/javascript">
+    setupConfig($("#endpointConfig-${uuid}"),
+                false,
+                "endpoints/${endpoint}",
+                false,
+                function() {},
+                "config");
+</script>

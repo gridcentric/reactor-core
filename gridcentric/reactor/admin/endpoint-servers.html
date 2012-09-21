@@ -1,4 +1,10 @@
 <!DOCTYPE HTML>
+
+<div style="position: relative; height: 100%;">
+    <div id="endpointServers-${uuid}"
+         style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"/>
+ </div>
+
 <script type="text/javascript">
     function update(result, timestamp, data, metrics) {
        if( !metrics["count"] ) {
@@ -10,9 +16,5 @@
             metrics["count"]["data"].shift();
        }
     }
-    setupGraph($("#endpointServers-${endpoint}"), "endpoints/${endpoint}/ips", update);
+    setupGraph($("#endpointServers-${uuid}"), "endpoints/${endpoint}/ips", update);
 </script>
-
-<div style="position: relative; width: 494px; height: 198px;">
-    <div id="endpointServers-${endpoint}" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"/>
-</div>

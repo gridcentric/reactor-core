@@ -9,16 +9,36 @@ var options = {
     yaxis: { show: true },
 };
 
+function isInDOM(elem) {
+    if( !elem.closest('html').length ) {
+        return false;
+    } else {
+        return true;
+    }
+}
+
+function try_plot(elem, data) {
+    if( elem.is(":visible") ) {
+        $.plot(elem, data, options);
+    }
+}
+
 function updateGraph(elem, path, data, metrics, callback) {
     function onData(result) {
         var timestamp = new Date();
+
+        // Hit the callback.
         callback(result, timestamp, data, metrics);
-        if( elem.is(":visible") ) {
-            $.plot(elem, data, options);
+
+        // Plot if the element is on screen.
+        try_plot(elem, data);
+
+        // Reschedule a callback if we're still open.
+        if( isInDOM(elem) ) {
+            setTimeout(function() {
+                updateGraph(elem, path, data, metrics, callback);
+            }, 5000);
         }
-        setTimeout(function() {
-            updateGraph(elem, path, data, metrics, callback);
-        }, 5000);
     }
     $.ajax({
         url: "/v1.0/" + path + "?auth_key=${auth_key}",
@@ -30,8 +50,7 @@ function updateGraph(elem, path, data, metrics, callback) {
 
 function setupGraph(elem, path, callback) {
     var data = [];
-    if( elem.is(":visible") ) {
-        $.plot(elem, data, options);
-    }
+    // Do an initial plot on screen.
+    try_plot(elem, data);
     updateGraph(elem, path, data, {}, callback);
 }

@@ -1,19 +1,16 @@
 <!DOCTYPE HTML>
+
+<ul id="managerPanel-${uuid}">
+     <li>Manager<div></div></li>
+ </ul>
+
 <script type="text/javascript">
-    $("#managerPanel-${manager.replace('.','_')}").kendoPanelBar({
-        expandMode: "single",
+    $("#managerPanel-${uuid}").kendoTabStrip({
+        animation: false,
         contentUrls: [
             '/reactor/admin/manager-info.html?auth_key=${auth_key}&manager=${manager}',
-            '/reactor/admin/manager-config.html?auth_key=${auth_key}&manager=${manager}',
         ]
     });
-    var panelbar = $("#managerPanel-${manager.replace('.','_')}").data("kendoPanelBar");
-    panelbar.expand(panelbar.element.children("li:first"));
+    var tabstrip = $("#managerPanel-${uuid}").data("kendoTabStrip");
+    tabstrip.select(tabstrip.tabGroup.children("li:first"));
 </script>
-
-<div class="wrapper">
-    <ul id="managerPanel-${manager.replace('.','_')}">
-         <li>Manager<div></div></li>
-         <li>Config<div></div></li>
-     </ul>
-</div>

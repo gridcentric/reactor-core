@@ -2,34 +2,66 @@
 // config.js
 //
 
-function enableConfig(edit, save, value) {
+function enableConfig(id, value) {
     if( value ) {
-        $("#" + edit).val(value);
+        $("#configValue-" + id).val(value);
     }
-    $("#" + save).removeAttr("disabled");
+    $("#configSave-" + id).removeAttr("disabled");
 }
-function disableConfig(edit, save) {
-    $("#" + save).attr("disabled", "disabled");
+
+function disableConfig(id) {
+    $("#configSave-" + id).attr("disabled", "disabled");
 }
-function loadConfig(edit, save, path, field) {
+
+function loadConfig(id, path, field) {
     $.ajax({
         url: "/v1.0/" + path + "?auth_key=${auth_key}",
         type: 'GET',
         dataType: 'json',
         success: function(result) {
-            enableConfig(edit, save, result[field]);
+            enableConfig(id, result[field]);
         },
     });
 }
 
-function setupConfig(form, edit, save, popup, path, disabled, callback, field) {
+function generateConfig(elem, id, name) {
+    if( !name ) {
+        elem.append('                                                          \
+<div class="wrapper">                                                          \
+    <form class="config" id="config-' + id + '">                               \
+        <textarea class="config"                                               \
+                  id="configValue-' + id + '"                                  \
+                  value=""/><br/>                                              \
+        <div class="popupholder">                                              \
+            <input id="configSave-' + id + '" type="submit" value="Save"/>     \
+            <div id="configPopup-' + id + '" class="popup">Saved.</div>        \
+        </div>                                                                 \
+    </form>                                                                    \
+</div>                                                                         \
+');
+    } else {
+        elem.append('                                                          \
+<form class="config" id="config-' + id + '">                                   \
+    <label>' + name + '</label>                                                \
+    <input id="configValue-' + id + '" value=""/>                              \
+    <input id="configSave-' + id + '" type="submit" value="Save"/>             \
+    <div id="configPopup-' + id + '" class="popup">Saved.</div>                \
+</form>                                                                        \
+');
+    }
+}
+
+function setupConfig(elem, name, path, disabled, callback, field) {
+    var id = randomId();
+    generateConfig(elem, id, name);
+
     if( !field ) {
         field = path;
     }
 
-    $("#" + form).submit(function(e) {
+    $("#config-" + id).submit(function(e) {
         e.preventDefault();
-        var value = document.forms[form].elements[0].value;
+        var value = document.forms["config-" + id].elements[0].value;
         var data = {};
         data[field] = value;
         $.ajax({
@@ -40,22 +72,23 @@ function setupConfig(form, edit, save, popup, path, disabled, callback, field) {
             processData: false,
             contentType: 'application/json',
             success: function() {
-                $("#" + popup).show();
-                $("#" + popup).fadeOut('slow');
+                $("#configPopup-" + id).show();
+                $("#configPopup-" + id).fadeOut('slow');
                 if( disabled ) {
-                    disableConfig(edit, save);
+                    disableConfig(id);
                 }
                 if( callback ) {
                     callback();
                 }
-                loadConfig(edit, save, path, field);
+                loadConfig(id, path, field);
             },
         });
     });
 
     if( disabled ) {
-        disableConfig(edit, save);
+        disableConfig(id);
     }
-    loadConfig(edit, save, path, field);
-    $("#" + popup).hide();
+
+    loadConfig(id, path, field);
+    $("#configPopup-" + id).hide();
 }

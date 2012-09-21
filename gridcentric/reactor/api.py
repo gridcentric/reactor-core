@@ -2,6 +2,7 @@ import threading
 import logging
 import json
 import os
+import uuid
 
 from pyramid.response import Response
 from mako.template import Template
@@ -55,14 +56,16 @@ class ReactorApi(PancakeApi):
                 kwargs = {}
                 kwargs.update(request.params.items())
                 kwargs["auth_key"] = auth_key
+                kwargs["uuid"]     = str(uuid.uuid4())
                 page_data = template.render(**kwargs)
 
             # Check for special types.
             ext = page_name.split('.')[-1]
-            mimemap = { "js" : "application/json",
-                        "png" : "image/png",
+            mimemap = { "js"   : "application/json",
+                        "png"  : "image/png",
+                        "gif"  : "image/gif",
                         "html" : "text/html",
-                        "css" : "text/css" }
+                        "css"  : "text/css" }
 
             return Response(body=page_data,
                             headers={"Content-type" : mimemap[ext]})

@@ -1,23 +1,9 @@
 <!DOCTYPE HTML>
+
+<div id="managerIndex">
+</div>
+
 <script type="text/javascript">
     setupDataSource("manager", "managers", "managers_configured");
-    setupSelect("manager");
+    setupSelect("manager", $("#managerIndex"));
 </script>
-
-<div class="wrapper">
-    <form id="managerText">
-        <input id="managerAutoComplete"/>
-        <input type="submit" value="Open">
-    </form>
-    <form id="managerList">
-        <select id="managerDropDown"/>
-        <input type="submit" value="Open">
-    </form>
-    <center>
-        <a href="#" id="managerTextButton">Find or Create</a>&nbsp;|&nbsp;
-        <a href="#" id="managerListButton">List</a>
-    </center>
-</div>
-
-<div id="managerContent">
-</div>

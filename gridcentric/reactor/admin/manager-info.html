@@ -1,6 +1,13 @@
 <!DOCTYPE HTML>
-<script type="text/javascript">
-</script>
 
-<div class="wrapper">
+<div id="managerConfig-${uuid}">
 </div>
+
+<script type="text/javascript">
+    setupConfig($("#managerConfig-${uuid}"),
+                false,
+                "managers/${manager}",
+                false,
+                function() {},
+                "config");
+</script>

@@ -1,5 +1,12 @@
 <!DOCTYPE HTML>
+
+<div style="position: relative; height: 100%;">
+    <div id="endpointPlot-${uuid}"
+         style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"/>
+</div>
+
 <script type="text/javascript">
+
     var scales = [ ' (n)', ' (u)', ' (m)', '', ' (K)', ' (M)', ' (G)' ];
 
     function normalize(data, timestamp, last) {
@@ -72,9 +79,7 @@
             }
         });
     }
-    setupGraph($("#endpointGraph-${endpoint}"), "endpoints/${endpoint}/metrics", update);
-</script>
 
-<div style="position: relative; width: 494px; height: 198px;">
-    <div id="endpointGraph-${endpoint}" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"/>
-</div>
+    // Setup the graph.
+    setupGraph($("#endpointPlot-${uuid}"), "endpoints/${endpoint}/metrics", update);
+</script>

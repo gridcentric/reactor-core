@@ -8,19 +8,11 @@ body {
     margin: 0;
 }
 
-
 /* the <content> div is the main box. */
 #content {
     position: relative;
     width: 450px;
-    top: 100px;
-
-    background: #e3e3e3;
-
-    border-width: 1px;
-    border-style: solid;
-    border-color: #c5c5c5;
-    /* border-color: #1f74a7; */
+    top:   50px;
 }
 
 /* the <tabs> div is the main tab panel. */
@@ -33,17 +25,32 @@ h1 {
     margin-left: 20px;
 }
 
-/* tab coloring. */
-.k-state-active, .k-active-filter, .k-state-active:hover
-{
-    border-color: #96c23c;
-}
-
 /* wrapper is the container inside each tab. */
 .wrapper {
     margin: auto;
     padding: 3px;
     overflow: hidden;
+    position: relative;
+}
+
+/* force tabstrips to the size of the windows. */
+.k-window * .k-tabstrip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: auto;
+}
+.k-window * .k-content {
+    position: absolute;
+    top: 34px;
+    bottom: 4px;
+    left: 4px;
+    right: 4px;
+    margin: 0;
+    overflow-y: auto;
 }
 
 /* plain text is always wrapped in <p> tags. */
@@ -84,11 +91,12 @@ select {
     right: 0;
     top: 8px;
 }
-
-/* enabled / disabled links. */
-.enabled {
+textarea {
+    width: 470px;
+    height: 149px;
 }
 
+/* disabled links. */
 .disabled {
     color: black;
     text-decoration: none;

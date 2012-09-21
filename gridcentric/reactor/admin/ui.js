@@ -4,8 +4,6 @@
 
 // This function is useful for generating unique identifiers
 // for div and elements that are added to the page dynamically.
-// (Generally once the divs are added, we track the elements
-// in a javascript array -- so determinism is not so important).
 function randomId() {
     var chars = 'abcdefghiklmnopqrstuvwxyz'.split('');
     var str = '';
@@ -15,31 +13,32 @@ function randomId() {
     return str;
 }
 
-// This object is used to store the global windows created
-// as per above. It is initialized here so that it doesn't
-// get reset over-and-over again.
-var windows = {};
+function windowOpen(object_type, name, cleanup) {
+    var objectDiv = object_type + "Window-" + randomId();
+    $("#" + object_type + "Content").append(
+        "<div id='" + objectDiv + "' style='padding: 0;'/>");
 
-function windowOpen(object_type, name) {
-    var key = object_type + "-" + name;
-    if( !windows[key] ) {
-        var objectDiv = object_type + "Window-" + randomId();
-        $("#" + object_type + "Content").append("<div id='" + objectDiv + "' style='padding: 0;'/>");
-        $("#" + objectDiv).kendoWindow({
-            title: name,
-            content: "/reactor/admin/" + object_type + ".html" +
-                     "?auth_key=${auth_key}&" + object_type + "=" + name,
-            actions: ["Minimize", "Close"],
-            width: "500px",
-            height: "339px",
-            modal: false,
-            resizable: false,
-            draggable: true,
-        });
-        windows[key] = $("#" + objectDiv);
-    } else {
-        windows[key].data("kendoWindow").open();
+    // Setup the cleanup functions.
+    function on_close() {
+        var elem = $("#" + objectDiv);
+        elem.data("kendoWindow").destroy();
+        elem.remove();
     }
+
+    // Create and open the window.
+    $("#" + objectDiv).kendoWindow({
+         title: name,
+         content: "/reactor/admin/" + object_type + ".html" +
+                  "?auth_key=${auth_key}&" + object_type + "=" + name,
+         actions: ["Maximize", "Close"],
+         minWidth:  540,
+         minHeight: 100,
+         width:     540,
+         height:    270,
+         resizable: true,
+         draggable: true,
+         close: on_close,
+    });
 }
 
 //
@@ -91,34 +90,62 @@ function toggleShowText(object_type) {
     $("#" + object_type + "List").hide();
 }
 
-function setupTextSelect(object_type) {
+function setupTextSelect(object_type, cleanup) {
     $("#" + object_type + "Text").submit(function(e) {
         e.preventDefault();
         var name = document.forms[object_type + "Text"].elements[0].value;
-        windowOpen(object_type, name);
+        windowOpen(object_type, name, cleanup);
     });
 }
-function setupListSelect(object_type) {
+
+function setupListSelect(object_type, cleanup) {
     $("#" + object_type + "List").submit(function(e) {
         e.preventDefault();
         var name = document.forms[object_type + "List"].elements[0].value;
-        windowOpen(object_type, name);
+        windowOpen(object_type, name, cleanup);
     });
 }
-function setupSelect(object_type) {
+
+function generateSelect(object_type, elem) {
+    elem.append('                                                           \
+<div class="wrapper">                                                       \
+    <form id="' + object_type + 'Text">                                     \
+        <input id="' + object_type + 'managerAutoComplete"/>                \
+        <input type="submit" value="Open">                                  \
+    </form>                                                                 \
+    <form id="' + object_type + 'List">                                     \
+        <select id="' + object_type + 'DropDown"/>                          \
+        <input type="submit" value="Open">                                  \
+    </form>                                                                 \
+    <center>                                                                \
+        <a href="#" id="' + object_type + 'ListButton">List</a>             \
+        &nbsp;|&nbsp;                                                       \
+        <a href="#" id="' + object_type + 'TextButton">Find or Create</a>   \
+    </center>                                                               \
+</div>                                                                      \
+<div id="' + object_type + 'Content"></div>                                 \
+');
+}
+
+function setupSelect(object_type, elem, cleanup) {
+    generateSelect(object_type, elem);
+
     $("#" + object_type + "AutoComplete").kendoAutoComplete({
         dataSource: dataSources[object_type],
     });
     $("#" + object_type + "DropDown").kendoDropDownList({
         dataSource: dataSources[object_type],
     });
-    setupTextSelect(object_type);
-    setupListSelect(object_type);
+
+    setupTextSelect(object_type, cleanup);
+    setupListSelect(object_type, cleanup);
+
     $("#" + object_type + "ListButton").click(function() {
         toggleShowList(object_type);
     });
     $("#" + object_type + "TextButton").click(function () {
         toggleShowText(object_type);
     });
-    toggleShowText(object_type);
+
+    toggleShowList(object_type);
 }

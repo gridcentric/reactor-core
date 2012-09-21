@@ -1,23 +1,9 @@
 <!DOCTYPE HTML>
+
+<div id="endpointIndex">
+</div>
+
 <script type="text/javascript">
     setupDataSource("endpoint", "endpoints", "endpoints");
-    setupSelect("endpoint");
+    setupSelect("endpoint", $("#endpointIndex"));
 </script>
-
-<div class="wrapper">
-    <form id="endpointText">
-        <input id="endpointAutoComplete"/>
-        <input type="submit" value="Open">
-    </form>
-    <form id="endpointList">
-        <select id="endpointDropDown"/>
-        <input type="submit" value="Open">
-    </form>
-    <center>
-        <a href="#" id="endpointTextButton">Find or Create</a>&nbsp;|&nbsp;
-        <a href="#" id="endpointListButton">List</a>
-    </center>
-</div>
-
-<div id="endpointContent">
-</div>
