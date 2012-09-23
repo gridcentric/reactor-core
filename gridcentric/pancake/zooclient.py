@@ -23,10 +23,13 @@ class PancakeClient(object):
         if full:
             managers = {}
             for ip in ips:
-                managers[ip] = self.zk_conn.read(paths.manager_ip(ip))
+                managers[ip] = self.get_manager_key(ip)
             return managers
         else:
             return ips
+
+    def get_manager_key(self, manager):
+        return self.zk_conn.read(paths.manager_ip(manager))
 
     def list_managers_configured(self):
         return self.zk_conn.list_children(paths.manager_configs())

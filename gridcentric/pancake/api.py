@@ -348,8 +348,11 @@ class PancakeApi:
                 config = self.client.get_manager_config(manager)
 
             if config != None:
+                manager_info = {}
                 manager_config = ManagerConfig(config)
-                response = Response(body=json.dumps({'config' : str(manager_config)}))
+                manager_info['config'] = str(manager_config)
+                manager_info['uuid'] = self.client.get_manager_key(manager)
+                response = Response(body=json.dumps(manager_info))
             else:
                 response = Response(status=404, body="%s not found" % manager)
 
