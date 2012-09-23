@@ -292,7 +292,7 @@
        }
        $("#ips").html("");
        $.each(result["ip_addresses"], function(index, value) {
-           $("#ips").append("<li>" + value + "</li>");
+           $("#ips").append("<li><a href='//" + value + "/'>" + value + "</a></li>");
        });
        metrics["count"]["data"].push([timestamp, result["ip_addresses"].length]);
        while( metrics["count"]["data"].length > 60 ) {
