@@ -1,0 +1,28 @@
+<%page args="type"/>
+
+<div class="row">
+<div class="span10 offset2">
+<form class="form-inline">
+<input type="text" id="${type}name" placeholder="New ${type}" class="input-medium"></input>
+<button id="${type}create" class="btn btn-primary" type="submit">Create</button>
+</form>
+</div>
+</div>
+
+<script type="text/javascript">
+    $("#${type}create").click(function (e) {
+        e.preventDefault();
+        var name = $("#${type}name").val();
+        $.ajax({
+            url: "/v1.0/${type}s/" + name + "?auth_key=${auth_key}",
+            type: 'POST',
+            dataType: 'json',
+            data: JSON.stringify({ "config" : ""}),
+            processData: false,
+            contentType: 'application/json',
+            success: function() {
+                window.location = "/reactor/admin/${type}s/" + name + "?auth_key=${auth_key}";
+            },
+        });
+    });
+</script>

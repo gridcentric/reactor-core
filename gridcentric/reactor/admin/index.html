@@ -1,94 +1,117 @@
-<!DOCTYPE HTML>
-<html dir="ltr" lang="en-US">
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<%include file="/navbar.html"/>
 
-<title>Reactor Administration</title>
+<div class="span9">
 
-<!-- Pull in local libraries. -->
-<script src="/reactor/admin/lib/jquery.min.js"></script>
-<link href="/reactor/admin/lib/kendo.common.min.css" rel="stylesheet"/>
-<link href="/reactor/admin/lib/kendo.metro.min.css" rel="stylesheet"/>
-<script src="/reactor/admin/lib/kendo.web.min.js"></script>
-<script src="/reactor/admin/lib/jquery.flot.js"></script>
-<script src="/reactor/admin/lib/jquery.ba-resize.min.js"></script>
+<div class="hero-unit">
 
-<!-- Pull in templated libraries. -->
-<script src="/reactor/admin/ui.js?auth_key=${auth_key}"></script>
-<script src="/reactor/admin/graph.js?auth_key=${auth_key}"></script>
-<script src="/reactor/admin/config.js?auth_key=${auth_key}"></script>
-<link rel="stylesheet" type="text/css" href="/reactor/admin/admin.css" media="screen"/>
+    <div id="loggedin">
+        <h3>Reactor Administration</h3>
+        <p>Gridcentric Reactor is a virtual appliance for load balancing and
+        managing scalable web services. This interface provides a quick
+        overview of endpoints and managers, but more advanced usage will
+        require the command-line tools and using the API directly.</p>
+        <p><a class="btn btn-primary btn-large" href="http://docs.gridcentric.com/reactor/">Documentation &raquo;</a></p>
+    </div>
 
-</style>
+    <div id="login">
+        <h3>You are not authenticated.</h3>
+        <form class="form-inline">
+            <input class="input-medium" id="authkeyVal" type="text" placeholder="Auth-Key">
+            <button type="submit" id="authkeySet" class="btn">Set</button>
+        </form>
+    </div>
+</div>
 
 <script type="text/javascript">
-    function showFullInterface() {
-        var tabstrip = $("#tabs").data("kendoTabStrip");
+</script>
 
-        /* Remove the login tab. */
-        tabstrip.remove("#login");
+<div class="row-fluid">
+  <div class="span4">
+      <h4 id="instances"></h2>
+  </div>
+  <div class="span4">
+      <h4 id="running"></h2>
+      <h4 id="paused"></h2>
+      <h4 id="stopped"></h2>
+  </div>
+  <div class="span4">
+      <h4 id="managers"></h2>
+  </div>
+</div>
 
-        /* Show the normal endpoints tabs. */
-        tabstrip.append([
-            {
-                text: "Endpoints",
-                contentUrl: "/reactor/admin/endpoints.html?auth_key=${auth_key}",
-            },
-            {
-                text: "Managers",
-                contentUrl: "/reactor/admin/managers.html?auth_key=${auth_key}"
-            },
-            {
-                text: "Config",
-                contentUrl: "/reactor/admin/config.html?auth_key=${auth_key}",
-            },
-            {
-                text: "About",
-                contentUrl: "/reactor/admin/about.html?auth_key=${auth_key}",
-            }
-        ]);
-        tabstrip.select(tabstrip.tabGroup.children("li:first"));
+</div>
+
+<script type="text/javascript">
+    var endpoint_count = 0;
+    var running_count = 0;
+    var paused_count = 0;
+    var stopped_count = 0;
+    var active_count = 0;
+    var pending = 0;
+    var managers = {};
+
+    function done_endpoint() {
+        pending -= 1;
+        if( pending == 0 ) {
+            $("#instances").html("" + active_count + " active instances.");
+            $("#running").html("" + running_count + " running endpoints.");
+            $("#paused").html("" + paused_count + " paused endpoints.");
+            $("#stopped").html("" + stopped_count + " stopped endpoints.");
+            $("#managers").html("" + Object.keys(managers).length + " managers.");
+        }
     }
 
-    function showAuthenticationInterface() {
-        $("#tabs").kendoTabStrip({
-            dataTextField: "text",
-            dataUrlField: "url",
-            dataContentUrlField: "contentUrl",
+    function do_logout() {
+        $("#loggedin").addClass("hidden");
+        $("#navbar").addClass("hidden");
+        $("#authkeySet").click(function (e) {
+            e.preventDefault();
+            var value = $("#authkeyVal").val();
+            window.location = window.location.pathname + "?auth_key=" + value;
         });
     }
 
-    $(document).ready(function() {
-        showAuthenticationInterface();
-        $.ajax({
-            url: "/v1.0/domain?auth_key=${auth_key}",
-            type: 'GET',
-            dataType: 'json',
-            success: showFullInterface,
+    function do_login() {
+        $("#navbar").removeClass("hidden");
+        $("#loggedin").removeClass("hidden");
+        $("#login").addClass("hidden");
+    }
+
+    function process_endpoints(result) {
+        $.each(result["endpoints"], function(index, value) {
+            endpoint_count += 1;
+            pending += 1;
+            $.ajax({
+                url: "/v1.0/endpoints/" + value + "/state?auth_key=${auth_key}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(result) {
+                    active_count += result["active"].length;
+                    managers[result["manager"]] = true;
+                    if( result["state"] == "RUNNING" ) {
+                        running_count += 1;
+                    } else if( result["state"] == "PAUSED" ) {
+                        paused_count += 1;
+                    } else if( result["state"] == "STOPPED" ) {
+                        stopped_count += 1;
+                    }
+                    done_endpoint();
+                },
+                error: function(result) {
+                    done_endpoint();
+                },
+            });
+            do_login();
         });
+    }
+
+    do_logout();
+    $.ajax({
+        url: "/v1.0/endpoints?auth_key=${auth_key}",
+        type: 'GET',
+        dataType: 'json',
+        success: process_endpoints,
     });
 </script>
 
-</head>
-
-<body>
-<div class="wrapper" id="content">
-    <h1>Reactor Administration Panel</h1>
-    <div id="tabs">
-        <ul>
-            <li id="login" class="k-state-active">Login</li>
-        </ul>
-
-        <div>
-            <p>This interface requires an authentication key.</p>
-            <form method="GET" action="/reactor/admin">
-                <label for="auth_key" value="Auth-Key">Auth-Key</label>
-                <input name="auth_key" type="password"/>
-                <input type="submit" value="Submit"/>
-            </form>
-        </div>
-    </div>
-</div>
-</body>
-
-</html>
+<%include file="/footer.html"/>

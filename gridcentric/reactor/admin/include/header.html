@@ -1,0 +1,40 @@
+<%page/>
+<!DOCTYPE HTML>
+<html dir="ltr" lang="en-US">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+
+<title>Reactor</title>
+
+<!-- Pull in local libraries. -->
+<link href="/reactor/admin/lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<link href="/reactor/admin/lib/bootstrap/css/bootstrap-responsive.css" rel="stylesheet">
+<script src="http://code.jquery.com/jquery-latest.js"></script>
+<script src="/reactor/admin/lib/bootstrap/js/bootstrap.min.js"></script>
+<script src="/reactor/admin/lib/jquery.flot.js"></script>
+<script src="/reactor/admin/lib/jquery.flot.resize.js"></script>
+
+<!-- Pull in customization. -->
+<link rel="stylesheet" type="text/css" href="/reactor/admin/admin.css" media="screen"/>
+<script src="/reactor/admin/graph.js?auth_key=${auth_key}"></script>
+
+</style>
+</head>
+
+<body>
+
+<div class="navbar navbar-inverse navbar-fixed-top">
+  <div class="navbar-inner">
+     <div class="container">
+        <a class="brand" href="/reactor/admin/?auth_key=${auth_key}">Reactor</a>
+        <div class="nav-collapse collapse">
+            <ul class="nav">
+            <!-- Menu -->
+            </ul>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+<div class="row-fluid">

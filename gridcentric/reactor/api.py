@@ -6,6 +6,8 @@ import uuid
 
 from pyramid.response import Response
 from mako.template import Template
+from mako.lookup import TemplateLookup
+from mako import exceptions
 
 from gridcentric.pancake.api import PancakeApi
 from gridcentric.pancake.api import connected
@@ -25,12 +27,12 @@ class ReactorApi(PancakeApi):
         self.config.add_route('api-servers', '/reactor/api_servers')
         self.config.add_view(self.set_api_servers, route_name='api-servers')
 
-        self.config.add_route('admin-home', '/reactor/admin')
-        self.config.add_route('admin-page', '/reactor/admin/{page_name}')
-        self.config.add_route('admin-lib', '/reactor/admin/lib/{page_name:.*}')
+        self.config.add_route('admin-home',   '/reactor/admin/')
+        self.config.add_route('admin-page',   '/reactor/admin/{page_name}')
+        self.config.add_route('admin-object', '/reactor/admin/{page_name}/{object_name:.*}')
         self.config.add_view(self.admin, route_name='admin-home')
         self.config.add_view(self.admin, route_name='admin-page')
-        self.config.add_view(self.admin_lib, route_name='admin-lib')
+        self.config.add_view(self.admin, route_name='admin-object')
 
         # Check the endpoint.
         self.check(zk_servers)
@@ -42,9 +44,23 @@ class ReactorApi(PancakeApi):
         """
         if request.method == 'GET':
             # Read the page_name from the request.
-            page_name = request.matchdict.get('page_name', 'index.html')
-            filename = os.path.join(os.path.dirname(__file__),
-                                    "admin", page_name)
+            page_name = request.matchdict.get('page_name', 'index')
+            object_name = request.matchdict.get('object_name', '')
+
+            if page_name == 'lib':
+                is_lib = True
+                page_name = os.path.join(page_name, object_name)
+            else:
+                is_lib = False
+                if object_name and page_name.endswith('s'):
+                    page_name = page_name[:-1]
+                if page_name.find('.') < 0:
+                    page_name += '.html'
+
+            # Check that the file exists.
+            filename = os.path.join(os.path.dirname(__file__), 'admin', page_name)
+            if not(os.path.exists(filename)):
+                return Response(status=404)
 
             if is_lib:
                 # Just open the page and write it out.
@@ -53,13 +69,20 @@ class ReactorApi(PancakeApi):
                 # Process the request with all params.
                 # This allows us to generate pages that include
                 # arbitrary parameters (for convenience).
-                template = Template(filename=filename)
+                lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
+                lookup = TemplateLookup(directories=[lookup_path])
+                template = Template(filename=filename, lookup=lookup)
                 auth_key = get_auth_key(request)
                 kwargs = {}
                 kwargs.update(request.params.items())
                 kwargs["auth_key"] = auth_key
                 kwargs["uuid"]     = str(uuid.uuid4())
-                page_data = template.render(**kwargs)
+                kwargs["object"]   = object_name
+
+                try:
+                    page_data = template.render(**kwargs)
+                except:
+                    page_data = exceptions.html_error_template().render()
 
             # Check for supported types.
             ext = page_name.split('.')[-1]
@@ -73,14 +96,6 @@ class ReactorApi(PancakeApi):
                             headers={"Content-type" : mimemap[ext]})
         else:
             return Response(status=403)
-
-    def admin_lib(self, context, request):
-        # Make sure the page_name contains the lib page.
-        page_name = request.matchdict['page_name']
-        request.matchdict['page_name'] = 'lib/' + page_name
-
-        # Process using the normal mechanism.
-        return self.admin(context, request, is_lib=True)
 
     @connected
     @authorized_admin_only

@@ -1,0 +1,24 @@
+<%page args='endpoint_name="",manager_name=""'/>
+<%include file="/header.html"/>
+
+<div class="span3" id="navbar">
+  <div class="well sidebar-nav">
+    <ul class="nav nav-list" id="itemList">
+    </ul>
+  </div>
+
+<%include file="/list.html" args="title='endpoints',name=endpoint_name,path='/v1.0/endpoints',field='endpoints',link='/reactor/admin/endpoints/'"/>
+<%include file="/list.html" args="title='managers active',name=manager_name,path='/v1.0/managers',field='managers_active',key=True,link='/reactor/admin/managers/'"/>
+<%include file="/list.html" args="title='managers configured',name=manager_name,path='/v1.0/managers',field='managers_configured',link='/reactor/admin/managers/'"/>
+
+<%include file="/new.html" args="type='endpoint'"/>
+<%include file="/new.html" args="type='manager'"/>
+
+<div class="row">
+<div class="span2 offset5">
+<p><a class="btn" href="/reactor/admin/">Logout</a></p>
+</div>
+</div>
+
+</div>
+
