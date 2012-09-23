@@ -164,8 +164,10 @@ class Connection(BaseNovaConnection):
     def _start_instance(self, params={}):
         # TODO: We can pass in the pancake parameter here via 
         # CloudStart or some other standard support mechanism.
+        userdata = "reactor=%s" % params.get('reactor', '')
         self._novaclient().servers.create(self.config.instance_name(),
                                   self.config.image(),
                                   self.config.flavor(),
                                   security_groups=self.config.security_groups(),
-                                  key_name=self.config.key_name())
+                                  key_name=self.config.key_name(),
+                                  userdata=userdata)
