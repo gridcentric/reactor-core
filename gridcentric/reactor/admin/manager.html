@@ -1,4 +1,4 @@
-<%include file="/managers.html" args="name=object"/>
+<%include file="/navbar.html" args="manager_name=object"/>
 
 <div class="span9">
 
@@ -100,7 +100,7 @@
                 type: 'DELETE',
                 processData: false,
                 success: function() {
-                    window.location = '/reactor/admin/managers?auth_key=${auth_key}';
+                    window.location = '/reactor/admin/?auth_key=${auth_key}';
                 },
             });
         });

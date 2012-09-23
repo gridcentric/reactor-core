@@ -1,20 +1,4 @@
-<%page args='title,name,path,field,link,key=False,elements=[]'/>
-
-% if not(elements):
-<div class="span3">
-  <div class="well sidebar-nav">
-    <ul class="nav nav-list" id="itemList">
-    </ul>
-  </div>
-</div>
-% endif
-<%
-    # NOTE: This line will modify the *default*
-    # value that gets passed in to the function.
-    # Therefore, future defaults will have a True
-    # elements and we wont regenerate the div.
-    elements.append(1)
-%>
+<%page args='title,path,field,link,name="",key=False'/>
 
 <script type="text/javascript">
     if( typeof active == 'undefined' ) {

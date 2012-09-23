@@ -5,9 +5,12 @@
 body {
     overflow-y: scroll;
 }
-.container-fluid {
+.row-fluid {
     margin-top: 60px;
 }
 .container a.brand.active {
     color: white;
+}
+div.hidden {
+    display: none;
 }

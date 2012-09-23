@@ -1,17 +1,10 @@
-<%include file="/endpoints.html" args="name=object"/>
+<%include file="/navbar.html" args="endpoint_name=object"/>
 
 <div class="span9">
     
 <h3>${object}</h3>
 
 <form class="form-horizontal">
-
-<div class="control-group">
-    <label class="control-label" for="manager">Manager</label>
-    <div class="controls" class="span4">
-    <input class="input-xlarge" id="manager" type="text" placeholder="Loading..." disabled>
-    </div>
-</div>
 
 <div class="control-group">
     <label class="control-label" for="state">Status</label>
@@ -26,6 +19,24 @@
                 <li><a id="pause" href="#">Pause</a></li>
             </ul>
         </div>
+    </div>
+</div>
+<div class="control-group">
+    <div class="controls">
+        <div class="dropdown">
+            <a class="btn dropdown-toggle" data-toggle="dropdown">
+                IPs&nbsp;<span class="caret"></span>
+            </a>
+            <ul id="ips" class="dropdown-menu" role="menu" aria-labelledby="dLabel">
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="control-group">
+    <label class="control-label" for="manager">Manager</label>
+    <div class="controls" class="span4">
+    <input class="input-xlarge" id="manager" type="text" placeholder="Loading..." disabled>
     </div>
 </div>
 
@@ -98,7 +109,7 @@
                 if( result["state"] == "RUNNING" )
                     $("#state").addClass("btn-success");
                 if( result["state"] == "PAUSED" )
-                    $("#state").addClass("btn-info");
+                    $("#state").addClass("btn-warning");
                 if( result["state"] == "STOPPED" )
                     $("#state").addClass("btn-inverse");
             },
@@ -192,7 +203,7 @@
                 type: 'DELETE',
                 processData: false,
                 success: function() {
-                    window.location = '/reactor/admin/endpoints?auth_key=${auth_key}';
+                    window.location = '/reactor/admin/?auth_key=${auth_key}';
                 },
             });
         });
@@ -279,6 +290,10 @@
             metrics["count"] = { "label" : "count", "data" : [] };
             data.push(metrics["count"]);
        }
+       $("#ips").html("");
+       $.each(result["ip_addresses"], function(index, value) {
+           $("#ips").append("<li>" + value + "</li>");
+       });
        metrics["count"]["data"].push([timestamp, result["ip_addresses"].length]);
        while( metrics["count"]["data"].length > 60 ) {
             metrics["count"]["data"].shift();

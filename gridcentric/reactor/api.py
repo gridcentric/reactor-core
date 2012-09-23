@@ -44,7 +44,7 @@ class ReactorApi(PancakeApi):
         """
         if request.method == 'GET':
             # Read the page_name from the request.
-            page_name = request.matchdict.get('page_name', 'endpoints')
+            page_name = request.matchdict.get('page_name', 'index')
             object_name = request.matchdict.get('object_name', '')
 
             if page_name == 'lib':
