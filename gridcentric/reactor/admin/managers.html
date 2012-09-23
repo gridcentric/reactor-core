@@ -1,9 +1,39 @@
-<!DOCTYPE HTML>
+<%include file="/managers.html"/>
 
-<div id="managerIndex">
+<div class="span9">
+
+<h3>Managers</h3>
+
+<form class="form-horizontal">
+
+<div class="control-group">
+    <label class="control-label" for="managername">New Manager</label>
+    <div class="controls">
+        <input type="text" id="managername" class="input-large"></input>
+        <button id="save" class="btn btn-primary" type="submit">Create</button>
+    </div>
+</div>
+
+</form>
+
 </div>
 
 <script type="text/javascript">
-    setupDataSource("manager", "managers", "managers_configured");
-    setupSelect("manager", $("#managerIndex"));
+    $("#save").click(function (e) {
+        e.preventDefault();
+        var name = $("#managername").val();
+        $.ajax({
+            url: "/v1.0/managers/" + name + "?auth_key=${auth_key}",
+            type: 'POST',
+            dataType: 'json',
+            data: JSON.stringify({ "config" : ""}),
+            processData: false,
+            contentType: 'application/json',
+            success: function() {
+                window.location = "/reactor/admin/managers/" + name + "?auth_key=${auth_key}";
+            },
+        });
+    });
 </script>
+
+<%include file="/footer.html"/>

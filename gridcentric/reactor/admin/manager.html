@@ -1,16 +1,119 @@
-<!DOCTYPE HTML>
+<%include file="/managers.html" args="name=object"/>
 
-<ul id="managerPanel-${uuid}">
-     <li>Manager<div></div></li>
- </ul>
+<div class="span9">
+
+<h3>${object}</h3>
+
+<form class="form-horizontal">
+
+<div class="control-group">
+    <label class="control-label" for="uuid">Uuid</label>
+    <div class="controls" class="span4">
+    <input class="input-xlarge" id="uuid" type="text" placeholder="" disabled>
+    </div>
+</div>
+
+<div class="control-group">
+    <label class="control-label" for="config">Config</label>
+    <div class="controls">
+        <textarea rows="10" id="config" class="input-xxlarge"></textarea>
+        <button id="configSave" class="btn" type="submit">Save</button>
+    </div>
+</div>
+
+<div class="control-group">
+    <div class="controls">
+        <a href="#deleteModal" role="button" class="btn btn-danger" data-toggle="modal">Delete</a>
+    </div>
+</div>
+
+<div class="modal" id="deleteModal" tabindex="-1" role="dialog" aria-labelledby="deleteModalLabel" aria-hidden="true">
+  <div class="modal-header">
+      <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&#739;</button>
+    <h3 id="deleteModalLabel">Are you sure?</h3>
+  </div>
+  <div class="modal-body">
+      <p>Are you sure you want to delete this manager? All the configuration
+      data will be destroyed, and the manager will no longer be able to participate
+      in the cluster.</p>
+  </div>
+  <div class="modal-footer">
+    <button class="btn" data-dismiss="modal" aria-hidden="true">Cancel</button>
+    <button id="deleteConfirm" class="btn btn-danger">Delete</button>
+  </div>
+</div>
+
+</form>
+
+</div>
 
 <script type="text/javascript">
-    $("#managerPanel-${uuid}").kendoTabStrip({
-        animation: false,
-        contentUrls: [
-            '/reactor/admin/manager-info.html?auth_key=${auth_key}&manager=${manager}',
-        ]
-    });
-    var tabstrip = $("#managerPanel-${uuid}").data("kendoTabStrip");
-    tabstrip.select(tabstrip.tabGroup.children("li:first"));
+    function loadUuid() {
+        $.ajax({
+            url: "/v1.0/managers/${object}?auth_key=${auth_key}",
+            type: 'GET',
+            dataType: 'json',
+            success: function(result) {
+                 $("#uuid").val(result['uuid']);
+            },
+        });
+    }
+
+    function loadConfig() {
+        $("#config").attr("disabled", "disabled");
+        $("#config").attr("value", "Loading...");
+
+        $.ajax({
+            url: "/v1.0/managers/${object}?auth_key=${auth_key}",
+            type: 'GET',
+            dataType: 'json',
+            success: function(result) {
+                $("#config").attr("value", result["config"]);
+                $("#config").removeAttr("disabled");
+            },
+        });
+
+        $("#configSave").click(function (e) {
+            e.preventDefault();
+            $("#config").attr("disabled", "disabled");
+            var value = $("#config").val();
+            $.ajax({
+                url: "/v1.0/managers/${object}?auth_key=${auth_key}",
+                type: 'POST',
+                dataType: 'json',
+                data: JSON.stringify({ "config" : value }),
+                contentType: 'application/json',
+                success: function(result) {
+                    $("#config").removeAttr("disabled");
+                },
+            });
+        });
+    }
+
+    function loadDelete() {
+        $('#deleteModal').modal('show');
+        $('#deleteModal').modal('hide');
+        $("#deleteConfirm").click(function (e) {
+            e.preventDefault();
+            $.ajax({
+                url: "/v1.0/managers/${object}?auth_key=${auth_key}",
+                type: 'DELETE',
+                processData: false,
+                success: function() {
+                    window.location = '/reactor/admin/managers?auth_key=${auth_key}';
+                },
+            });
+        });
+        $("#delete").click(function (e) {
+            e.preventDefault();
+            $('#deleteModal').modal('show');
+        });
+    }
+
+    // Set everything up.
+    loadUuid();
+    loadConfig();
+    loadDelete();
 </script>
+
+<%include file="/footer.html"/>

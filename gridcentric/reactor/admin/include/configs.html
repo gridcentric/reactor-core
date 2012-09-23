@@ -1,0 +1,27 @@
+<%page args='name=""'/>
+<%include file="/header.html" args="section='config'"/>
+
+<div class="span3">
+  <div class="well sidebar-nav">
+     <ul class="nav nav-list" id="itemList">
+       <li class="nav-header">Config</a></li>
+       % if name == 'core':
+       <li class="active"><a href="#">Core</a></li>
+       % else:
+       <li><a href="/reactor/admin/config/core?auth_key=${auth_key}">Core</a></li>
+       % endif
+
+       % if name == 'cluster':
+       <li class="active"><a href="#">Cluster</a></li>
+       % else:
+       <li><a href="/reactor/admin/config/cluster?auth_key=${auth_key}">Cluster</a></li>
+       % endif
+
+       % if name == 'about':
+       <li class="active"><a href="#">About</a></li>
+       % else:
+       <li><a href="/reactor/admin/config/about?auth_key=${auth_key}">About</a></li>
+       % endif
+    </ul>
+  </div>
+</div>

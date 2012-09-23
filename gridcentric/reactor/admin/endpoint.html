@@ -1,20 +1,302 @@
-<!DOCTYPE HTML>
+<%include file="/endpoints.html" args="name=object"/>
 
-<ul id="endpointPanel-${uuid}">
-    <li>Endpoint<div></div></li>
-    <li>Metrics<div></div></li>
-    <li>Servers<div></div></li>
-</ul>
+<div class="span9">
+    
+<h3>${object}</h3>
+
+<form class="form-horizontal">
+
+<div class="control-group">
+    <label class="control-label" for="manager">Manager</label>
+    <div class="controls" class="span4">
+    <input class="input-xlarge" id="manager" type="text" placeholder="Loading..." disabled>
+    </div>
+</div>
+
+<div class="control-group">
+    <label class="control-label" for="state">Status</label>
+    <div class="controls">
+        <div class="btn-group">
+            <a id="state"
+               class="btn dropdown-toggle"
+               data-toggle="dropdown"></a>
+            <ul id="actions" class="dropdown-menu">
+                <li><a id="start" href="#">Start</a></li>
+                <li><a id="stop" href="#">Stop</a></li>
+                <li><a id="pause" href="#">Pause</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="control-group">
+    <label class="control-label" for="config">Config</label>
+    <div class="controls">
+        <textarea rows="10" id="config" class="input-xxlarge"></textarea>
+        <button id="configSave" class="btn" type="submit">Save</button>
+    </div>
+</div>
+
+<div class="control-group">
+    <label class="control-label" for="metrics">Metrics</label>
+    <div class="controls">
+        <input type="text" id="metrics" class="input-xxlarge"></input>
+        <button id="metricsSave" class="btn" type="submit">Save</button>
+    </div>
+</div>
+
+<div class="control-group">
+    <div class="controls">
+        <a href="#deleteModal" role="button" class="btn btn-danger" data-toggle="modal">Delete</a>
+    </div>
+</div>
+
+<div class="modal" id="deleteModal" tabindex="-1" role="dialog" aria-labelledby="deleteModalLabel" aria-hidden="true">
+  <div class="modal-header">
+      <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&#739;</button>
+    <h3 id="deleteModalLabel">Are you sure?</h3>
+  </div>
+  <div class="modal-body">
+      <p>Are you sure you want to delete this endpoint? All the configuration
+      data will be destroyed. Note that no servers will be removed, please stop
+      the service prior to deletion if you would like this to happen.</p>
+  </div>
+  <div class="modal-footer">
+    <button class="btn" data-dismiss="modal" aria-hidden="true">Cancel</button>
+    <button id="deleteConfirm" class="btn btn-danger">Delete</button>
+  </div>
+</div>
+
+</form>
+
+<h3>Live Metrics</h3>
+<div style="min-height: 200px; position: relative;">
+<div id="livemetrics" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"></div>
+</div>
+
+<h3>Servers</h3>
+<div style="min-height: 200px; position: relative;">
+<div id="servers" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"></div>
+</div>
+
+</div>
 
 <script type="text/javascript">
-    $("#endpointPanel-${uuid}").kendoTabStrip({
-        animation: false,
-        contentUrls: [
-            '/reactor/admin/endpoint-info.html?auth_key=${auth_key}&endpoint=${endpoint}',
-            '/reactor/admin/endpoint-plot.html?auth_key=${auth_key}&endpoint=${endpoint}',
-            '/reactor/admin/endpoint-servers.html?auth_key=${auth_key}&endpoint=${endpoint}',
-        ]
+
+    function loadState() {
+        $("#state").html('Loading...');
+        $.ajax({
+            url: "/v1.0/endpoints/${object}/state?auth_key=${auth_key}",
+            type: 'GET',
+            dataType: 'json',
+            success: function(result) {
+                $("#manager").attr("placeholder", result["manager"]);
+                $("#state").html(result["state"] + '&nbsp;<span class="caret"></span>');
+                $("#state").removeClass("btn-success");
+                $("#state").removeClass("btn-inverse");
+                $("#state").removeClass("btn-info");
+                if( result["state"] == "RUNNING" )
+                    $("#state").addClass("btn-success");
+                if( result["state"] == "PAUSED" )
+                    $("#state").addClass("btn-info");
+                if( result["state"] == "STOPPED" )
+                    $("#state").addClass("btn-inverse");
+            },
+        });
+    }
+
+    function setupActions(datamap) {
+        $.each(datamap, function(sel, value) {
+            $(sel).click(function(e) {
+                e.preventDefault();
+                $.ajax({
+                    url: "/v1.0/endpoints/${object}/state?auth_key=${auth_key}",
+                    type: 'POST',
+                    dataType: 'json',
+                    data: JSON.stringify(value),
+                    processData: false,
+                    contentType: 'application/json',
+                    success: function() {
+                        loadState();
+                    },
+                });
+            });
+        });
+    }
+
+    function loadConfig() {
+        $("#config").attr("disabled", "disabled");
+        $("#config").attr("value", "Loading...");
+
+        $.ajax({
+            url: "/v1.0/endpoints/${object}?auth_key=${auth_key}",
+            type: 'GET',
+            dataType: 'json',
+            success: function(result) {
+                $("#config").attr("value", result["config"]);
+                $("#config").removeAttr("disabled");
+            },
+        });
+
+        $("#configSave").click(function (e) {
+            e.preventDefault();
+            $("#config").attr("disabled", "disabled");
+            var value = $("#config").val();
+            $.ajax({
+                url: "/v1.0/endpoints/${object}?auth_key=${auth_key}",
+                type: 'POST',
+                dataType: 'json',
+                data: JSON.stringify({ "config" : value }),
+                contentType: 'application/json',
+                success: function(result) {
+                    $("#config").removeAttr("disabled");
+                },
+            });
+        });
+    }
+
+    function loadMetrics() {
+        $("#metricsSave").click(function (e) {
+            e.preventDefault();
+            $("#metrics").attr("disabled", "disabled");
+            var value = $("#metrics").val();
+            $.ajax({
+                url: "/v1.0/endpoints/${object}/metrics?auth_key=${auth_key}",
+                type: 'POST',
+                dataType: 'json',
+                data: value,
+                contentType: 'application/json',
+                success: function(result) {
+                    $("#metrics").removeAttr("disabled");
+                    $("#metricsSave").removeClass("btn-danger");
+                    $("#metricsSave").removeClass("btn-success");
+                    $("#metricsSave").addClass("btn-success");
+                },
+                error: function(result) {
+                    $("#metrics").removeAttr("disabled");
+                    $("#metricsSave").removeClass("btn-danger");
+                    $("#metricsSave").removeClass("btn-success");
+                    $("#metricsSave").addClass("btn-danger");
+                },
+            });
+        });
+    }
+
+    function loadDelete() {
+        $('#deleteModal').modal('show');
+        $('#deleteModal').modal('hide');
+        $("#deleteConfirm").click(function (e) {
+            e.preventDefault();
+            $.ajax({
+                url: "/v1.0/endpoints/${object}?auth_key=${auth_key}",
+                type: 'DELETE',
+                processData: false,
+                success: function() {
+                    window.location = '/reactor/admin/endpoints?auth_key=${auth_key}';
+                },
+            });
+        });
+        $("#delete").click(function (e) {
+            e.preventDefault();
+            $('#deleteModal').modal('show');
+        });
+    }
+
+    var scales = [ ' (n)', ' (u)', ' (m)', '', ' (K)', ' (M)', ' (G)' ];
+    function normalize(data, timestamp, last) {
+        var scale       = data["scale"];
+        var delta_scale = 1.0;
+        var scale_idx   = data["scale_idx"];
+        var avg         = data["average"];
+
+        // Grab the old scales.
+        if( !scale || !scale_idx ) {
+            scale = 1.0;
+            scale_idx = 3;
+        }
+        last = last * scale;
+
+        // Compute the new average.
+        if( !avg ) {
+            avg = 0.0;
+        }
+        avg = (avg * data["data"].length + last) / (data["data"].length + 1)
+        data["average"] = avg;
+
+        // Figure out the up scale.
+        var count = 0;
+        while( avg < 1 && avg > 0 ) {
+            delta_scale = delta_scale * 1000;
+            avg = avg * 1000;
+            scale_idx -= 1;
+        }
+
+        // Figure out the down scale.
+        var count = 0;
+        while( avg > 1000 ) {
+            delta_scale = delta_scale / 1000;
+            avg = avg / 1000;
+            scale_idx += 1;
+        }
+
+        // Apply uniformly.
+        var normalized_data = [];
+        $.each(data["data"], function(index, value) {
+            normalized_data.push([value[0], value[1] * delta_scale]);
+        });
+
+        // Push the new value.
+        normalized_data.push([timestamp, last * delta_scale])
+
+        data["data"]      = normalized_data;
+        data["average"]   = delta_scale * data["average"];
+        data["scale"]     = delta_scale * scale;
+        data["scale_idx"] = scale_idx;
+        data["label"]     = data["name"] + scales[scale_idx];
+    }
+
+    function updateLiveMetrics(result, timestamp, data, metrics) {
+        $.each(result, function(metric, value) {
+            if( !metrics[metric] ) {
+                metrics[metric] = {
+                    "name" : metric,
+                    "data" : [] };
+                data.push(metrics[metric]);
+            }
+
+            // Normalize the metrics.
+            normalize(metrics[metric], timestamp, value);
+
+            // Limit the size.
+            while( metrics[metric]["data"].length > 60 ) {
+                metrics[metric]["data"].shift();
+            }
+        });
+    }
+
+    function updateServers(result, timestamp, data, metrics) {
+       if( !metrics["count"] ) {
+            metrics["count"] = { "label" : "count", "data" : [] };
+            data.push(metrics["count"]);
+       }
+       metrics["count"]["data"].push([timestamp, result["ip_addresses"].length]);
+       while( metrics["count"]["data"].length > 60 ) {
+            metrics["count"]["data"].shift();
+       }
+    }
+
+    // Set everything up.
+    loadState();
+    setupActions({
+        "#start" : { "action" : "START" },
+        "#stop"  : { "action" : "STOP" },
+        "#pause" : { "action" : "PAUSE" }
     });
-    var tabstrip = $("#endpointPanel-${uuid}").data("kendoTabStrip");
-    tabstrip.select(tabstrip.tabGroup.children("li:first"));
+    loadConfig();
+    loadMetrics();
+    loadDelete();
+    setupGraph($("#livemetrics"), "endpoints/${object}/metrics", updateLiveMetrics);
+    setupGraph($("#servers"), "endpoints/${object}/ips", updateServers);
 </script>
+
+<%include file="/footer.html"/>

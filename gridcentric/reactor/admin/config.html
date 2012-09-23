@@ -1,23 +1,97 @@
-<!DOCTYPE HTML>
+<%include file="/configs.html" args="name=object"/>
 
-<div class="wrapper">
-    <div id="configDomain"></div>
-    <div id="configAuthKey"></div>
+<div class="span9">
+
+% if object == 'core':
+<h3>Core</h3>
+
+<form class="form-horizontal">
+
+<div class="control-group">
+    <label class="control-label" for="domain">Domain</label>
+    <div class="controls">
+        <input type="text" id="domain" class="input-large"></textarea>
+        <button id="domainSave" class="btn" type="submit">Save</button>
+    </div>
+</div>
+
+<div class="control-group">
+    <label class="control-label" for="authkey">AuthKey</label>
+    <div class="controls">
+        <input type="password" id="authkey" class="input-large"></input>
+        <button id="authkeySave" class="btn" type="submit">Save</button>
+    </div>
+</div>
+
+</form>
+
+% elif object == 'cluster':
+<h3>Cluster</h3>
+<p>Sorry, cluster configuration is currently not available from the
+administration panel.</p>
+
+% elif object == 'about':
+<h3>About</h3>
+<p>Gridcentric Reactor is a virtual appliance for load balancing
+and managing scalable web services.</p>
+<p>For more information, visit
+<a href="http://www.gridcentric.com">www.gridcentric.com</a>.</p>
+% endif
+
 </div>
 
 <script type="text/javascript">
-    setupConfig($("#configDomain"),
-                "Domain",  // Name.
-                false,     // Textarea.
-                "domain",  // Path.
-                "domain"); // Field.
-                 
-    setupConfig($("#configAuthKey"),
-                "AuthKey",  // Name.
-                false,      // Textarea.
-                "auth_key", // Path.
-                "auth_key", // Field.
-                false,      // Read-only.
-                true,       // Noload.
-                function () { window.location.reload(); });
+    function loadDomain() {
+        $("#domain").attr("disabled", "disabled");
+        $("#domain").attr("value", "Loading...");
+
+        $.ajax({
+            url: "/v1.0/domain?auth_key=${auth_key}",
+            type: 'GET',
+            dataType: 'json',
+            success: function(result) {
+                $("#domain").attr("value", result["domain"]);
+                $("#domain").removeAttr("disabled");
+            },
+        });
+
+        $("#domainSave").click(function (e) {
+            e.preventDefault();
+            $("#domain").attr("disabled", "disabled");
+            var value = $("#domain").val();
+            $.ajax({
+                url: "/v1.0/domain?auth_key=${auth_key}",
+                type: 'POST',
+                dataType: 'json',
+                data: JSON.stringify({ "domain" : value }),
+                contentType: 'application/json',
+                success: function(result) {
+                    $("#domain").removeAttr("disabled");
+                    window.location.reload();
+                },
+            });
+        });
+    }
+
+    function loadAuthKey() {
+        $("#authkeySave").click(function (e) {
+            e.preventDefault();
+            var value = $("#authkey").val();
+            $.ajax({
+                url: "/v1.0/auth_key?auth_key=${auth_key}",
+                type: 'POST',
+                dataType: 'json',
+                data: JSON.stringify({ "auth_key" : value }),
+                contentType: 'application/json',
+                success: function(result) {
+                    window.location.reload();
+                },
+            });
+        });
+    }
+
+    loadDomain();
+    loadAuthKey();
 </script>
+
+<%include file="/footer.html"/>

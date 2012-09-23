@@ -1,0 +1,74 @@
+<%page args='title,name,path,field,link,key=False,elements=[]'/>
+
+% if not(elements):
+<div class="span3">
+  <div class="well sidebar-nav">
+    <ul class="nav nav-list" id="itemList">
+    </ul>
+  </div>
+</div>
+% endif
+<%
+    # NOTE: This line will modify the *default*
+    # value that gets passed in to the function.
+    # Therefore, future defaults will have a True
+    # elements and we wont regenerate the div.
+    elements.append(1)
+%>
+
+<script type="text/javascript">
+    if( typeof active == 'undefined' ) {
+        active = false;
+        pending = [];
+    }
+
+    function go(req) {
+        active = true;
+        $.ajax(req);
+    }
+    function next() {
+        if( pending.length > 0 ) {
+            go(pending.shift());
+        }
+    }
+    function done() {
+        active = false;
+        next();
+    }
+    function submit(req) {
+        if( active ) {
+            pending.push(req);
+        } else {
+            go(req);
+        }
+    }
+
+    function process(result) {
+        $("#itemList").append('<li class="nav-header">${title}</li>');
+        var keys = [];
+        $.each(result['${field}'], function(index, value) {
+            % if key:
+            keys.push(index);
+            % else:
+            keys.push(value);
+            % endif
+        });
+        keys.sort();
+        $.each(keys, function(index, value) {
+            if( value == '${name}' ) {
+                $("#itemList").append('<li class="active"><a href="#">' + value + '</a></li>');
+            } else {
+                $("#itemList").append('<li><a href="${link}' + value +'?auth_key=${auth_key}">' + value + '</a></li>');
+            }
+        });
+        done();
+    }
+
+    // Submit the real request.
+    submit({
+        url: '${path}?auth_key=${auth_key}',
+        type: 'GET',
+        dataType: 'json',
+        success: process, });
+
+</script>

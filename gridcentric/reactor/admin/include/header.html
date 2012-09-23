@@ -1,0 +1,68 @@
+<%page args="section"/>
+<!DOCTYPE HTML>
+<html dir="ltr" lang="en-US">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+
+<title>Reactor</title>
+
+<!-- Pull in local libraries. -->
+<link href="/reactor/admin/lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<link href="/reactor/admin/lib/bootstrap/css/bootstrap-responsive.css" rel="stylesheet">
+<script src="http://code.jquery.com/jquery-latest.js"></script>
+<script src="/reactor/admin/lib/bootstrap/js/bootstrap.min.js"></script>
+<script src="/reactor/admin/lib/jquery.flot.js"></script>
+<script src="/reactor/admin/lib/jquery.flot.resize.js"></script>
+
+<!-- Pull in customization. -->
+<link rel="stylesheet" type="text/css" href="/reactor/admin/admin.css" media="screen"/>
+<script src="/reactor/admin/graph.js?auth_key=${auth_key}"></script>
+
+</style>
+</head>
+
+<body>
+
+<div class="navbar navbar-inverse navbar-fixed-top">
+  <div class="navbar-inner">
+      <div class="container">
+      <a class="brand" href="http://docs.gridcentric.com/reactor/">Reactor</a>
+      <div class="nav-collapse collapse">
+          <ul class="nav">
+          % if section == 'endpoints':
+          <li class="active"><a href="/reactor/admin/endpoints?auth_key=${auth_key}">Endpoints</a></li>
+          % else:
+          <li><a href="/reactor/admin/endpoints?auth_key=${auth_key}">Endpoints</a></li>
+          % endif
+
+          % if section == 'managers':
+          <li class="active"><a href="/reactor/admin/managers?auth_key=${auth_key}">Managers</a></li>
+          % else:
+          <li><a href="/reactor/admin/managers?auth_key=${auth_key}">Managers</a></li>
+          % endif
+
+          % if section == 'config':
+          <li class="active"><a href="/reactor/admin/config/core?auth_key=${auth_key}">Config</a></li>
+          % else:
+          <li><a href="/reactor/admin/config/core?auth_key=${auth_key}">Config</a></li>
+          % endif
+        </ul>
+        <form class="navbar-form pull-right">
+          <input class="span2" id="authkeyVal" type="text" placeholder="Auth-Key">
+          <button type="submit" id="authkeySet" class="btn">Set</button>
+        </form>
+    </div>
+    </div>
+  </div>
+</div>
+
+<script type="text/javascript">
+    $("#authkeySet").click(function (e) {
+        e.preventDefault();
+        var value = $("#authkeyVal").val();
+        window.location = window.location.pathname + "?auth_key=" + value;
+    });
+</script>
+
+<div class="container-fluid">
+<div class="row-fluid">
