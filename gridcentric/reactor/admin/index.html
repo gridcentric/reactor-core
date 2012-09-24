@@ -1,24 +1,25 @@
 <%include file="/navbar.html"/>
 
-<div class="span9">
+<div id="login" class="span6">
+    <div class="hero-unit">
+        <h3>You are not authenticated.</h3>
+        <form class="form-inline">
+            <input class="input-medium" id="authkeyVal" type="text" placeholder="Auth-Key">
+            <button type="submit" id="authkeySet" class="btn">Set</button>
+        </form>
+    </div>
+</div>
+
+<div id="loggedin" class="span9">
 
 <div class="hero-unit">
-
-    <div id="loggedin">
+    <div>
         <h3>Reactor Administration</h3>
         <p>Gridcentric Reactor is a virtual appliance for load balancing and
         managing scalable web services. This interface provides a quick
         overview of endpoints and managers, but more advanced usage will
         require the command-line tools and using the API directly.</p>
         <p><a class="btn btn-primary btn-large" href="http://docs.gridcentric.com/reactor/">Documentation &raquo;</a></p>
-    </div>
-
-    <div id="login">
-        <h3>You are not authenticated.</h3>
-        <form class="form-inline">
-            <input class="input-medium" id="authkeyVal" type="text" placeholder="Auth-Key">
-            <button type="submit" id="authkeySet" class="btn">Set</button>
-        </form>
     </div>
 </div>
 
@@ -74,7 +75,7 @@
     function do_login() {
         $("#navbar").removeClass("hidden");
         $("#loggedin").removeClass("hidden");
-        $("#login").addClass("hidden");
+        $("#login").html("");
     }
 
     function process_endpoints(result) {

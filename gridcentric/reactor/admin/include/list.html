@@ -1,33 +1,48 @@
-<%page args='title,path,field,link,name="",key=False'/>
+<%page args='title,path,field,link,name="",key=False,second_time=[]'/>
 
+<%
+# This exploits a little trick in the way this code
+# is mapped onto python. We push something into the
+# default argument to ensure that the second time
+# through this template, we dont regenerate the code
+# below. This will keep everything consistent.
+if not(second_time):
+    second_time.append(True)
+    first_time = True
+else:
+    first_time = False
+%>
+
+% if first_time:
 <script type="text/javascript">
-    if( typeof active == 'undefined' ) {
-        active = false;
-        pending = [];
-    }
+    var list_active = false;
+    var list_pending = [];
 
-    function go(req) {
-        active = true;
+    function list_go(req) {
+        list_active = true;
         $.ajax(req);
     }
-    function next() {
-        if( pending.length > 0 ) {
-            go(pending.shift());
+    function list_next() {
+        if( list_pending.length > 0 ) {
+            list_go(list_pending.shift());
         }
     }
-    function done() {
-        active = false;
-        next();
+    function list_done() {
+        list_active = false;
+        list_next();
     }
-    function submit(req) {
-        if( active ) {
-            pending.push(req);
+    function list_submit(req) {
+        if( list_active ) {
+            list_pending.push(req);
         } else {
-            go(req);
+            list_go(req);
         }
     }
+</script>
+% endif
 
-    function process(result) {
+<script type="text/javascript">
+    function list_process(result) {
         $("#itemList").append('<li class="nav-header">${title}</li>');
         var keys = [];
         $.each(result['${field}'], function(index, value) {
@@ -45,14 +60,13 @@
                 $("#itemList").append('<li><a href="${link}' + value +'?auth_key=${auth_key}">' + value + '</a></li>');
             }
         });
-        done();
+        list_done();
     }
 
     // Submit the real request.
-    submit({
+    list_submit({
         url: '${path}?auth_key=${auth_key}',
         type: 'GET',
         dataType: 'json',
-        success: process, });
-
+        success: list_process, });
 </script>
