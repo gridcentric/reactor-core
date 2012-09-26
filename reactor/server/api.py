@@ -1,4 +1,5 @@
 import threading
+import traceback
 import logging
 import json
 import os
@@ -120,9 +121,16 @@ class ServerApi(ReactorApi):
         if self.zk_servers != zk_servers:
             self.stop_manager()
 
+        def manager_run():
+            try:
+                self.manager.run()
+            except:
+                error = traceback.format_exc()
+                logging.error("An unrecoverable error occurred: %s" % (error))
+
         if not(self.manager_running):
             self.manager = ReactorScaleManager(zk_servers)
-            self.manager_thread = threading.Thread(target=self.manager.run)
+            self.manager_thread = threading.Thread(target=manager_run)
             self.manager_thread.daemon = True
             self.manager_thread.start()
             self.manager_running = True
