@@ -43,7 +43,6 @@ class ReactorScaleManager(ScaleManager):
                 hosts.append(host)
         iptables.setup(hosts, extra_ports=[8080])
 
-    @locked
     def manager_register(self, config_str=''):
         # Ensure that the default loadbalancers are available.
         new_config = ManagerConfig(config_str)
@@ -56,12 +55,6 @@ class ReactorScaleManager(ScaleManager):
                                 self.reload_domain,
                                 default_value=self.domain))
 
-    @locked
-    def health_check(self):
-        # Perform a normal health check.
-        super(ReactorScaleManager, self).health_check()
-
-    @locked
     def serve(self):
         # Perform normal setup.
         super(ReactorScaleManager, self).serve()
@@ -74,7 +67,6 @@ class ReactorScaleManager(ScaleManager):
         if not("api" in self.endpoints):
             self.create_endpoint("api")
 
-    @locked
     def create_endpoint(self, endpoint_name):
         if endpoint_name == "api":
             # Create the API endpoint.
@@ -87,7 +79,6 @@ class ReactorScaleManager(ScaleManager):
             # Create the standard endpoint.
             super(ReactorScaleManager, self).create_endpoint(endpoint_name)
 
-    @locked
     def remove_endpoint(self, endpoint_name, unmanage=False):
         if endpoint_name == "api" and unmanage:
             # Recreate, we always have an API endpoint.
