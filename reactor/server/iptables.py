@@ -94,14 +94,13 @@ def zookeeper_reject(extra_ports=[]):
 def setup(hosts=[], extra_ports=[]):
     zookeeper_clear(extra_ports=extra_ports)
     zookeeper_allow(ZOOKEEPER_LOCAL, extra_ports=extra_ports)
-    addresses = []
+    addresses = [ZOOKEEPER_LOCAL]
     for host in hosts:
         try:
             address = socket.gethostbyname(host)
         except socket.error:
             continue
         if not(address in addresses):
+            zookeeper_allow(address, extra_ports=extra_ports)
             addresses.append(address)
-    for address in addresses:
-        zookeeper_allow(address, extra_ports=extra_ports)
     zookeeper_reject(extra_ports=extra_ports)
