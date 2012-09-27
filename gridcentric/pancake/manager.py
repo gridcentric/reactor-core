@@ -773,7 +773,7 @@ class ScaleManager(object):
                     # This should be a dictionary { "name" : (weight, value) }
                     ip_metrics = json.loads(ip_metrics)
                     metrics.append(ip_metrics)
-                    if not ip_address int metric_ips:
+                    if not ip_address in metric_ips:
                         metric_ips.append(ip_address)
                     if self.metric_indicates_active(ip_metrics):
                         active_connections.append(ip_address)
