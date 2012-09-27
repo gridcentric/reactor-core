@@ -54,6 +54,12 @@ class ManagerConfig(Config):
         return self._getint("manager", "health_check", 5)
 
 def locked(fn):
+    """
+    IMPORTANT: There is a potential deadlock if the manager is locked when setting / clearing
+    a zookeeper watch. Our policy is that the manager cannot be locked when it makes a call
+    to one of the zookeeper client's watch functions. Note to check the full call chain to 
+    ensure that a higher level function is not setting the lock.
+    """
     def wrapped_fn(self, *args, **kwargs):
         try:
             self.cond.acquire()
@@ -90,11 +96,14 @@ class ScaleManager(object):
         self.load_balancer = None # Load balancer connections.
 
     @locked
-    def serve(self):
+    def __connect_to_zookeeper(self):
         # Create a Zookeeper connection.
         if self.zk_conn:
             self.zk_conn.close()
         self.zk_conn = ZookeeperConnection(self.zk_servers)
+
+    def serve(self):
+        self.__connect_to_zookeeper()
 
         # Load our configuration and register ourselves.
         self.manager_register()
@@ -152,7 +161,6 @@ class ScaleManager(object):
     def endpoint_owned(self, endpoint):
         return self.key_to_owned.get(endpoint.key(), False)
 
-    @locked
     def endpoint_change(self, endpoints):
         logging.info("Endpoints have changed: new=%s, existing=%s" %
                      (endpoints, self.endpoints.keys()))
@@ -161,34 +169,57 @@ class ScaleManager(object):
             if endpoint_name not in self.endpoints:
                 self.create_endpoint(endpoint_name)
 
-        endpoints_to_remove = []
-        for endpoint_name in self.endpoints:
+        known_endpoint_names = self.endpoints.keys()
+        for endpoint_name in known_endpoint_names:
             if endpoint_name not in endpoints:
                 self.remove_endpoint(endpoint_name, unmanage=True)
-                endpoints_to_remove += [endpoint_name]
 
-        for endpoint in endpoints_to_remove:
-            del self.endpoints[endpoint]
-
-    @locked
     def update_config(self, config_str):
         self.manager_register(config_str)
         self.reload_loadbalancer()
 
-    @locked
-    def manager_register(self, config_str=''):
-        # Figure out our global IPs.
-        logging.info("Manager %s has key %s." % (str(self.names), self.uuid))
-
-        # Load our given configuration.
-        self.config = ManagerConfig(config_str)
-
-        # Watch for future updates to our configuration, and recall update_config.
+    def __configure(self, config_str):
+        """
+        This setups up the base manager configuration by combining
+        the global configuration and config_str into a single configuration.
+        """
         self.zk_conn.clear_watch_fn(self.update_config)
         global_config = self.zk_conn.watch_contents(paths.config(), self.update_config)
-        if global_config:
-            self.config.reload(global_config)
+        # Load our given configuration.
+        base_config = ManagerConfig(config_str)
 
+        if global_config:
+            base_config.reload(global_config)
+
+        # NOTE: We may have multiple global IPs (especially in the case of
+        # provisioning a cluster that could have floating IPs that move around.
+        # We read in each of the configuration blocks in turn, and hope that
+        # they are not somehow mutually incompatible.
+        configured_ips = None
+        if self.names:
+
+            def load_ip_config(ip):
+                # Reload our local config.
+                local_config = self.zk_conn.watch_contents(
+                                    paths.manager_config(ip),
+                                    self.update_config)
+                if local_config:
+                    base_config.reload(local_config)
+
+            # Read all configured IPs.
+            for ip in self.names:
+                load_ip_config(ip)
+            configured_ips = base_config.ips()
+            for ip in configured_ips:
+                load_ip_config(ip)
+
+        return base_config
+
+    @locked
+    def __register_manager_ips(self, configured_ips):
+        """
+        Register all of the manager's configured ips.
+        """
         # We remove all existing registered IPs.
         for ip in self.registered_ips:
             if self.zk_conn.read(paths.manager_ip(ip)) == self.uuid:
@@ -196,26 +227,7 @@ class ScaleManager(object):
                 self.zk_conn.delete(paths.manager_ip(ip))
         self.registered_ips = []
 
-        # NOTE: We may have multiple global IPs (especially in the case of
-        # provisioning a cluster that could have floating IPs that move around.
-        # We read in each of the configuration blocks in turn, and hope that
-        # they are not somehow mutually incompatible.
         if self.names:
-            def load_ip_config(ip):
-                # Reload our local config.
-                local_config = self.zk_conn.watch_contents(
-                                    paths.manager_config(ip),
-                                    self.update_config)
-                if local_config:
-                    self.config.reload(local_config)
-
-            # Read all configured IPs.
-            for ip in self.names:
-                load_ip_config(ip)
-            configured_ips = self.config.ips()
-            for ip in configured_ips:
-                load_ip_config(ip)
-
             def register_ip(name):
                 try:
                     # Register our IP.
@@ -234,11 +246,13 @@ class ScaleManager(object):
                 for name in self.names:
                     register_ip(name)
 
+    @locked
+    def __determine_manager_keys(self, key_num):
         # Generate keys.
-        while len(self.manager_keys) < self.config.keys():
+        while len(self.manager_keys) < key_num:
             # Generate a random hash key to associate with this manager.
             self.manager_keys.append(hashlib.md5(str(uuid.uuid4())).hexdigest())
-        while len(self.manager_keys) > self.config.keys():
+        while len(self.manager_keys) > key_num:
             # Drop keys while we're too high.
             del self.manager_keys[len(self.manager_keys) - 1]
 
@@ -247,10 +261,14 @@ class ScaleManager(object):
         self.zk_conn.write(paths.manager_keys(self.uuid), key_string, ephemeral=True)
         logging.info("Generated %d keys." % len(self.manager_keys))
 
+    @locked
+    def __select_endpoints(self):
         # If we're not doing initial setup, refresh endpoints.
         for endpoint in self.endpoints.values():
             self.manager_select(endpoint)
 
+    @locked
+    def __setup_loadbalancer_connections(self, loadbalancer_names):
         # Create the loadbalancer connections.
         # NOTE: Any old loadbalancer object should be cleaned
         # up automatically (i.e. the objects should implement
@@ -260,6 +278,24 @@ class ScaleManager(object):
             self.load_balancer.append(\
                 lb_connection.get_connection(\
                     name, self.config.loadbalancer_config(name), self))
+
+    @locked
+    def __set_config(self, config):
+        self.config = config
+
+    def manager_register(self, config_str=''):
+        # Figure out our global IPs.
+        logging.info("Manager %s has key %s." % (str(self.names), self.uuid))
+
+        manager_config = self.__configure(config_str)
+        self.__register_manager_ips(manager_config.ips())
+        self.__determine_manager_keys(manager_config.keys())
+
+        self.__set_config(manager_config)
+        self.__select_endpoints()
+
+        self.__setup_loadbalancer_connections(manager_config.loadbalancer_names())
+
 
     @locked
     def manager_change(self, managers):
@@ -298,7 +334,6 @@ class ScaleManager(object):
         # Kick the loadbalancer.
         self.reload_loadbalancer()
 
-    @locked
     def create_endpoint(self, endpoint_name):
         logging.info("New endpoint %s found to be managed." % endpoint_name)
 
@@ -313,14 +348,19 @@ class ScaleManager(object):
         self.add_endpoint(endpoint)
 
     @locked
-    def add_endpoint(self, endpoint):
+    def __add_endpoint(self, endpoint):
         self.endpoints[endpoint.name] = endpoint
         endpoint_key = endpoint.key()
 
-        if not(self.key_to_endpoints.has_key(endpoint.key())):
-                self.key_to_endpoints[endpoint.key()] = []
-        if not(endpoint.name in self.key_to_endpoints[endpoint.key()]):
-            self.key_to_endpoints[endpoint.key()].append(endpoint.name)
+        if not(self.key_to_endpoints.has_key(endpoint_key)):
+                self.key_to_endpoints[endpoint_key] = []
+
+        if not(endpoint.name in self.key_to_endpoints[endpoint_key]):
+            self.key_to_endpoints[endpoint_key].append(endpoint.name)
+
+    def add_endpoint(self, endpoint):
+
+        self.__add_endpoint(endpoint)
 
         def local_lock(fn):
             def wrapped_fn(*args, **kwargs):
@@ -380,6 +420,22 @@ class ScaleManager(object):
         endpoint.update()
 
     @locked
+    def __remove_endpoint(self, endpoint, unmanage):
+
+        endpoint_name = endpoint.name
+        logging.info("Unmanaging endpoint %s" % (endpoint_name))
+        endpoint_names = self.key_to_endpoints.get(endpoint.key(), [])
+        if endpoint_name in endpoint_names:
+            endpoint_names.remove(endpoint_name)
+            if len(endpoint_names) == 0:
+                del self.key_to_endpoints[endpoint.key()]
+
+        # Perform a full unmanage if this is required.
+        if unmanage and self.endpoint_owned(endpoint):
+            endpoint.unmanage()
+
+        del self.endpoints[endpoint_name]
+
     def remove_endpoint(self, endpoint_name, unmanage=False):
         """
         This removes / unmanages the endpoint.
@@ -394,18 +450,7 @@ class ScaleManager(object):
 
             # Update the loadbalancer for this endpoint.
             self.update_loadbalancer(endpoint, remove=True)
-
-            logging.info("Unmanaging endpoint %s" % (endpoint_name))
-            endpoint_names = self.key_to_endpoints.get(endpoint.key(), [])
-            if endpoint_name in endpoint_names:
-                endpoint_names.remove(endpoint_name)
-                if len(endpoint_names) == 0:
-                    del self.key_to_endpoints[endpoint.key()]
-
-            # Perform a full unmanage if this is required.
-            if unmanage and self.endpoint_owned(endpoint):
-                endpoint.unmanage()
-
+            self.__remove_endpoint(endpoint, unmanage)
             self.manager_remove(endpoint)
 
     @locked
