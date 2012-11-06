@@ -21,6 +21,7 @@ install: clean dist
 clean:
 	@rm -rf dist build reactor.egg-info
 	@find . -name \*.pyc -exec rm -f {} \;
+	@rm -rf *.deb *.rpm debbuild rpmbuild
 .PHONY: clean
 
 # Build the development environment by installing all of the dependent packages.
