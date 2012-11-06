@@ -1,12 +1,12 @@
 """
 The generic load balancer interface.
 """
-from gridcentric.pancake import utils
-from gridcentric.pancake.config import SubConfig
+from reactor import utils
+from reactor.config import SubConfig
 
 import logging
 
-import gridcentric.pancake.zookeeper.paths as paths
+import reactor.zookeeper.paths as paths
 
 def get_connection(name, config, scale_manager):
 
@@ -16,7 +16,7 @@ def get_connection(name, config, scale_manager):
     lb_config = LoadBalancerConfig(config)
     lb_class = lb_config.loadbalancer_class()
     if lb_class == '':
-        lb_class = "gridcentric.pancake.loadbalancer.%s.Connection" % (name)
+        lb_class = "reactor.loadbalancer.%s.Connection" % (name)
     lb_conn_class = utils.import_class(lb_class)
     return lb_conn_class(name, scale_manager, config)
 

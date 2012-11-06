@@ -1,14 +1,14 @@
 import json
 import httplib2
 
-class PancakeApiClient(httplib2.Http):
+class ReactorApiClient(httplib2.Http):
     """
-    A simple client that interacts with the REST interface of the pancakeApi. This is to be
+    A simple client that interacts with the REST interface of the reactorApi. This is to be
     used in third-party applications that want python bindings to interact with the system.
     """
 
     def __init__(self, api_url, api_key=None):
-        super(PancakeApiClient, self).__init__()
+        super(ReactorApiClient, self).__init__()
 
         self.api_url = api_url
         self.api_key = api_key
@@ -24,7 +24,7 @@ class PancakeApiClient(httplib2.Http):
 
     def list_managed_endpoints(self):
         """
-        Returns a list of all the endpoints currently being managed by the pancake.
+        Returns a list of all the endpoints currently being managed by the reactor.
         """
         resp, body = self._authenticated_request('/v1.0/endpoints', 'GET')
         return body.get('endpoints', [])
@@ -150,14 +150,14 @@ class PancakeApiClient(httplib2.Http):
 
     def get_domain(self):
         """
-        Gets the current pancake domain.
+        Gets the current reactor domain.
         """
         resp, body = self._authenticated_request('/v1.0/domain', 'GET')
         return body.get("domain", '')
 
     def set_domain(self, domain):
         """
-        Sets the current pancake domain.
+        Sets the current reactor domain.
         """
         self._authenticated_request('/v1.0/domain',
                                     'POST', body={'domain':domain})
@@ -174,7 +174,7 @@ class PancakeApiClient(httplib2.Http):
             kwargs['headers']['Content-Type'] = 'application/json'
             kwargs['body'] = json.dumps(kwargs['body'])
 
-        resp, body = super(PancakeApiClient, self).request(*args, **kwargs)
+        resp, body = super(ReactorApiClient, self).request(*args, **kwargs)
 
         if resp.status != 200:
             raise Exception("Error (status=%s): %s" % (resp.status, str(body)))

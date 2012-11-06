@@ -3,9 +3,9 @@ import signal
 
 from mako.template import Template
 
-from gridcentric.pancake.config import SubConfig
-from gridcentric.pancake.loadbalancer.connection import LoadBalancerConnection
-from gridcentric.pancake.loadbalancer.netstat import connection_count
+from reactor.config import SubConfig
+from reactor.loadbalancer.connection import LoadBalancerConnection
+from reactor.loadbalancer.netstat import connection_count
 
 class DnsmasqLoadBalancerConfig(SubConfig):
 
@@ -13,7 +13,7 @@ class DnsmasqLoadBalancerConfig(SubConfig):
         return self._get("config_path", "/etc/dnsmasq.d")
 
     def hosts_path(self):
-        return self._get("hosts_path", "/etc/hosts.pancake")
+        return self._get("hosts_path", "/etc/hosts.reactor")
 
 class Connection(LoadBalancerConnection):
     
@@ -82,7 +82,7 @@ class Connection(LoadBalancerConnection):
                                     hosts=self.config.hosts_path())
 
         # Write out the config file.
-        config_file = file(os.path.join(self.config.config_path(), "pancake.conf"), 'wb')
+        config_file = file(os.path.join(self.config.config_path(), "reactor.conf"), 'wb')
         config_file.write(conf)
         config_file.flush()
         config_file.close()

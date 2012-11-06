@@ -7,12 +7,12 @@ dependent projects.
 2. Using Openstack, with the gridcentric extensions installed, boot a new
 instance. Install the VMS agent in this instance, and deploy your favorite
 sample application.  You'll also need to deploy a hook in /etc/gridcentric/clone.d
-which registers with Pancake when cloning occurs, something like:
+which registers with reactor when cloning occurs, something like:
 
-'''/etc/gridcentric/clone.d/90_pancake'''
+'''/etc/gridcentric/clone.d/90_reactor'''
    #!/bin/bash
    while true; do
-       curl -X POST <http://this-pancake-url/v1.0/register> && break
+       curl -X POST <http://this-reactor-url/v1.0/register> && break
    done
 
 Once this is done and the instance is running your demo app, bless the instance.
@@ -21,13 +21,13 @@ Once this is done and the instance is running your demo app, bless the instance.
 to point to the newly created instance.
 
 4. Run the scale manager server
-$ sudo bin/pancake -z localhost:2181 runserver
+$ sudo bin/reactor -z localhost:2181 runserver
 
 5. Run the scale manager API that allows communication with the scale manager.
-$ bin/pancake -z localhost:2181 runapi
+$ bin/reactor -z localhost:2181 runapi
 
 6. Create a new endpoint to autoscale, using the example endpoint.conf.
-$ bin/pancake manage testscale < example/endpoint.conf
+$ bin/reactor manage testscale < example/endpoint.conf
 
 7. The scale manager will now manage the endpoint, and launch new instances up
 to the specified minimum number of instances. The load balancer configuration
@@ -37,7 +37,7 @@ so that we know the IP is up and running.
 ==Dependencies==
 
 nginx (optional)
-    The default load balancer used by pancake.
+    The default load balancer used by reactor.
 
 dnsmasq (optional)
     Required if you are using the 'dnsmasq' load balancer.
@@ -58,7 +58,7 @@ python-netifaces
 ==Project Contents==
 
 bin
-    Contains scripts that are used to start and configure the Pancake endpoint / API.
+    Contains scripts that are used to start and configure the reactor endpoint / API.
 
 gridcentric
     The top-level python package.

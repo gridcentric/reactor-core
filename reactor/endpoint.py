@@ -4,10 +4,10 @@ import traceback
 import socket
 import sys
 
-from gridcentric.pancake.config import Config
-from gridcentric.pancake.config import ConfigView
-import gridcentric.pancake.cloud.connection as cloud_connection
-import gridcentric.pancake.metrics.calculator as metric_calculator
+from reactor.config import Config
+from reactor.config import ConfigView
+import reactor.cloud.connection as cloud_connection
+import reactor.metrics.calculator as metric_calculator
 
 def compute_key(url):
     return hashlib.md5(url).hexdigest()

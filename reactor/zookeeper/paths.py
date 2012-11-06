@@ -3,7 +3,7 @@ This defines the various paths used in zookeeper
 """
 
 # The root path that all other paths hang off from.
-ROOT = "/gridcentric/pancake"
+ROOT = "/reactor"
 
 # The path to the authorization hash used by the API to validate requests.
 AUTH_HASH = "%s/auth" % (ROOT)
@@ -93,7 +93,7 @@ def endpoint_live_active(name):
     return "%s/live_active" % (endpoint(name))
 
 # The ips that have been confirmed by the system for a particular endpoint. An
-# ip is confirmed once it sends a message to a pancake.
+# ip is confirmed once it sends a message to a reactor.
 def confirmed_ips(name):
     return "%s/confirmed_ip" % (endpoint(name))
 

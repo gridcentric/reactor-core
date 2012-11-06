@@ -5,8 +5,8 @@ from httplib import HTTPException
 from novaclient import shell
 from novaclient.v1_1.client import Client as NovaClient
 
-from gridcentric.pancake.config import SubConfig
-import gridcentric.pancake.cloud.connection as cloud_connection
+from reactor.config import SubConfig
+import reactor.cloud.connection as cloud_connection
 
 class BaseNovaConnection(cloud_connection.CloudConnection):
 
@@ -162,7 +162,7 @@ class Connection(BaseNovaConnection):
         return instances
 
     def _start_instance(self, params={}):
-        # TODO: We can pass in the pancake parameter here via 
+        # TODO: We can pass in the reactor parameter here via 
         # CloudStart or some other standard support mechanism.
         userdata = "reactor=%s" % params.get('reactor', '')
         self._novaclient().servers.create(self.config.instance_name(),

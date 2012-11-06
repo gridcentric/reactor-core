@@ -14,7 +14,7 @@ install: clean
 .PHONY: install
 
 clean:
-	@rm -rf dist build pancake.egg-info
+	@rm -rf dist build reactor.egg-info
 	@find . -name \*.pyc -exec rm -f {} \;
 .PHONY: clean
 

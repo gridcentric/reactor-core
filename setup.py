@@ -10,24 +10,23 @@ except ImportError:
         from setuptools import setup, find_packages
 
 setup(
-    name="pancake",
-    description="Gridcentric load balancer and scale manager (pancake).",
+    name="reactor",
+    description="Load balancer and scale manager.",
     version=os.getenv("VERSION"),
     author="Gridcentric Inc.",
     author_email="support@gridcentric.com",
     url="http://www.gridcentric.com",
-    packages=["gridcentric",
-              "gridcentric.pancake",
-              "gridcentric.pancake.loadbalancer",
-              "gridcentric.pancake.zookeeper",
-              "gridcentric.pancake.metrics",
-              "gridcentric.pancake.cloud"],
-    package_data={'gridcentric.pancake.loadbalancer':\
-            ["nginx.template", "dnsmasq.template", "pancake.conf"]},
+    packages=["reactor",
+              "reactor.loadbalancer",
+              "reactor.zookeeper",
+              "reactor.metrics",
+              "reactor.cloud"],
+    package_data={'reactor.loadbalancer':\
+            ["nginx.template", "dnsmasq.template", "reactor.conf"]},
     include_package_data=True,
     entry_points={
         'console_scripts': [
-            'pancake = gridcentric.pancake.cli:main'
+            'reactor = reactor.cli:main'
         ]
     }
 )

@@ -6,11 +6,11 @@ import traceback
 from pyramid.config import Configurator
 from pyramid.response import Response
 
-from gridcentric.pancake.endpoint import EndpointConfig
-from gridcentric.pancake.endpoint import State
-from gridcentric.pancake.manager import ManagerConfig
-from gridcentric.pancake.zooclient import PancakeClient
-from gridcentric.pancake.zookeeper.connection import ZookeeperException
+from reactor.endpoint import EndpointConfig
+from reactor.endpoint import State
+from reactor.manager import ManagerConfig
+from reactor.zooclient import ReactorClient
+from reactor.zookeeper.connection import ZookeeperException
 
 def get_auth_key(request):
     return request.headers.get('X-Auth-Key', None) or \
@@ -79,7 +79,7 @@ def connected(request_handler):
         return response
     return fn
 
-class PancakeApi:
+class ReactorApi:
 
     def __init__(self, zk_servers):
         self.zk_servers = zk_servers
@@ -150,7 +150,7 @@ class PancakeApi:
     def reconnect(self, zk_servers):
         self.disconnect()
         self.zk_servers = zk_servers
-        self.client = PancakeClient(zk_servers)
+        self.client = ReactorClient(zk_servers)
 
     def disconnect(self):
         if self.client:
@@ -251,7 +251,7 @@ class PancakeApi:
 
     def _create_admin_auth_token(self, auth_key):
         if auth_key:
-            salt = 'gridcentricpancake'
+            salt = 'gridcentricreactor'
             return hashlib.sha1("%s%s" % (salt, auth_key)).hexdigest()
         else:
             return None

@@ -11,9 +11,9 @@ import logging
 
 from mako.template import Template
 
-from gridcentric.pancake.config import SubConfig
-from gridcentric.pancake.loadbalancer.connection import LoadBalancerConnection
-from gridcentric.pancake.loadbalancer.netstat import connection_count
+from reactor.config import SubConfig
+from reactor.loadbalancer.connection import LoadBalancerConnection
+from reactor.loadbalancer.netstat import connection_count
 
 class NginxLogReader(object):
     def __init__(self, log_filename, filter=None):
@@ -66,7 +66,7 @@ class NginxLogWatcher(threading.Thread):
     def __init__(self, access_logfile):
         threading.Thread.__init__(self)
         self.daemon = True
-        log_filter = "pancake> " \
+        log_filter = "reactor> " \
                    + "\[([^\]]*)\]" \
                    + "[^<]*" \
                    + "<([^>]*?)>" \
@@ -275,8 +275,8 @@ class Connection(LoadBalancerConnection):
 
     def save(self):
         # Copy over our base configuration.
-        shutil.copyfile(os.path.join(os.path.dirname(__file__), 'pancake.conf'),
-                        os.path.join(self.config.config_path(), 'pancake.conf'))
+        shutil.copyfile(os.path.join(os.path.dirname(__file__), 'reactor.conf'),
+                        os.path.join(self.config.config_path(), 'reactor.conf'))
 
         # Send a signal to NginX to reload the configuration
         # (Note: we might need permission to do this!!)

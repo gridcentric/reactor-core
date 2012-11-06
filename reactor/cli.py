@@ -9,8 +9,8 @@ import json
 from StringIO import StringIO
 from ConfigParser import SafeConfigParser
 
-from gridcentric.pancake.apiclient import PancakeApiClient
-from gridcentric.pancake import log
+from reactor.apiclient import ReactorApiClient
+from reactor import log
 
 def usage():
     print "usage: %s < -h|--help | [options] command >" % sys.argv[0]
@@ -125,7 +125,7 @@ def main():
     command = get_arg(0)
     
     def get_api_client():
-        return PancakeApiClient(api_server, password)
+        return ReactorApiClient(api_server, password)
     
     try:
         if command == "version":
@@ -281,7 +281,7 @@ def main():
     
         elif command == "runserver":
     
-            from gridcentric.pancake.manager import ScaleManager
+            from reactor.manager import ScaleManager
     
             log.configure(loglevel, logfile)
             manager = ScaleManager(zk_servers, get_args())
@@ -290,10 +290,10 @@ def main():
         elif command == "runapi":
     
             from paste.httpserver import serve
-            from gridcentric.pancake.api import PancakeApi
+            from reactor.api import ReactorApi
     
             log.configure(loglevel, logfile)
-            api = PancakeApi(zk_servers)
+            api = ReactorApi(zk_servers)
             serve(api.get_wsgi_app(), host='0.0.0.0')
     
         else:

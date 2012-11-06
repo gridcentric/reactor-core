@@ -9,20 +9,20 @@ import traceback
 import socket
 from StringIO import StringIO
 
-from gridcentric.pancake.config import Config
-from gridcentric.pancake.config import ConfigView
+from reactor.config import Config
+from reactor.config import ConfigView
 
-from gridcentric.pancake.endpoint import Endpoint
-from gridcentric.pancake.endpoint import State
+from reactor.endpoint import Endpoint
+from reactor.endpoint import State
 
-import gridcentric.pancake.loadbalancer.connection as lb_connection
-from gridcentric.pancake.loadbalancer.connection import BackendIP
+import reactor.loadbalancer.connection as lb_connection
+from reactor.loadbalancer.connection import BackendIP
 
-from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
-from gridcentric.pancake.zookeeper.connection import ZookeeperException
-import gridcentric.pancake.zookeeper.paths as paths
+from reactor.zookeeper.connection import ZookeeperConnection
+from reactor.zookeeper.connection import ZookeeperException
+import reactor.zookeeper.paths as paths
 
-from gridcentric.pancake.metrics.calculator import calculate_weighted_averages
+from reactor.metrics.calculator import calculate_weighted_averages
 
 # We must always specify some domain for the installation.
 # If none is available, we use example.com as it is protected
@@ -80,7 +80,7 @@ class ScaleManager(object):
         self.cond       = threading.Condition()
 
         self.uuid   = str(uuid.uuid4()) # Manager uuid (generated).
-        self.domain = NODOMAIN          # Pancake domain.
+        self.domain = NODOMAIN          # Reactor domain.
 
         self.endpoints = {}        # Endpoint map (name -> endpoint)
         self.key_to_endpoints = {} # Endpoint map (key() -> [names...])
@@ -602,7 +602,7 @@ class ScaleManager(object):
 
     @locked
     def start_params(self, endpoint=None):
-        # FIXME: If the user is running the Pancake server manually, then there
+        # FIXME: If the user is running the Reactor server manually, then there
         # is no real way to pass in a valid set of start parameters here. This
         # should be extracted and implemented in a more flexible way at some
         # point down the road.

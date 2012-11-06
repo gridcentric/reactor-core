@@ -6,9 +6,9 @@ import random
 import flowcontrol
 import flowcontrol.daemon
 
-from gridcentric.pancake.config import SubConfig
-from gridcentric.pancake.loadbalancer.connection import LoadBalancerConnection
-from gridcentric.pancake.loadbalancer.netstat import connection_count
+from reactor.config import SubConfig
+from reactor.loadbalancer.connection import LoadBalancerConnection
+from reactor.loadbalancer.netstat import connection_count
 
 class ConnectionConsumer(threading.Thread):
     def __init__(self, connection, producer, exclusive=True):

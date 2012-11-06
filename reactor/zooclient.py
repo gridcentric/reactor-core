@@ -1,10 +1,10 @@
 import json
 
-from gridcentric.pancake.endpoint import EndpointConfig
-from gridcentric.pancake.zookeeper.connection import ZookeeperConnection
-import gridcentric.pancake.zookeeper.paths as paths
+from reactor.endpoint import EndpointConfig
+from reactor.zookeeper.connection import ZookeeperConnection
+import reactor.zookeeper.paths as paths
 
-class PancakeClient(object):
+class ReactorClient(object):
 
     def __init__(self, zk_servers):
         self.zk_conn = ZookeeperConnection(zk_servers)

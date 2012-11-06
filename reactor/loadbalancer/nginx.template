@@ -8,7 +8,7 @@ ${extra}
 % endif
 
 server {
-    access_log /var/log/nginx/access.log pancake;
+    access_log /var/log/nginx/access.log reactor;
 
     listen ${listen};
     server_name ${netloc};

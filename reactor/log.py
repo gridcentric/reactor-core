@@ -1,5 +1,5 @@
 """
-A simple module used to configure the logger for the pancake project.
+A simple module used to configure the logger for the reactor project.
 """
 
 import logging

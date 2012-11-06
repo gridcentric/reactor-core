@@ -2,4 +2,4 @@ syntax: glob
 *.pyc
 build/
 dist/
-pancake.egg-info
+reactor.egg-info

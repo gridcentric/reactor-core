@@ -1,6 +1,6 @@
 
-from gridcentric.pancake.cloud.nova import BaseNovaConfig
-from gridcentric.pancake.cloud.nova import BaseNovaConnection
+from reactor.cloud.nova import BaseNovaConfig
+from reactor.cloud.nova import BaseNovaConnection
 
 class NovaVmsConfig(BaseNovaConfig):
 
