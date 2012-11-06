@@ -1,0 +1,72 @@
+<%page args='title,path,field,link,name="",key=False,second_time=[]'/>
+
+<%
+# This exploits a little trick in the way this code
+# is mapped onto python. We push something into the
+# default argument to ensure that the second time
+# through this template, we dont regenerate the code
+# below. This will keep everything consistent.
+if not(second_time):
+    second_time.append(True)
+    first_time = True
+else:
+    first_time = False
+%>
+
+% if first_time:
+<script type="text/javascript">
+    var list_active = false;
+    var list_pending = [];
+
+    function list_go(req) {
+        list_active = true;
+        $.ajax(req);
+    }
+    function list_next() {
+        if( list_pending.length > 0 ) {
+            list_go(list_pending.shift());
+        }
+    }
+    function list_done() {
+        list_active = false;
+        list_next();
+    }
+    function list_submit(req) {
+        if( list_active ) {
+            list_pending.push(req);
+        } else {
+            list_go(req);
+        }
+    }
+</script>
+% endif
+
+<script type="text/javascript">
+    function list_process(result) {
+        $("#itemList").append('<li class="nav-header">${title}</li>');
+        var keys = [];
+        $.each(result['${field}'], function(index, value) {
+            % if key:
+            keys.push(index);
+            % else:
+            keys.push(value);
+            % endif
+        });
+        keys.sort();
+        $.each(keys, function(index, value) {
+            if( value == '${name}' ) {
+                $("#itemList").append('<li class="active"><a href="#">' + value + '</a></li>');
+            } else {
+                $("#itemList").append('<li><a href="${link}' + value +'?auth_key=${auth_key}">' + value + '</a></li>');
+            }
+        });
+        list_done();
+    }
+
+    // Submit the real request.
+    list_submit({
+        url: '${path}?auth_key=${auth_key}',
+        type: 'GET',
+        dataType: 'json',
+        success: list_process, });
+</script>

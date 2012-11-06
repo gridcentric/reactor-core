@@ -77,6 +77,8 @@ def usage():
     print ""
     print "    runapi                 Runs the API server."
     print ""
+    print "    runappliance           Runs the appliance."
+    print ""
 
 def main():
     api_server = "http://localhost:8080"
@@ -113,7 +115,7 @@ def main():
     loglevel = logging.INFO
     if debug:
         loglevel = logging.DEBUG
-    
+
     def get_arg(n):
         if len(args) < n+1:
             usage()
@@ -295,7 +297,7 @@ def main():
             log.configure(loglevel, logfile)
             api = ReactorApi(zk_servers)
             serve(api.get_wsgi_app(), host='0.0.0.0')
-    
+   
         else:
             usage()
             sys.exit(1)
@@ -306,3 +308,20 @@ def main():
         else:
             sys.stderr.write("%s\n" %(e))
             sys.exit(1)
+
+def server():
+    from paste.httpserver import serve
+    import reactor.appliance.config as config
+    from reactor.appliance.api import ApplianceApi
+
+    try:
+        # Try to read the saved configuration.
+        zk_servers = config.read_config()
+    except:
+        # Otherwise, use localhost.
+        zk_servers = ["localhost"]
+
+    # Disable the logfile.
+    log.configure(logging.INFO, "/dev/null")
+    app = ApplianceApi(zk_servers)
+    serve(app.get_wsgi_app(), host='0.0.0.0')

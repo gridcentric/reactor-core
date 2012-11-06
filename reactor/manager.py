@@ -22,12 +22,9 @@ from reactor.zookeeper.connection import ZookeeperConnection
 from reactor.zookeeper.connection import ZookeeperException
 import reactor.zookeeper.paths as paths
 
-from reactor.metrics.calculator import calculate_weighted_averages
+import reactor.windows as windows
 
-# We must always specify some domain for the installation.
-# If none is available, we use example.com as it is protected
-# under domain name RFC as a reserved name.
-NODOMAIN = "example.com"
+from reactor.metrics.calculator import calculate_weighted_averages
 
 class ManagerConfig(Config):
 
@@ -78,9 +75,7 @@ class ScaleManager(object):
         self.running    = False
         self.config     = ManagerConfig("")
         self.cond       = threading.Condition()
-
-        self.uuid   = str(uuid.uuid4()) # Manager uuid (generated).
-        self.domain = NODOMAIN          # Reactor domain.
+        self.uuid       = str(uuid.uuid4()) # Manager uuid (generated).
 
         self.endpoints = {}        # Endpoint map (name -> endpoint)
         self.key_to_endpoints = {} # Endpoint map (key() -> [names...])
@@ -95,6 +90,9 @@ class ScaleManager(object):
 
         self.load_balancer = None # Load balancer connections.
 
+        # The Windows domain connection.
+        self.windows = windows.WindowsConnection()
+
     @locked
     def __connect_to_zookeeper(self):
         # Create a Zookeeper connection.
@@ -107,12 +105,6 @@ class ScaleManager(object):
 
         # Load our configuration and register ourselves.
         self.manager_register()
-
-        # Read the domain.
-        self.reload_domain(self.zk_conn.watch_contents(\
-                                paths.domain(),
-                                self.reload_domain,
-                                default_value=self.domain))
 
         # Watch all managers and endpoints.
         self.manager_change(self.zk_conn.watch_children(paths.managers(), self.manager_change))
@@ -596,17 +588,12 @@ class ScaleManager(object):
         self.load_balancer.save()
 
     @locked
-    def reload_domain(self, domain):
-        self.domain = domain or NODOMAIN
-        self.reload_loadbalancer()
-
-    @locked
     def start_params(self, endpoint=None):
-        # FIXME: If the user is running the Reactor server manually, then there
-        # is no real way to pass in a valid set of start parameters here. This
-        # should be extracted and implemented in a more flexible way at some
-        # point down the road.
-        return {}
+        # If a Windows connection is available, get start params for this service.
+        # This will generally create the appropriate accounts on the Windows domain,
+        # and give them back to the VMs for the agent to use in configuration.
+        if endpoint and self.windows:
+            params.update(self.windows.start_params(ConfigView(endpoint.config, "windows")))
 
     @locked
     def marked_instances(self, endpoint_name):

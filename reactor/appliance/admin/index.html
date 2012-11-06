@@ -1,0 +1,118 @@
+<%include file="/navbar.html"/>
+
+<div id="login" class="span6">
+    <div class="hero-unit">
+        <h3>You are not authenticated.</h3>
+        <form class="form-inline">
+            <input class="input-medium" id="authkeyVal" type="text" placeholder="Auth-Key">
+            <button type="submit" id="authkeySet" class="btn">Set</button>
+        </form>
+    </div>
+</div>
+
+<div id="loggedin" class="span9">
+
+<div class="hero-unit">
+    <div>
+        <h3>Reactor Administration</h3>
+        <p>Gridcentric Reactor is a virtual appliance for load balancing and
+        managing scalable web services. This interface provides a quick
+        overview of endpoints and managers, but more advanced usage will
+        require the command-line tools and using the API directly.</p>
+        <p><a class="btn btn-primary btn-large" href="http://docs.gridcentric.com/reactor/">Documentation &raquo;</a></p>
+    </div>
+</div>
+
+<script type="text/javascript">
+</script>
+
+<div class="row-fluid">
+  <div class="span4">
+      <h4 id="instances"></h2>
+  </div>
+  <div class="span4">
+      <h4 id="running"></h2>
+      <h4 id="paused"></h2>
+      <h4 id="stopped"></h2>
+  </div>
+  <div class="span4">
+      <h4 id="managers"></h2>
+  </div>
+</div>
+
+</div>
+
+<script type="text/javascript">
+    var endpoint_count = 0;
+    var running_count = 0;
+    var paused_count = 0;
+    var stopped_count = 0;
+    var active_count = 0;
+    var pending = 0;
+    var managers = {};
+
+    function done_endpoint() {
+        pending -= 1;
+        if( pending == 0 ) {
+            $("#instances").html("" + active_count + " active instances.");
+            $("#running").html("" + running_count + " running endpoints.");
+            $("#paused").html("" + paused_count + " paused endpoints.");
+            $("#stopped").html("" + stopped_count + " stopped endpoints.");
+            $("#managers").html("" + Object.keys(managers).length + " managers.");
+        }
+    }
+
+    function do_logout() {
+        $("#loggedin").addClass("hidden");
+        $("#navbar").addClass("hidden");
+        $("#authkeySet").click(function (e) {
+            e.preventDefault();
+            var value = $("#authkeyVal").val();
+            window.location = window.location.pathname + "?auth_key=" + value;
+        });
+    }
+
+    function do_login() {
+        $("#navbar").removeClass("hidden");
+        $("#loggedin").removeClass("hidden");
+        $("#login").html("");
+    }
+
+    function process_endpoints(result) {
+        $.each(result["endpoints"], function(index, value) {
+            endpoint_count += 1;
+            pending += 1;
+            $.ajax({
+                url: "/v1.0/endpoints/" + value + "/state?auth_key=${auth_key}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(result) {
+                    active_count += result["active"].length;
+                    managers[result["manager"]] = true;
+                    if( result["state"] == "RUNNING" ) {
+                        running_count += 1;
+                    } else if( result["state"] == "PAUSED" ) {
+                        paused_count += 1;
+                    } else if( result["state"] == "STOPPED" ) {
+                        stopped_count += 1;
+                    }
+                    done_endpoint();
+                },
+                error: function(result) {
+                    done_endpoint();
+                },
+            });
+            do_login();
+        });
+    }
+
+    do_logout();
+    $.ajax({
+        url: "/v1.0/endpoints?auth_key=${auth_key}",
+        type: 'GET',
+        dataType: 'json',
+        success: process_endpoints,
+    });
+</script>
+
+<%include file="/footer.html"/>

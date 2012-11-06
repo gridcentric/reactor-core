@@ -1,0 +1,16 @@
+/*
+ * admin.css
+ */
+
+body {
+    overflow-y: scroll;
+}
+.row-fluid {
+    margin-top: 60px;
+}
+.container a.brand.active {
+    color: white;
+}
+div.hidden {
+    display: none;
+}

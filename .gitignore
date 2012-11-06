@@ -1,5 +1,9 @@
 syntax: glob
-*.pyc
 build/
 dist/
-reactor.egg-info
+*.egg-info
+*.pyc
+debbuild/
+rpmbuild/
+*.deb
+*.rpm
