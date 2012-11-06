@@ -9,20 +9,20 @@ from mako.template import Template
 from mako.lookup import TemplateLookup
 from mako import exceptions
 
-from gridcentric.pancake.api import PancakeApi
-from gridcentric.pancake.api import connected
-from gridcentric.pancake.api import authorized
-from gridcentric.pancake.api import authorized_admin_only
-from gridcentric.pancake.api import get_auth_key
+from reactor.api import ReactorApi
+from reactor.api import connected
+from reactor.api import authorized
+from reactor.api import authorized_admin_only
+from reactor.api import get_auth_key
 
-from gridcentric.reactor.manager import ReactorScaleManager
-import gridcentric.reactor.ips as ips
-import gridcentric.reactor.config as config
+from reactor.manager import ReactorScaleManager
+import reactor.ips as ips
+import reactor.config as config
 
-class ReactorApi(PancakeApi):
+class ApplianceApi(ReactorApi):
     def __init__(self, zk_servers):
         self.manager_running = False
-        PancakeApi.__init__(self, zk_servers)
+        ReactorApi.__init__(self, zk_servers)
 
         self.config.add_route('api-servers', '/reactor/api_servers')
         self.config.add_view(self.set_api_servers, route_name='api-servers')
@@ -120,7 +120,7 @@ class ReactorApi(PancakeApi):
             self.stop_manager()
 
         if not(self.manager_running):
-            self.manager = ReactorScaleManager(zk_servers)
+            self.manager = ReactorScaleManager(zk_servers, check=self.check)
             self.manager_thread = threading.Thread(target=self.manager.run)
             self.manager_thread.daemon = True
             self.manager_thread.start()
@@ -156,4 +156,4 @@ class ReactorApi(PancakeApi):
         self.check(zk_servers)
 
         # Call the base API to reconnect.
-        PancakeApi.reconnect(self, zk_servers)
+        ReactorApi.reconnect(self, zk_servers)

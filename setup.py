@@ -9,7 +9,7 @@ def all_files(path):
     return found
 
 # Index all the administration console files.
-admin_files = all_files('gridcentric/reactor/admin')
+admin_files = all_files('reactor/admin')
 
 setup(
     name="reactor-server",
@@ -18,17 +18,16 @@ setup(
     author_email='info@gridcentric.com',
     url='http://www.gridcentric.com',
     packages=[
-        'gridcentric',
-        'gridcentric.reactor'
+        'reactor'
     ] + admin_files.keys(),
     description='Reactor virtual appliance server.',
     package_data = admin_files,
     entry_points={
         'console_scripts': [
-            'reactor-server = gridcentric.reactor.server:main',
-            'reactor = gridcentric.pancake.cli:main'
+            'reactor-server = reactor.server:main',
+            'reactor = pancake.cli:main'
         ]
     },
 )
 
-print all_files('gridcentric/reactor/admin')
+print all_files('reactor/admin')

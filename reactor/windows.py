@@ -8,7 +8,7 @@ import base64
 import ldap
 import ldap.modlist as modlist
 
-from gridcentric.pancake.config import SubConfig
+from reactor.config import SubConfig
 
 COMPUTER_ATTRS = [
     "operatingsystem",

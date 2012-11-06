@@ -2,10 +2,10 @@ import logging
 
 from paste.httpserver import serve
 
-import gridcentric.reactor.log as log
-import gridcentric.reactor.config as config
+import reactor.log as log
+import reactor.appliance.config as config
 
-from gridcentric.reactor.api import ReactorApi
+from reactor.appliance.api import ApplianceApi
 
 def main():
     log.configure(logging.DEBUG, "/var/log/reactor.log")
@@ -17,5 +17,5 @@ def main():
     if len(zk_servers) == 0:
         zk_servers = ["localhost"]
 
-    app = ReactorApi(zk_servers)
+    app = ApplianceApi(zk_servers)
     serve(app.get_wsgi_app(), host='0.0.0.0')

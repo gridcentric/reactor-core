@@ -1,7 +1,7 @@
-from gridcentric.pancake.endpoint import EndpointConfig
-from gridcentric.pancake.endpoint import Endpoint
-from gridcentric.pancake.endpoint import State
-import gridcentric.pancake.zookeeper.paths as paths
+from reactor.endpoint import EndpointConfig
+from reactor.endpoint import Endpoint
+from reactor.endpoint import State
+import reactor.zookeeper.paths as paths
 
 class APIEndpoint(Endpoint):
     def __init__(self, scale_manager):

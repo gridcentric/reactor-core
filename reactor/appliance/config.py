@@ -2,7 +2,7 @@ import re
 import subprocess
 import os
 
-import gridcentric.reactor.ips as ips
+import reactor.appliance.ips as ips
 
 ZOOKEEPER_ID_FILE = "/etc/zookeeper/conf/myid"
 ZOOKEEPER_CONFIG_FILE = "/etc/zookeeper/conf/zoo.cfg"

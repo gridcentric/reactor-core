@@ -9,7 +9,7 @@ import threading
 import math
 import random
 
-from gridcentric.pancake.apiclient import PancakeApiClient
+from reactor.apiclient import ReactorApiClient
 
 api_server = "http://localhost:8080"
 password = None
@@ -217,7 +217,7 @@ else:
     output = gource.stdin
 
 # Connect to the API.
-client = PancakeApiClient(api_server, password)
+client = ReactorApiClient(api_server, password)
 
 def update():
     while True:

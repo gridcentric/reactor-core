@@ -1,15 +1,15 @@
 import logging
 
-from gridcentric.pancake.manager import ManagerConfig
-from gridcentric.pancake.manager import ScaleManager
-from gridcentric.pancake.manager import locked
-from gridcentric.pancake.config import ConfigView
-import gridcentric.pancake.zookeeper.paths as paths
+from reactor.manager import ManagerConfig
+from reactor.manager import ScaleManager
+from reactor.manager import locked
+from reactor.config import ConfigView
+import reactor.zookeeper.paths as paths
 
-from gridcentric.reactor.endpoint import APIEndpoint
-import gridcentric.reactor.iptables as iptables
-import gridcentric.reactor.ips as ips
-import gridcentric.reactor.windows as windows
+from reactor.endpoint import APIEndpoint
+import reactor.appliance.iptables as iptables
+import reactor.appliance.ips as ips
+import reactor.windows as windows
 
 class ReactorScaleManager(ScaleManager):
     def __init__(self, zk_servers):
@@ -50,6 +50,11 @@ class ReactorScaleManager(ScaleManager):
         new_config = ManagerConfig(config_str)
         new_config._set("manager", "loadbalancer", "dnsmasq,nginx,tcp")
         super(ReactorScaleManager, self).manager_register(str(new_config))
+
+    @locked
+    def health_check(self):
+        # Perform a normal health check.
+        super(ReactorScaleManager, self).health_check()
 
     @locked
     def serve(self):
