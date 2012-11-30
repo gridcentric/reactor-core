@@ -21,13 +21,13 @@ Once this is done and the instance is running your demo app, bless the instance.
 to point to the newly created instance.
 
 4. Run the scale manager server
-$ sudo bin/reactor -z localhost:2181 runserver
+$ sudo reactor -z localhost:2181 runserver
 
 5. Run the scale manager API that allows communication with the scale manager.
-$ bin/reactor -z localhost:2181 runapi
+$ reactor -z localhost:2181 runapi
 
 6. Create a new endpoint to autoscale, using the example endpoint.conf.
-$ bin/reactor manage testscale < example/endpoint.conf
+$ reactor manage testscale < example/endpoint.conf
 
 7. The scale manager will now manage the endpoint, and launch new instances up
 to the specified minimum number of instances. The load balancer configuration
@@ -59,7 +59,7 @@ python-netifaces
 ==Project Contents==
 
 bin
-    Contains scripts that are used to start and configure the reactor endpoint / API.
+    Contains scripts that are used to configure the reactor instance.
 
-gridcentric
+reactor
     The top-level python package.
