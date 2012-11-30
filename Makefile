@@ -2,6 +2,11 @@
 
 VERSION ?= 1.1
 DESTDIR ?= /usr
+ifneq ($(RELEASE),)
+PACKAGE_VERSION = $(VERSION).$(RELEASE)
+else
+PACKAGE_VERSION = $(VERSION).0
+endif
 
 RPMBUILD := rpmbuild
 DEBBUILD := debbuild
@@ -15,17 +20,17 @@ default: dist packages
 .PHONY: default
 
 dist:
-	@VERSION=$(VERSION) python setup.py sdist
+	@VERSION=$(PACKAGE_VERSION) python setup.py sdist
 .PHONY: dist
 
 install: dist
-	@VERSION=$(VERSION) python setup.py install --prefix=$(DESTDIR)
+	@VERSION=$(PACKAGE_VERSION) python setup.py install --prefix=$(DESTDIR)
 .PHONY: install
 
 dist_install:
-	@VERSION=$(VERSION) python setup.py bdist -p bdist
+	@VERSION=$(PACKAGE_VERSION) python setup.py bdist -p bdist
 	@mkdir -p $(DESTDIR)
-	@cd $(DESTDIR) && tar -zxvf $(CURDIR)/dist/reactor-$(VERSION).bdist.tar.gz
+	@cd $(DESTDIR) && tar -zxvf $(CURDIR)/dist/reactor-$(PACKAGE_VERSION).bdist.tar.gz
 	@mv $(DESTDIR)/usr/local/* $(DESTDIR)/usr; rmdir $(DESTDIR)/usr/local
 
 clean:
@@ -64,7 +69,7 @@ agent.deb: $(DEBBUILD)
 	@$(INSTALL_DIR) $(DEBBUILD)/reactor-agent
 	@rsync -ruav --delete packagers/deb/reactor-agent/ $(DEBBUILD)/reactor-agent
 	@rsync -ruav agent/ $(DEBBUILD)/reactor-agent
-	@sed -i "s/\(^Version:\).*/\1 $(VERSION)/" $(DEBBUILD)/reactor-agent/DEBIAN/control
+	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-agent/DEBIAN/control
 	@fakeroot dpkg -b $(DEBBUILD)/reactor-agent .
 .PHONY: agent.deb
 
@@ -72,7 +77,7 @@ agent.deb: $(DEBBUILD)
 agent.rpm: $(RPMBUILD)
 	@rpmbuild -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
 	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \
-	    --define="%version $(VERSION)" \
+	    --define="%version $(PACKAGE_VERSION)" \
 	    packagers/rpm/reactor-agent.spec
 	@find $(RPMBUILD) -name \*.rpm -exec mv {} . \;
 .PHONY: agent.rpm
@@ -83,7 +88,7 @@ server.deb: $(DEBBUILD)
 	@rsync -ruav --delete packagers/deb/reactor-server/ $(DEBBUILD)/reactor-server
 	@$(MAKE) dist_install DESTDIR=$(DEBBUILD)/reactor-server
 	@$(INSTALL_BIN) bin/reactor-setup $(DEBBUILD)/reactor-server/usr/bin
-	@sed -i "s/\(^Version:\).*/\1 $(VERSION)/" $(DEBBUILD)/reactor-server/DEBIAN/control
+	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-server/DEBIAN/control
 	@fakeroot dpkg -b $(DEBBUILD)/reactor-server .
 .PHONY: server.deb
 
