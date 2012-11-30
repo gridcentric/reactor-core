@@ -1,8 +1,8 @@
 
-from reactor.cloud.nova import BaseNovaConfig
-from reactor.cloud.nova import BaseNovaConnection
+from reactor.cloud.osapi import BaseOsConfig
+from reactor.cloud.osapi import BaseOsConnection
 
-class NovaVmsConfig(BaseNovaConfig):
+class OsVmsConfig(BaseOsConfig):
 
     def instance_id(self):
         return self._get("instance_id", "0")
@@ -10,14 +10,14 @@ class NovaVmsConfig(BaseNovaConfig):
     def target(self):
         return self._get("target", "0")
 
-class Connection(BaseNovaConnection):
+class Connection(BaseOsConnection):
     """ Connects to a nova cloud that has the Gridcentric VMS extension enabled. """
 
     def __init__(self, config):
         super(Connection, self).__init__(config)
 
     def create_config(self, config):
-        return NovaVmsConfig(config)
+        return OsVmsConfig(config)
 
     def _list_instances(self):
         """ 

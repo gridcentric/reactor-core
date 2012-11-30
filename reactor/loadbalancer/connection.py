@@ -9,7 +9,6 @@ import logging
 import reactor.zookeeper.paths as paths
 
 def get_connection(name, config, scale_manager):
-
     if name == "none" or name == "":
         return LoadBalancerConnection(name, scale_manager, config)
 

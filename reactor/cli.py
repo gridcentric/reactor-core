@@ -77,8 +77,6 @@ def usage():
     print ""
     print "    runapi                 Runs the API server."
     print ""
-    print "    runappliance           Runs the appliance."
-    print ""
 
 def main():
     api_server = "http://localhost:8080"
@@ -311,8 +309,8 @@ def main():
 
 def server():
     from paste.httpserver import serve
-    import reactor.appliance.config as config
-    from reactor.appliance.api import ApplianceApi
+    import reactor.server.config as config
+    from reactor.server.api import ServerApi
 
     try:
         # Try to read the saved configuration.
@@ -323,5 +321,5 @@ def server():
 
     # Disable the logfile.
     log.configure(logging.INFO, "/dev/null")
-    app = ApplianceApi(zk_servers)
+    app = ServerApi(zk_servers)
     serve(app.get_wsgi_app(), host='0.0.0.0')

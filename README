@@ -38,6 +38,7 @@ so that we know the IP is up and running.
 
 nginx (optional)
     The default load balancer used by reactor.
+    * Optionally built with the stick module.
 
 dnsmasq (optional)
     Required if you are using the 'dnsmasq' load balancer.

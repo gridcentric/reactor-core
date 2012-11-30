@@ -174,6 +174,9 @@ class TcpLoadBalancerConfig(SubConfig):
 
 class Connection(LoadBalancerConnection):
 
+    producer = None
+    consumer = None
+
     def __init__(self, name, scale_manager, config):
         LoadBalancerConnection.__init__(self, name, scale_manager)
         self.portmap = {}
@@ -187,8 +190,10 @@ class Connection(LoadBalancerConnection):
         self.consumer.start()
 
     def __del__(self):
-        self.producer.stop()
-        self.consumer.stop()
+        if self.producer:
+            self.producer.stop()
+        if self.consumer:
+            self.consumer.stop()
 
     def clear(self):
         # Remove all mapping and tracking configuration.

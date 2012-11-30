@@ -1,0 +1,91 @@
+#!/bin/bash
+
+function usage() {
+    echo "usage: $0 <api-servers ...> [-- <servers-to-configure ...>]"
+    echo "Both <api-servers> and <servers-to-configure> should be space-separated lists."
+    echo "To specify an authentication key, set the environment variable REACTOR_AUTH_KEY."
+    echo "For example: REACTOR_AUTH_KEY=example $0 192.168.1.10 -- 192.168.1.10 192.168.1.11"
+    echo "To use an SSH connection to configure servers specify a keyfile."
+    echo "For example: SSH_KEY=keyfile.id_rsa $0 192.168.1.10 -- 192.168.1.10 192.168.1.11"
+}
+
+# Check commands.
+if [ "$#" -lt "1" ]; then
+    usage
+    exit 1
+fi
+
+# Build our lists.
+api_servers=""
+scale_servers=""
+api_server_spec=""
+api_auth_spec=""
+in_scale="n"
+
+for arg; do
+    if [ "$arg" == "--" ]; then
+        in_scale="y"
+        continue
+    elif [ "$in_scale" == "y" ]; then
+        scale_servers="$scale_servers $arg"
+    else
+        api_servers="$api_servers $arg"
+    fi
+done
+
+# Configure the API servers.
+if [ "$in_scale" == "n" ]; then
+    scale_servers="$api_servers"
+fi
+
+# Set the authentication header spec.
+if [ "x$REACTOR_AUTH_KEY" != "x" ]; then
+    api_auth_spec="-H 'X-Auth-Key: $REACTOR_AUTH_KEY'"
+fi
+
+# Construct the API server string.
+for server in $api_servers; do
+    if [ "$api_server_spec" == "" ]; then
+        api_server_spec="\"$server\""
+    else
+        api_server_spec="$api_server_spec,\"$server\""
+    fi
+done
+
+function do_remote() {
+    if [ "x$SSH_KEY" == "x" ]; then
+        REMOTE_COMMAND="sh -c"
+        target="$1"
+    else
+        # We disable known host warnings, since they are almost guaranteed to be first-time.
+        SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+        REMOTE_COMMAND="ssh -i $SSH_KEY $SSH_OPTS root@$1"
+        target="localhost"
+    fi
+    COMMAND_STRING=$(printf "$2" "$target")
+    $REMOTE_COMMAND "$COMMAND_STRING"
+}
+
+# Setup accounts on all API servers.
+for api_server in $api_servers; do
+    echo "Prepping $api_server..."
+    for server in $api_servers $scale_servers; do
+        do_remote $server "curl -X POST \
+            -H 'Content-type: application/json' \
+            -d '{}' \
+            $api_auth_spec \
+            http://%s:8080/v1.0/managers/$server"
+    done
+    sleep 1
+done
+
+# Contact all the given servers.
+for server in $scale_servers; do
+    echo "Setting up $server..."
+    do_remote $server "curl -X POST \
+        -H 'Content-type: application/json' \
+        -d '{ \"api_servers\" : [$api_server_spec] }' \
+        $api_auth_spec \
+        http://%s:8080/api_servers"
+    sleep 1
+done

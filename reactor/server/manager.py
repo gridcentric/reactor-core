@@ -6,9 +6,9 @@ from reactor.manager import locked
 from reactor.config import ConfigView
 import reactor.zookeeper.paths as paths
 
-from reactor.appliance.endpoint import APIEndpoint
-import reactor.appliance.iptables as iptables
-import reactor.appliance.ips as ips
+from reactor.server.endpoint import APIEndpoint
+import reactor.server.iptables as iptables
+import reactor.server.ips as ips
 
 # We must always specify some domain for the installation.
 # If none is available, we use example.com as it is protected

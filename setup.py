@@ -17,7 +17,24 @@ def all_files(path):
     return found
 
 # Index all the administration console files.
-admin_files = all_files('reactor/admin')
+admin_files = all_files("reactor/server/admin")
+
+packages=[
+    "reactor",
+    "reactor.loadbalancer",
+    "reactor.zookeeper",
+    "reactor.metrics",
+    "reactor.cloud",
+    "reactor.server",
+    "reactor.server.admin",
+    "reactor.demo",
+] + admin_files.keys()
+
+package_data = {
+    "reactor.loadbalancer" : ["nginx.template", "dnsmasq.template", "reactor.conf"],
+    "reactor.demo" : ["reactor.png"]
+}
+package_data.update(admin_files.items())
 
 setup(
     name="reactor",
@@ -26,21 +43,14 @@ setup(
     author="Gridcentric Inc.",
     author_email="support@gridcentric.com",
     url="http://www.gridcentric.com",
-    packages=["reactor",
-              "reactor.appliance",
-              "reactor.loadbalancer",
-              "reactor.zookeeper",
-              "reactor.metrics",
-              "reactor.cloud"
-    ] + admin_files.keys(),
-    package_data={'reactor.loadbalancer':\
-            ["nginx.template", "dnsmasq.template", "reactor.conf"]},
+    packages=packages,
+    package_data=package_data,
     include_package_data=True,
     entry_points={
         'console_scripts': [
-            'reactor-demo = reactor.demo:main',
             'reactor = reactor.cli:main',
-            'reactor-server = reactor.cli:server'
+            'reactor-server = reactor.cli:server',
+            'reactor-demo = reactor.demo:main'
         ]
     }
 )

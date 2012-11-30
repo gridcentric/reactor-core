@@ -2,7 +2,7 @@ import re
 import subprocess
 import os
 
-import reactor.appliance.ips as ips
+import reactor.server.ips as ips
 
 ZOOKEEPER_ID_FILE = "/etc/zookeeper/conf/myid"
 ZOOKEEPER_CONFIG_FILE = "/etc/zookeeper/conf/zoo.cfg"

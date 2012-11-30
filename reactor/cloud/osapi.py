@@ -8,15 +8,15 @@ from novaclient.v1_1.client import Client as NovaClient
 from reactor.config import SubConfig
 import reactor.cloud.connection as cloud_connection
 
-class BaseNovaConnection(cloud_connection.CloudConnection):
+class BaseOsConnection(cloud_connection.CloudConnection):
 
     def __init__(self, config):
-        super(BaseNovaConnection, self).__init__(config)
+        super(BaseOsConnection, self).__init__(config)
         self.deleted_instance_ids = []
         self.config = self.create_config(config)
 
     def create_config(self, config):
-        return BaseNovaConfig(config)
+        return BaseOsConfig(config)
 
     def _list_instances(self):
         """ 
@@ -100,7 +100,7 @@ class BaseNovaConnection(cloud_connection.CloudConnection):
             # we just want that id to not be in the deleted_instance_ids list.
             pass
 
-class BaseNovaConfig(cloud_connection.CloudConnectionConfig):
+class BaseOsConfig(cloud_connection.CloudConnectionConfig):
 
     def user(self):
         return self._get("user", "admin")
@@ -123,7 +123,7 @@ class BaseNovaConfig(cloud_connection.CloudConnectionConfig):
     def service_type(self):
         return self._get('service_type', 'compute')
 
-class NovaConfig(BaseNovaConfig):
+class OsApiConfig(BaseOsConfig):
 
     def instance_name(self):
         return self._get("instance_name", "name")
@@ -140,13 +140,13 @@ class NovaConfig(BaseNovaConfig):
     def key_name(self):
         return self._get("key_name", "") or None
 
-class Connection(BaseNovaConnection):
+class Connection(BaseOsConnection):
 
     def __init__(self, config):
         super(Connection, self).__init__(config)
 
     def create_config(self, config):
-        return NovaConfig(config)
+        return OsApiConfig(config)
 
     def _list_instances(self):
         """ 

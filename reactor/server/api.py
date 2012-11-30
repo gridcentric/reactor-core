@@ -15,11 +15,11 @@ from reactor.api import authorized
 from reactor.api import authorized_admin_only
 from reactor.api import get_auth_key
 
-from reactor.appliance.manager import ReactorScaleManager
-import reactor.appliance.ips as ips
-import reactor.appliance.config as config
+from reactor.server.manager import ReactorScaleManager
+import reactor.server.ips as ips
+import reactor.server.config as config
 
-class ApplianceApi(ReactorApi):
+class ServerApi(ReactorApi):
     def __init__(self, zk_servers):
         self.manager_running = False
         ReactorApi.__init__(self, zk_servers)
@@ -38,7 +38,23 @@ class ApplianceApi(ReactorApi):
         self.check(zk_servers)
 
     @connected
-    def admin(self, context, request, is_lib=False):
+    @authorized_admin_only
+    def set_api_servers(self, context, request):
+        """
+        Updates the list of API servers in the system.
+        """
+        if request.method == 'POST':
+            api_servers = json.loads(request.body)['api_servers']
+            logging.info("Updating API Servers.")
+            self.reconnect(api_servers)
+            return Response()
+        elif request.method == 'GET':
+            return Response(body=json.dumps({ "api_servers" : self.zk_servers }))
+        else:
+            return Response(status=403)
+
+    @connected
+    def admin(self, context, request):
         """
         Render a page from the admin directory and write it back.
         """
@@ -97,21 +113,6 @@ class ApplianceApi(ReactorApi):
         else:
             return Response(status=403)
 
-    @connected
-    @authorized_admin_only
-    def set_api_servers(self, context, request):
-        """
-        Updates the list of API servers in the system.
-        """
-        if request.method == 'POST':
-            api_servers = json.loads(request.body)['api_servers']
-            logging.info("Updating API Servers.")
-            self.reconnect(api_servers)
-            return Response()
-        elif request.method == 'GET':
-            return Response(body=json.dumps({ "api_servers" : self.zk_servers }))
-        else:
-            return Response(status=403)
 
     def start_manager(self, zk_servers):
         zk_servers.sort()

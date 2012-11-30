@@ -22,9 +22,10 @@ COLOR_MAP = { \
     DECOMMISSIONED_TYPE : "008800",
     }
 
-def query_state(client, factor):
+def query_state(client):
     # Just grab the list of managers.
     managers = client.list_managers_active()
+    users = 0
 
     # Build a map of endpoint states.
     endpoints = {}
@@ -47,7 +48,7 @@ def query_state(client, factor):
             # Compute the number of "users" this endpoint will have.
             users = int(math.ceil(float(metrics["active"]) * len(active) / factor))
         except:
-            users = 1
+            users = 0
 
         for ip in ips:
             if ip in active:
@@ -157,7 +158,7 @@ def usage():
     print "Optional arguments:"
     print "   -h, --help             Display this help message"
     print ""
-    print "   -a, --api=             The API url (default is localhost)."
+    print "   -a, --api=             The API url (default is %s)." % api_server
     print ""
     print "   -p, --password=        The password used to connect to the API."
     print ""
@@ -176,7 +177,7 @@ def main():
     factor = 10.0
 
     opts, args = getopt.getopt(sys.argv[1:], 
-        "ha:p:df:i:", ["help","api_server=","password=","dryrun","factor=","interval="])
+            "ha:p:df:i:", ["help","api_server=","password=","dryrun","factor=","interval="])
 
     for o, a in opts:
         if o in ('-h', '--help'):
@@ -193,9 +194,6 @@ def main():
         elif o in ('-i', '--interval'):
             interval = float(a)
 
-    # Load our image data (this directory).
-    image_dir = os.path.dirname(__file__)
-
     if dryrun:
         # Open stdout.
         output = sys.stdout
@@ -207,8 +205,7 @@ def main():
              "--user-scale", "0.5",
              "--max-user-speed", "20",
              "--hide", "date",
-             "--user-image-dir", image_dir,
-             "--default-user-image", os.path.join(image_dir, "user.png"),
+             "--user-image-dir", os.path.dirname(__file__),
              "--highlight-dirs",
              "--font-size", "14",
              "--file-idle-time", "0",
@@ -222,7 +219,7 @@ def main():
     def update():
         while True:
             # Query state.
-            managers, endpoints, users = query_state(client, factor)
+            managers, endpoints, users = query_state(client)
 
             # Generate differential log.
             generate_log(output, managers, endpoints, users)
