@@ -320,6 +320,6 @@ def server():
         zk_servers = ["localhost"]
 
     # Disable the logfile.
-    log.configure(logging.INFO, "/dev/null")
+    log.configure(logging.INFO)
     app = ServerApi(zk_servers)
     serve(app.get_wsgi_app(), host='0.0.0.0')

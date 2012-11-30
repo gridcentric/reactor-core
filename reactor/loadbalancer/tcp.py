@@ -1,14 +1,69 @@
+import os
+import socket
 import re
 import time
 import threading
 import random
-
-import flowcontrol
-import flowcontrol.daemon
+import select
 
 from reactor.config import SubConfig
 from reactor.loadbalancer.connection import LoadBalancerConnection
 from reactor.loadbalancer.netstat import connection_count
+
+def close_fds(except_fds=[]):
+    try:
+        maxfd = os.sysconf("SC_OPEN_MAX")
+    except (AttributeError, ValueError):
+        maxfd = 1024
+        for fd in range(0, maxfd):
+            if not(fd in except_fds):
+                os.close(fd)
+
+def fork_and_exec(cmd, child_fds=[]):
+    # Close all file descriptors, except
+    # for those we have been specified to keep.
+    # These file descriptors are closed in the
+    # parent post fork.
+
+    pid = os.fork()
+    if pid != 0:
+        # Wait for the child to exit.
+        while True:
+            (pid, status) = os.waitpid(pid, 0)
+            if pid == pid:
+                return
+
+        # Close the child FDs.
+        for fd in child_fds:
+            os.close(fd)
+
+        # Finish up here.
+        return
+
+    # Close off all parent FDs.
+    close_fds(except_fds=child_fds)
+
+    # Fork again.
+    pid = os.fork()
+    if pid != 0:
+        os._exit(0)
+
+    # Exec the given command.
+    os.execvp(cmd[0], cmd)
+
+class Accept:
+    def __init__(self, sock):
+        (client, address) = sock.accept()
+        self.sock = client
+        self.src  = address
+        self.dst  = sock.getsockname()
+
+    def drop(self):
+        self.sock.close()
+
+    def redirect(self, host, port):
+        cmd = ["socat", "fd:%d" % self.sock.fileno(), "tcp-connect:%s:%d" % (host, port)]
+        return fork_and_exec(cmd, child_fds=self.sock.fileno())
 
 class ConnectionConsumer(threading.Thread):
     def __init__(self, connection, producer, exclusive=True):
@@ -28,18 +83,18 @@ class ConnectionConsumer(threading.Thread):
     def stop(self):
         self.execute = False
 
-    def handle(self, req):
+    def handle(self, connection):
         self.cond.acquire()
         try:
             # Index by the destination port.
-            port = req.dst[1]
+            port = connection.dst[1]
             if not(self.ports.has_key(port)):
                 self.cond.notifyAll()
-                req.drop()
+                connection.drop()
                 return True
 
             # Create a map of the IPs.
-            backends = self.ports[req.dst[1]]
+            backends = self.ports[connection.dst[1]]
             ipmap = {}
             ipmap.update(backends)
             ips = ipmap.keys()
@@ -53,7 +108,7 @@ class ConnectionConsumer(threading.Thread):
             # Either redirect or drop the connection.
             if ip:
                 self.cond.notifyAll()
-                req.redirect(ip, ipmap[ip])
+                connection.redirect(ip, ipmap[ip])
                 return True
             else:
                 return False
@@ -61,58 +116,78 @@ class ConnectionConsumer(threading.Thread):
             self.cond.release()
 
     def flush(self):
-        # Attempt to flush all requests.
+        # Attempt to flush all connections.
         while self.producer.has_pending():
-            req = self.producer.next()
-            if not(self.handle(req)):
-                self.producer.push(req)
+            connection = self.producer.next()
+            if not(self.handle(connection)):
+                self.producer.push(connection)
                 break
 
     def run(self):
         while self.execute:
-            req = self.producer.next()
+            connection = self.producer.next()
 
             self.cond.acquire()
             try:
-                if self.handle(req):
-                    # If we can handle this request,
+                if self.handle(connection):
+                    # If we can handle this connection,
                     # make sure that the queue is flushed.
                     self.flush()
                 else:
-                    # If we can't handle this request right
+                    # If we can't handle this connection right
                     # now, we wait and will try it again on
                     # the next round.
-                    self.producer.push(req)
+                    self.producer.push(connection)
                     self.cond.wait()
             finally:
                 self.cond.release()
 
-class FlowControlProducer(threading.Thread):
+class ConnectionProducer(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
         self.execute = True
-        self.monitor = flowcontrol.FlowControl()
         self.pending = []
+        self.sockets = {}
+        self.filemap = {}
+        self.portmap = {}
         self.cond    = threading.Condition()
+        self.set()
 
     def stop(self):
         self.cond.acquire()
         self.execute = False
-        del self.monitor
-        flowcontrol.daemon.stop()
         self.cond.release()
 
-    def set(self, ports):
+    def set(self, ports=[]):
         # Set the appropriate ports.
         self.cond.acquire()
         try:
             for port in ports:
-                self.monitor.add_port(port)
+                if not(self.sockets.has_key(port)):
+                    sock = socket.socket()
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    sock.bind(("", port))
+                    sock.listen(10)
+                    self.sockets[port] = sock
+                    self.filemap[sock.fileno()] = sock
+                    self.portmap[sock.fileno()] = port
+            for port in self.sockets:
+                if not(port in ports):
+                    sock = self.sockets[port]
+                    del self.sockets[port]
+                    del self.filemap[sock.fileno()]
+                    del self.portmap[sock.fileno()]
+            self._update_epoll()
         finally:
             self.cond.release()
 
+    def _update_epoll(self):
+        self.epoll = select.epoll()
+        for socket in self.sockets.values():
+            self.epoll.register(socket.fileno(), select.EPOLLIN)
+
     def next(self, timeout=None):
-        # Pull the next request.
+        # Pull the next connection.
         self.cond.acquire()
         try:
             while self.execute and \
@@ -125,17 +200,17 @@ class FlowControlProducer(threading.Thread):
         finally:
             self.cond.release()
 
-    def push(self, req):
-        # Push back a request.
+    def push(self, connection):
+        # Push back a connection.
         self.cond.acquire()
         try:
-            self.pending.insert(0, req)
+            self.pending.insert(0, connection)
             self.cond.notifyAll()
         finally:
             self.cond.release()
 
     def has_pending(self):
-        # Check for pending requests.
+        # Check for pending connections.
         self.cond.acquire()
         try:
             return self.execute and len(self.pending) > 0
@@ -143,24 +218,35 @@ class FlowControlProducer(threading.Thread):
             self.cond.release()
 
     def run(self):
-        # Process connections from monitor.
         while True:
-            req = self.monitor.next(timeout=1000)
+            # Poll for events.
+            events = self.epoll.poll(1)
+
+            # Scan the events and accept.
             self.cond.acquire()
+            for fileno, event in events:
+                if not(fileno in self.filemap):
+                    # Stale connection.
+                    continue
+
+                sock = self.filemap[fileno]
+                port = self.portmap[fileno]
+
+                # Create a new connection object.
+                connection = Accept(sock)
+
+                # Push it into the queue.
+                self.pending.append(connection)
+                self.cond.notifyAll()
 
             # Check if we should continue executing.
             if not(self.execute):
                 self.cond.notifyAll()
                 self.cond.release()
                 break
-            if not(req):
+            else:
                 self.cond.release()
                 continue
-
-            # Push the request into the queue.
-            self.pending.append(req)
-            self.cond.notifyAll()
-            self.cond.release()
 
 class TcpLoadBalancerConfig(SubConfig):
 
@@ -184,7 +270,7 @@ class Connection(LoadBalancerConnection):
         self.active = {}
         self.config = TcpLoadBalancerConfig(config)
 
-        self.producer = FlowControlProducer()
+        self.producer = ConnectionProducer()
         self.producer.start()
         self.consumer = ConnectionConsumer(self, self.producer, self.config.exclusive())
         self.consumer.start()
@@ -244,7 +330,7 @@ class Connection(LoadBalancerConnection):
         # Grab the active connections.
         active_connections = connection_count()
         stale_active = []
-        locked_ips = self._list_ips()
+        locked_ips = self._list_ips() or []
 
         for connection_list in self.tracked.values():
 
