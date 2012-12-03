@@ -589,6 +589,7 @@ class ScaleManager(object):
 
     @locked
     def start_params(self, endpoint=None):
+        params = {}
         # If a Windows connection is available, get start params for this service.
         # This will generally create the appropriate accounts on the Windows domain,
         # and give them back to the VMs for the agent to use in configuration.
