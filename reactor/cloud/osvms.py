@@ -7,9 +7,6 @@ class OsVmsConfig(BaseOsConfig):
     def instance_id(self):
         return self._get("instance_id", "0")
 
-    def target(self):
-        return self._get("target", "0")
-
 class Connection(BaseOsConnection):
     """ Connects to a nova cloud that has the Gridcentric VMS extension enabled. """
 
@@ -23,10 +20,10 @@ class Connection(BaseOsConnection):
         """ 
         Returns a list of instances from the endpoint.
         """
-        return self._novaclient().gridcentric.list_launched(self.config.instance_id())
+        server = self._novaclient().gridcentric.get(self.config.instance_id())
+        return server.list_launched()
 
     def _start_instance(self, params={}):
-        launch_params = { 'target' : self.config.target(), 'guest' : params }
-        self._novaclient().gridcentric.launch(self.config.instance_id(),
-                                              target=self.config.target(),
-                                              guest_params=params)
+        launch_params = { 'guest' : params }
+        server = self._novaclient().gridcentric.get(self.config.instance_id())
+        server.launch(guest_params=params)
