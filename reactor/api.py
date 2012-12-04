@@ -113,6 +113,9 @@ class ReactorApi:
         self.config.add_route('manager-list', '/v1.0/managers')
         self.config.add_view(self.list_managers, route_name='manager-list')
 
+        self.config.add_route('log-action', '/v1.0/logs/{manager}')
+        self.config.add_view(self.handle_log_action, route_name='log-action')
+
         self.config.add_route('endpoint-action', '/v1.0/endpoints/{endpoint_name}')
         self.config.add_view(self.handle_endpoint_action, route_name='endpoint-action')
 
@@ -372,6 +375,34 @@ class ReactorApi:
                 response = Response()
             else:
                 response = Response(status=404, body="%s not found" % manager)
+
+        else:
+            response = Response(status=403)
+
+        return response
+
+    @connected
+    @authorized_admin_only
+    def handle_log_action(self, context, request):
+        """
+        This handles a log action:
+        GET - Reads the logs at the given uuid.
+        """
+        manager = request.matchdict.get('manager', None)
+        response = Response()
+
+        if request.method == "GET":
+            logging.info("Retrieving manager %s logs" % manager)
+
+            if not(manager):
+                response = Response(status=400, body="no manager provided")
+            else:
+                log = self.client.get_manager_log(manager)
+                if log:
+                    manager_log = { 'log' : log }
+                    response = Response(body=json.dumps(manager_log))
+                else:
+                    response = Response(status=404, body="%s not found" % manager)
 
         else:
             response = Response(status=403)

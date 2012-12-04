@@ -81,6 +81,13 @@ class ReactorApiClient(httplib2.Http):
                                                  (manager or 'default'), 'GET')
         return body.get('config', "")
 
+    def get_manager_log(self, manager):
+        """
+        Return the manager's log.
+        """
+        resp, body = self._authenticated_request('/v1.0/logs/%s' % manager, 'GET')
+        return body.get('log', "")
+
     def remove_manager_config(self, manager):
         """
         Remove the given manager's configuration.

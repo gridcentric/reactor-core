@@ -12,7 +12,7 @@ from ConfigParser import SafeConfigParser
 from reactor.apiclient import ReactorApiClient
 from reactor import log
 
-def usage():
+def main_usage():
     print "usage: %s < -h|--help | [options] command >" % sys.argv[0]
     print ""
     print "Optional arguments:"
@@ -39,9 +39,7 @@ def usage():
     print ""
     print "    manage <endpoint>      Manage or update a serivce with the given name."
     print "                           The endpoint configuration is read from stdin."
-    print ""
     print "    unmanage <endpoint>    Unmanged the endpoint with the given name."
-    print ""
     print "    show <endpoint>        Show the current configuration for the endpoint."
     print ""
     print "    register <ip>          Register the given IP address."
@@ -49,32 +47,26 @@ def usage():
     print "    ips <endpoint>         Displays all of the confirmed IP addresses."
     print ""
     print "    state <endpoint>       Get the endpoint state."
-    print ""
     print "    start <endpoint>       "
     print "    stop  <endpoint>       Update the endpoint state."
     print "    pause <endpoint>       "
     print ""
     print "    get-metrics <endpoint> Get custom endpoint metrics."
-    print ""
     print "    set-metrics <endpoint> Set custom endpoint metrics. The metrics are read"
     print "                           as JSON { \"name\" : [weight, value] } from stdin."
     print ""
     print "    managers-configured    List all the configured managers."
-    print ""
     print "    managers-active        List all the active managers."
     print ""
     print "    update-manager [ip]    Update the current configuration for the manager."
-    print ""
     print "    show-manager [ip]      Show the current configuration for the manager."
-    print ""
+    print "    show-log <uuid>        Show the log for the given manager."
     print "    forget-manager <ip>    Remove and forget the given manager."
     print ""
     print "    passwd [password]      Updates the API's password."
-    print ""
     print "    domain [domain]        Get or set the domain."
     print ""
     print "    runserver [names...]   Run the scale manager server."
-    print ""
     print "    runapi                 Runs the API server."
     print ""
 
@@ -86,13 +78,13 @@ def main():
     logfile = None
     update = False
 
-    opts, args = getopt.getopt(sys.argv[1:], 
-                                "ha:p:z:dl:u", 
+    opts, args = getopt.getopt(sys.argv[1:],
+                                "ha:p:z:dl:u",
                                ["help","api_server=","password=","zookeeper=","debug","log=","update"])
-    
+
     for o, a in opts:
         if o in ('-h', '--help'):
-            usage()
+            main_usage()
             sys.exit(0)
         elif o in ('-a', '--api'):
             api_server = a
@@ -101,7 +93,7 @@ def main():
         elif o in ('-z', '--zookeeper'):
             zk_servers.append(a)
         elif o in ('-d', '--debug'):
-            debug=True
+            debug = True
         elif o in ('-l','--log'):
             logfile = a
         elif o in ('-u','--update'):
@@ -109,14 +101,14 @@ def main():
     
     if len(zk_servers) == 0:
         zk_servers = ["localhost"]
-    
+
     loglevel = logging.INFO
     if debug:
         loglevel = logging.DEBUG
 
     def get_arg(n):
         if len(args) < n+1:
-            usage()
+            main_usage()
             sys.exit(1)
         return args[n]
     def get_args():
@@ -170,7 +162,7 @@ def main():
             api_client = get_api_client()
             config = api_client.get_endpoint_config(endpoint_name)
             print config.strip()
-    
+
         elif command == "managers-configured":
             api_client = get_api_client()
             managers = api_client.list_managers_configured()
@@ -214,7 +206,13 @@ def main():
             api_client = get_api_client()
             config = api_client.get_manager_config(manager)
             print config.strip()
-    
+
+        elif command == "show-log":
+            manager = get_arg(1)
+            api_client = get_api_client()
+            log = api_client.get_manager_log(manager)
+            sys.stdout.write(log)
+
         elif command == "forget-manager":
             manager = get_arg(1)
             api_client = get_api_client()
@@ -297,7 +295,7 @@ def main():
             serve(api.get_wsgi_app(), host='0.0.0.0')
    
         else:
-            usage()
+            main_usage()
             sys.exit(1)
     
     except Exception, e:
@@ -307,19 +305,52 @@ def main():
             sys.stderr.write("%s\n" %(e))
             sys.exit(1)
 
+def server_usage():
+    print "usage: %s < -h|--help | [options] command >" % sys.argv[0]
+    print ""
+    print "Optional arguments:"
+    print "   -h, --help              Display this help message"
+    print ""
+    print "   -d, --debug             Enables debugging log and full stack trace errors."
+    print ""
+    print "   -l, --log=              Log to a file instead of stdout."
+    print ""
+
 def server():
+    debug = False
+    logfile = None
+
+    opts, args = getopt.getopt(sys.argv[1:],
+                                "hdl:u",
+                               ["help","debug","log="])
+
+    for o, a in opts:
+        if o in ('-h', '--help'):
+            server_usage()
+            sys.exit(0)
+        elif o in ('-d', '--debug'):
+            debug = True
+        elif o in ('-l','--log'):
+            logfile = a
+
     from paste.httpserver import serve
     import reactor.server.config as config
     from reactor.server.api import ServerApi
+
+    loglevel = logging.INFO
+    if debug:
+        loglevel = logging.DEBUG
+    log.configure(loglevel, logfile)
 
     try:
         # Try to read the saved configuration.
         zk_servers = config.read_config()
     except:
+        zk_servers = []
+    if len(zk_servers) == 0:
         # Otherwise, use localhost.
         zk_servers = ["localhost"]
 
-    # Disable the logfile.
-    log.configure(logging.INFO)
+    # Start the full server app.
     app = ServerApi(zk_servers)
     serve(app.get_wsgi_app(), host='0.0.0.0')

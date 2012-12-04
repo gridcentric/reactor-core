@@ -90,6 +90,9 @@ class ScaleManager(object):
 
         self.load_balancer = None # Load balancer connections.
 
+        # Setup logging.
+        self.log = self.setup_logging()
+
         # The Windows domain connection.
         self.windows = windows.WindowsConnection()
 
@@ -99,6 +102,17 @@ class ScaleManager(object):
         if self.zk_conn:
             self.zk_conn.close()
         self.zk_conn = ZookeeperConnection(self.zk_servers)
+
+    @locked
+    def setup_logging(self):
+        """ Add an in-memory log that can be polled remotely. """
+        log_buffer = StringIO()
+        logger = logging.getLogger()
+        formatter = logging.Formatter('%(asctime)s [%(thread)d] %(levelname)s %(name)s: %(message)s')
+        handler = logging.StreamHandler(log_buffer)
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        return log_buffer
 
     def serve(self):
         self.__connect_to_zookeeper()
@@ -287,7 +301,6 @@ class ScaleManager(object):
         self.__select_endpoints()
 
         self.__setup_loadbalancer_connections(manager_config.loadbalancer_names())
-
 
     @locked
     def manager_change(self, managers):
@@ -876,6 +889,16 @@ class ScaleManager(object):
             except:
                 error = traceback.format_exc()
                 logging.error("Error updating endpoint %s: %s" % (endpoint.name, error))
+
+        try:
+            # Try updating our logs.
+            self.zk_conn.write(paths.manager_log(self.uuid), self.log.getvalue(), ephemeral=True)
+        except:
+            error = traceback.format_exc()
+            logging.error("Error saving logs: %s" % error)
+
+        # Reset the buffer.
+        self.log.truncate(0)
 
     def run(self):
         # Note that we are running.

@@ -48,6 +48,10 @@ def managers():
 def manager_keys(name):
     return "%s/keys/%s" % (MANAGERS, name)
 
+# The logs for a given manager.
+def manager_log(name):
+    return "%s/log/%s" % (MANAGERS, name)
+
 # The metrics for a particular manager.
 def manager_metrics(name):
     return "%s/metrics/%s" % (MANAGERS, name)

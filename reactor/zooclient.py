@@ -31,6 +31,9 @@ class ReactorClient(object):
     def get_manager_key(self, manager):
         return self.zk_conn.read(paths.manager_ip(manager))
 
+    def get_manager_log(self, manager):
+        return self.zk_conn.read(paths.manager_log(manager))
+
     def list_managers_configured(self):
         return self.zk_conn.list_children(paths.manager_configs())
 
