@@ -18,7 +18,10 @@ class APIEndpoint(Endpoint):
 
         # Update basic information.
         api_config = EndpointConfig(str(config))
-        url = "http://api.%s" % self.scale_manager.domain
+        if self.scale_manager.domain:
+            url = "http://api.%s" % self.scale_manager.domain
+        else:
+            url = "http://"
         api_config._set("endpoint", "url", url)
         api_config._set("scaling",  "url", url)
         api_config._set("endpoint", "port", "8080")

@@ -4,4 +4,6 @@ no-resolv
 no-hosts
 addn-hosts=${hosts}
 expand-hosts
+% if domain:
 domain=${domain}
+% endif

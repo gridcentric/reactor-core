@@ -10,11 +10,6 @@ from reactor.server.endpoint import APIEndpoint
 import reactor.server.iptables as iptables
 import reactor.server.ips as ips
 
-# We must always specify some domain for the installation.
-# If none is available, we use example.com as it is protected
-# under domain name RFC as a reserved name.
-NODOMAIN = "example.com"
-
 class ReactorScaleManager(ScaleManager):
     def __init__(self, zk_servers):
         # Grab the list of global IPs.
@@ -25,7 +20,7 @@ class ReactorScaleManager(ScaleManager):
         self.api_endpoint = None
 
         # The reactor domain.
-        self.domain = NODOMAIN 
+        self.domain = ""
 
     def start_params(self, endpoint=None):
         # Pass a parameter pointed back to this instance.
@@ -88,7 +83,7 @@ class ReactorScaleManager(ScaleManager):
 
     @locked
     def reload_domain(self, domain):
-        self.domain = domain or NODOMAIN
+        self.domain = domain or ""
         self.reload_loadbalancer()
 
         if self.api_endpoint:

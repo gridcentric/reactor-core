@@ -232,8 +232,8 @@ class Connection(LoadBalancerConnection):
         # Ensure that there is a path.
         path = path or "/"
 
-        # Ensure that there is a server name.
-        netloc = netloc or "example.com"
+        # If there is no netloc, set it so False.
+        netloc = netloc or False
 
         # Add the connection to our tracking list, and
         # compute the specification for the template.

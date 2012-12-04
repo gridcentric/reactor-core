@@ -10,9 +10,17 @@ ${extra}
 server {
     access_log /var/log/nginx/access.log reactor;
 
+% if not(netloc):
+    listen ${listen} default_server;
+    server_name _;
+    server_name_in_redirect off;
+% else:
     listen ${listen};
     server_name ${netloc};
+% endif
+
     location ${path} {
+
 % if redirect:
       return 301 ${redirect};
 % else:

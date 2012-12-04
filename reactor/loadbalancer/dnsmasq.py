@@ -74,8 +74,6 @@ class Connection(LoadBalancerConnection):
 
         # Make sure we have a domain.
         domain = self._scale_manager.domain
-        if not(domain):
-            domain = "example.com"
 
         # Write out our configuration template.
         conf = self.template.render(domain=domain,
