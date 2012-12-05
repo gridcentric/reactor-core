@@ -70,13 +70,17 @@ def connected(request_handler):
             return request_handler(*args, **kwargs)
         except ZookeeperException:
             # Disconnect (next request will reconnect).
+            logging.error("Unexpected error: %s" % traceback.format_exc())
             self.disconnect()
             return None
     def fn(*args, **kwargs):
         response = try_once(*args, **kwargs)
         if not(response):
             response = try_once(*args, **kwargs)
-        return response
+        if not(response):
+            return Response(status=500, body="internal error")
+        else:
+            return response
     return fn
 
 class ReactorApi:

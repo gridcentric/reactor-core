@@ -19,12 +19,9 @@ class ReactorScaleManager(ScaleManager):
         # The implicit API endpoint.
         self.api_endpoint = None
 
-        # The reactor domain.
-        self.domain = ""
-
     def start_params(self, endpoint=None):
         # Pass a parameter pointed back to this instance.
-        params = ScaleManager.start_params(endpoint=endpoint)
+        params = super(ReactorScaleManager, self).start_params(endpoint=endpoint)
         params["reactor"] = "api.%s" % self.domain
 
         return params
@@ -43,12 +40,6 @@ class ReactorScaleManager(ScaleManager):
         new_config = ManagerConfig(config_str)
         new_config._set("manager", "loadbalancer", "dnsmasq,nginx,tcp")
         super(ReactorScaleManager, self).manager_register(str(new_config))
-
-        # Reload the domain.
-        self.reload_domain(self.zk_conn.watch_contents(\
-                                paths.domain(),
-                                self.reload_domain,
-                                default_value=self.domain))
 
     def serve(self):
         # Perform normal setup.
@@ -81,11 +72,8 @@ class ReactorScaleManager(ScaleManager):
         else:
             super(ReactorScaleManager, self).remove_endpoint(endpoint_name, unmanage=unmanage)
 
-    @locked
     def reload_domain(self, domain):
-        self.domain = domain or ""
-        self.reload_loadbalancer()
-
+        super(ReactorScaleManager, self).reload_domain(domain)
         if self.api_endpoint:
             # Make sure that the API endpoint reloads appropriately.
             self.api_endpoint.api_config()

@@ -5,6 +5,7 @@ from reactor import utils
 from reactor.config import SubConfig
 
 import logging
+import traceback
 
 import reactor.zookeeper.paths as paths
 
@@ -16,8 +17,13 @@ def get_connection(name, config, scale_manager):
     lb_class = lb_config.loadbalancer_class()
     if lb_class == '':
         lb_class = "reactor.loadbalancer.%s.Connection" % (name)
-    lb_conn_class = utils.import_class(lb_class)
-    return lb_conn_class(name, scale_manager, config)
+
+    try:
+        lb_conn_class = utils.import_class(lb_class)
+        return lb_conn_class(name, scale_manager, config)
+    except:
+        logging.error("Unable to load loadbalancer: %s" % traceback.format_exc())
+        return LoadBalancerConnection(name, scale_manager, config)
 
 class LoadBalancerConfig(SubConfig):
 

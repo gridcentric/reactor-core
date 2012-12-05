@@ -307,6 +307,8 @@ class Connection(LoadBalancerConnection):
 
         # Check for a removal / unsupported redirect.
         if len(ips) == 0:
+            if listen in self.portmap:
+                del self.portmap[listen]
             return
 
         # Update the portmap.

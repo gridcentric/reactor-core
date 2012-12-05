@@ -96,6 +96,9 @@ class ScaleManager(object):
         # The Windows domain connection.
         self.windows = windows.WindowsConnection()
 
+        # The reactor domain.
+        self.domain = ""
+
     @locked
     def __connect_to_zookeeper(self):
         # Create a Zookeeper connection.
@@ -301,6 +304,17 @@ class ScaleManager(object):
         self.__select_endpoints()
 
         self.__setup_loadbalancer_connections(manager_config.loadbalancer_names())
+
+        # Reload the domain.
+        self.reload_domain(self.zk_conn.watch_contents(\
+                                paths.domain(),
+                                self.reload_domain,
+                                default_value=self.domain))
+
+    @locked
+    def reload_domain(self, domain):
+        self.domain = domain or ""
+        self.reload_loadbalancer()
 
     @locked
     def manager_change(self, managers):
@@ -608,6 +622,7 @@ class ScaleManager(object):
         # and give them back to the VMs for the agent to use in configuration.
         if endpoint and self.windows:
             params.update(self.windows.start_params(ConfigView(endpoint.config, "windows")))
+        return params
 
     @locked
     def marked_instances(self, endpoint_name):

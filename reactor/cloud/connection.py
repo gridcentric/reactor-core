@@ -2,6 +2,9 @@
 The generic cloud connection interface.
 """
 
+import logging
+import traceback
+
 from reactor import utils
 from reactor.config import SubConfig
 
@@ -13,8 +16,13 @@ def get_connection(cloud_type, config):
     cloud_class = cloud_config.cloud_class()
     if cloud_class == '':
         cloud_class = "reactor.cloud.%s.Connection" % (cloud_type)
-    cloud_conn_class = utils.import_class(cloud_class)
-    return cloud_conn_class(config)
+
+    try:
+        cloud_conn_class = utils.import_class(cloud_class)
+        return cloud_conn_class(config)
+    except:
+        logging.error("Unable to load cloud: %s" % traceback.format_exc())
+        return CloudConnection(config)
 
 class CloudConnectionConfig(SubConfig):
 
