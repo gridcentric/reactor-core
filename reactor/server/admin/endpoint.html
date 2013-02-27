@@ -137,14 +137,14 @@
 
     function loadConfig() {
         $("#config").attr("disabled", "disabled");
-        $("#config").attr("value", "Loading...");
+        $("#config").text("Loading...");
 
         $.ajax({
             url: "/v1.0/endpoints/${object}?auth_key=${auth_key}",
             type: 'GET',
             dataType: 'json',
             success: function(result) {
-                $("#config").attr("value", result["config"]);
+                $("#config").text(result["config"]);
                 $("#config").removeAttr("disabled");
             },
         });
@@ -159,35 +159,8 @@
                 dataType: 'json',
                 data: JSON.stringify({ "config" : value }),
                 contentType: 'application/json',
-                success: function(result) {
+                done: function(result) {
                     $("#config").removeAttr("disabled");
-                },
-            });
-        });
-    }
-
-    function loadMetrics() {
-        $("#metricsSave").click(function (e) {
-            e.preventDefault();
-            $("#metrics").attr("disabled", "disabled");
-            var value = $("#metrics").val();
-            $.ajax({
-                url: "/v1.0/endpoints/${object}/metrics?auth_key=${auth_key}",
-                type: 'POST',
-                dataType: 'json',
-                data: value,
-                contentType: 'application/json',
-                success: function(result) {
-                    $("#metrics").removeAttr("disabled");
-                    $("#metricsSave").removeClass("btn-danger");
-                    $("#metricsSave").removeClass("btn-success");
-                    $("#metricsSave").addClass("btn-success");
-                },
-                error: function(result) {
-                    $("#metrics").removeAttr("disabled");
-                    $("#metricsSave").removeClass("btn-danger");
-                    $("#metricsSave").removeClass("btn-success");
-                    $("#metricsSave").addClass("btn-danger");
                 },
             });
         });
@@ -308,7 +281,6 @@
         "#pause" : { "action" : "PAUSE" }
     });
     loadConfig();
-    loadMetrics();
     loadDelete();
     setupGraph($("#livemetrics"), "endpoints/${object}/metrics", updateLiveMetrics);
     setupGraph($("#servers"), "endpoints/${object}/ips", updateServers);
