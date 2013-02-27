@@ -20,7 +20,7 @@
             data: JSON.stringify({ "config" : ""}),
             processData: false,
             contentType: 'application/json',
-            success: function() {
+            complete: function() {
                 window.location = "/admin/${type}s/" + name + "?auth_key=${auth_key}";
             },
         });

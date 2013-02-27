@@ -49,16 +49,9 @@
 </div>
 
 <div class="control-group">
-    <label class="control-label" for="metrics">Metrics</label>
+    <label class="control-label" for="delete">Actions</label>
     <div class="controls">
-        <input type="text" id="metrics" class="input-xxlarge"></input>
-        <button id="metricsSave" class="btn" type="submit">Save</button>
-    </div>
-</div>
-
-<div class="control-group">
-    <div class="controls">
-        <a href="#deleteModal" role="button" class="btn btn-danger" data-toggle="modal">Delete</a>
+        <a href="#deleteModal" id="delete" role="button" class="btn btn-danger" data-toggle="modal">Delete</a>
     </div>
 </div>
 
@@ -127,7 +120,7 @@
                     data: JSON.stringify(value),
                     processData: false,
                     contentType: 'application/json',
-                    success: function() {
+                    complete: function() {
                         loadState();
                     },
                 });
@@ -159,7 +152,7 @@
                 dataType: 'json',
                 data: JSON.stringify({ "config" : value }),
                 contentType: 'application/json',
-                done: function(result) {
+                complete: function(result) {
                     $("#config").removeAttr("disabled");
                 },
             });
