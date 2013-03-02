@@ -34,6 +34,8 @@ class ServerApi(ReactorApi):
         self.config.add_view(self.admin, route_name='admin-home')
         self.config.add_view(self.admin, route_name='admin-page')
         self.config.add_view(self.admin, route_name='admin-object')
+        self.config.add_view(context='pyramid.exceptions.NotFound',
+                view='pyramid.view.append_slash_notfound_view')
 
         # Check the endpoint.
         self.check(zk_servers)
