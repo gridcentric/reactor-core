@@ -48,7 +48,7 @@ function updateGraph(elem, path, data, metrics, callback) {
         }
     }
     $.ajax({
-        url: "/v1.0/" + path + "?auth_key=${auth_key}",
+        url: "/v1.0/" + path,
         type: 'GET',
         dataType: 'json',
         success: onData,

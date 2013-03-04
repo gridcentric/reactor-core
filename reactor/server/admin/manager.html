@@ -50,7 +50,7 @@
 <script type="text/javascript">
     function loadUuid() {
         $.ajax({
-            url: "/v1.0/managers/${object}?auth_key=${auth_key}",
+            url: "/v1.0/managers/${object}",
             type: 'GET',
             dataType: 'json',
             success: function(result) {
@@ -64,7 +64,7 @@
         $("#config").attr("value", "Loading...");
 
         $.ajax({
-            url: "/v1.0/managers/${object}?auth_key=${auth_key}",
+            url: "/v1.0/managers/${object}",
             type: 'GET',
             dataType: 'json',
             success: function(result) {
@@ -78,7 +78,7 @@
             $("#config").attr("disabled", "disabled");
             var value = $("#config").val();
             $.ajax({
-                url: "/v1.0/managers/${object}?auth_key=${auth_key}",
+                url: "/v1.0/managers/${object}",
                 type: 'POST',
                 dataType: 'json',
                 data: JSON.stringify({ "config" : value }),
@@ -96,11 +96,11 @@
         $("#deleteConfirm").click(function (e) {
             e.preventDefault();
             $.ajax({
-                url: "/v1.0/managers/${object}?auth_key=${auth_key}",
+                url: "/v1.0/managers/${object}",
                 type: 'DELETE',
                 processData: false,
                 success: function() {
-                    window.location = '/admin/?auth_key=${auth_key}';
+                    window.location = '/admin/';
                 },
             });
         });

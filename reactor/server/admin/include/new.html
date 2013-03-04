@@ -14,14 +14,14 @@
         e.preventDefault();
         var name = $("#${type}name").val();
         $.ajax({
-            url: "/v1.0/${type}s/" + name + "?auth_key=${auth_key}",
+            url: "/v1.0/${type}s/" + name,
             type: 'POST',
             dataType: 'json',
             data: JSON.stringify({ "config" : ""}),
             processData: false,
             contentType: 'application/json',
             complete: function() {
-                window.location = "/admin/${type}s/" + name + "?auth_key=${auth_key}";
+                window.location = "/admin/${type}s/" + name;
             },
         });
     });

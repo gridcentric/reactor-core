@@ -57,7 +57,7 @@ else:
             if( value == '${name}' ) {
                 $("#itemList").append('<li class="active"><a href="#">' + value + '</a></li>');
             } else {
-                $("#itemList").append('<li><a href="${link}' + value +'?auth_key=${auth_key}">' + value + '</a></li>');
+                $("#itemList").append('<li><a href="${link}' + value + '">' + value + '</a></li>');
             }
         });
         list_done();
@@ -65,7 +65,7 @@ else:
 
     // Submit the real request.
     list_submit({
-        url: '${path}?auth_key=${auth_key}',
+        url: '${path}',
         type: 'GET',
         dataType: 'json',
         success: list_process, });

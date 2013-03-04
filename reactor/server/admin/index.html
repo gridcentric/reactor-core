@@ -1,15 +1,5 @@
 <%include file="/navbar.html"/>
 
-<div id="login" class="span6">
-    <div class="hero-unit">
-        <h3>You are not authenticated.</h3>
-        <form class="form-inline">
-            <input class="input-medium" id="authkeyVal" type="text" placeholder="Auth-Key">
-            <button type="submit" id="authkeySet" class="btn">Set</button>
-        </form>
-    </div>
-</div>
-
 <div id="loggedin" class="span9">
 
 <div class="hero-unit">
@@ -62,28 +52,12 @@
         }
     }
 
-    function do_logout() {
-        $("#loggedin").addClass("hidden");
-        $("#navbar").addClass("hidden");
-        $("#authkeySet").click(function (e) {
-            e.preventDefault();
-            var value = $("#authkeyVal").val();
-            window.location = window.location.pathname + "?auth_key=" + value;
-        });
-    }
-
-    function do_login() {
-        $("#navbar").removeClass("hidden");
-        $("#loggedin").removeClass("hidden");
-        $("#login").html("");
-    }
-
     function process_endpoints(result) {
         $.each(result["endpoints"], function(index, value) {
             endpoint_count += 1;
             pending += 1;
             $.ajax({
-                url: "/v1.0/endpoints/" + value + "/state?auth_key=${auth_key}",
+                url: "/v1.0/endpoints/" + value + "/state",
                 type: 'GET',
                 dataType: 'json',
                 success: function(result) {
@@ -102,13 +76,11 @@
                     done_endpoint();
                 },
             });
-            do_login();
         });
     }
 
-    do_logout();
     $.ajax({
-        url: "/v1.0/endpoints?auth_key=${auth_key}",
+        url: "/v1.0/endpoints",
         type: 'GET',
         dataType: 'json',
         success: process_endpoints,

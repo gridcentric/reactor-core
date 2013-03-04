@@ -1,5 +1,6 @@
 import json
 import httplib2
+import urllib
 
 class ReactorApiClient(httplib2.Http):
     """
@@ -171,7 +172,18 @@ class ReactorApiClient(httplib2.Http):
 
     def _authenticated_request(self, url, method, **kwargs):
         if self.api_key != None:
-            kwargs.setdefault('headers', {})['X-Auth-Key'] = self.api_key
+            # Log in and get a cookie
+            body = {'auth_key' : self.api_key}
+            headers = {'Content-type': 'application/x-www-form-urlencoded'}
+            resp, _ = super(ReactorApiClient, self).request(
+                                    self.api_url + '/admin/login', 'POST',
+                                    headers=headers,
+                                    body=urllib.urlencode(body))
+
+            if 'set-cookie' not in resp:
+                raise Exception("Error: invalid password.")
+
+            kwargs.setdefault('headers', {})['Cookie'] = resp['set-cookie']
         resp, body = self.request(self.api_url + url, method, **kwargs)
         return resp, body
 

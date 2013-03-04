@@ -5,6 +5,7 @@ import traceback
 
 from pyramid.config import Configurator
 from pyramid.response import Response
+from pyramid.security import authenticated_userid
 
 from reactor.endpoint import EndpointConfig
 from reactor.endpoint import State
@@ -12,42 +13,63 @@ from reactor.manager import ManagerConfig
 from reactor.zooclient import ReactorClient
 from reactor.zookeeper.connection import ZookeeperException
 
-def get_auth_key(request):
-    return request.headers.get('X-Auth-Key', None) or \
-           request.params.get('auth_key', None)
-
-def authorized_admin_only(request_handler):
+def authorized_admin_only(request_handler=None, forbidden_view=None):
     """
     A Decorator that does a simple check to see if the request is
     authorized before executing the actual handler. NOTE: This will
     only authorize for admins only. 
-    """
-    def fn(self, context, request):
-        auth_key = get_auth_key(request)
-        try:
-            if self._authorize_admin_access(context, request, auth_key):
-                return request_handler(self, context, request)
-            else:
-                # Return an unauthorized response.
-                return Response(status=401, body="unauthorized")
-        except:
-            # Return an internal error.
-            logging.error("Unexpected error: %s" % traceback.format_exc())
-            return Response(status=500, body="internal error")
 
-    return fn
+    Use of this decorator implies use of the @connected decorator.
+    """
+    def _authorized_admin_only(request_handler):
+        def fn(self, context, request):
+            try:
+                if self._authorize_admin_access(context, request):
+                    return request_handler(self, context, request)
+
+                # Access denied
+                if forbidden_view:
+                    return eval(forbidden_view)(context, request)
+                else:
+                    # Return an unauthorized response.
+                    return Response(status=401, body="unauthorized")
+            except:
+                # Return an internal error.
+                logging.error("Unexpected error: %s" % traceback.format_exc())
+                return Response(status=500, body="internal error")
+
+        return fn
+
+    # This decorator can be invoked either with arguments (e.g.
+    # @authorized_admin_only(forbidden_view='my_view') or without
+    # (e.g. @authorized_admin_only() or @authorized_admin_only).
+    #
+    # When invoked with (), we must generate a decorator, which
+    # python will then apply to the function via '@'. When
+    # invoked without (), we skip the generation step and
+    # decorate the function. We know how we were invoked via the
+    # request_handler parameter - if being called as a function,
+    # it will be None; if being called as a decorator, it will
+    # be the function being decorated.
+    if request_handler:
+        # Decorator
+        return _authorized_admin_only(request_handler)
+    else:
+        # Generator
+        return _authorized_admin_only
 
 def authorized(request_handler):
     """
     A Decorator that does a simple check to see if the request is
     authorized before executing the actual handler. 
+
+    Use of this decorator implies use of the @connected decorator.
     """
     def fn(self, context, request):
-        auth_key = get_auth_key(request)
         try:
             if self._authorize_ip_access(context, request) or \
-                self._authorize_endpoint_access(context, request, auth_key) or \
-                self._authorize_admin_access(context, request, auth_key):
+                self._authorize_endpoint_access(context, request) or \
+                self._authorize_admin_access(context, request):
                 return request_handler(self, context, request)
             else:
                 # Return an unauthorized response.
@@ -171,22 +193,20 @@ class ReactorApi:
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
 
-    @connected
-    def _authorize_admin_access(self, context, request, auth_key):
+    def _authorize_admin_access(self, context, request):
         auth_hash = self.client.auth_hash()
         if auth_hash != None:
-            if auth_key != None:
-                auth_token = self._create_admin_auth_token(auth_key)
-                return auth_hash == auth_token
-            else:
-                return False
+            return authenticated_userid(request) != None
         else:
             # If there is no auth hash then authentication has not been turned
             # on so all requests are allowed by default.
             return True
 
-    @connected
-    def _authorize_endpoint_access(self, context, request, auth_key):
+    def _req_get_auth_key(self, request):
+        return request.headers.get('X-Auth-Key', None) or \
+               request.params.get('auth_key', None)
+
+    def _authorize_endpoint_access(self, context, request):
         # Pull an endpoint name if it is specified.
         endpoint_name = request.matchdict.get('endpoint_name', None)
     
@@ -206,6 +226,7 @@ class ReactorApi:
                 endpoint_config.get_endpoint_auth()
 
             if auth_hash != None and auth_hash != "":
+                auth_key = self._req_get_auth_key(request)
                 if auth_key != None:
                     auth_token = self._create_endpoint_auth_token(\
                         auth_key, auth_salt, auth_algo)
@@ -236,7 +257,6 @@ class ReactorApi:
 
         return ip_address
 
-    @connected
     def _authorize_ip_access(self, context, request):
         matched_route = request.matched_route
         if matched_route != None:
@@ -262,6 +282,11 @@ class ReactorApi:
             return hashlib.sha1("%s%s" % (salt, auth_key)).hexdigest()
         else:
             return None
+
+    def check_admin_auth_key(self, auth_key):
+        auth_hash = self.client.auth_hash()
+        client_hash = self._create_admin_auth_token(auth_key)
+        return auth_hash == client_hash
 
     def _create_endpoint_auth_token(self, auth_key, auth_salt, algo):
         if auth_salt == None:

@@ -5,7 +5,12 @@ import json
 import os
 import uuid
 
+from pyramid.authentication import AuthTktAuthenticationPolicy
+from pyramid.authorization import ACLAuthorizationPolicy
+from pyramid.httpexceptions import HTTPFound
 from pyramid.response import Response
+from pyramid.security import remember, forget, authenticated_userid
+from pyramid.url import route_url
 from mako.template import Template
 from mako.lookup import TemplateLookup
 from mako import exceptions
@@ -14,7 +19,6 @@ from reactor.api import ReactorApi
 from reactor.api import connected
 from reactor.api import authorized
 from reactor.api import authorized_admin_only
-from reactor.api import get_auth_key
 
 from reactor.server.manager import ReactorScaleManager
 import reactor.server.ips as ips
@@ -28,10 +32,32 @@ class ServerApi(ReactorApi):
         self.config.add_route('api-servers', '/api_servers')
         self.config.add_view(self.set_api_servers, route_name='api-servers')
 
+        # Set up auth-ticket authentication
+        self.config.set_authentication_policy(
+            AuthTktAuthenticationPolicy(
+                'gridcentricreactor'))
+        self.config.set_authorization_policy(
+            ACLAuthorizationPolicy())
+
+        # Add a login page
+        self.config.add_route('admin-login', '/admin/login')
+        self.config.add_view(self.admin_login, route_name='admin-login')
+
+        # Add a logout page
+        self.config.add_route('admin-logout', '/admin/logout')
+        self.config.add_view(self.admin_logout, route_name='admin-logout')
+
+        # Note: views are routed on a first-matched basis, so the ordering
+        # of the following add_route calls are important since fetches to
+        # /admin/assets could be matched by either the admin-asset or
+        # admin-object routes (and we want them to go to admin-asset,
+        # so that they can be fetched even in unathenticated contexts).
         self.config.add_route('admin-home',   '/admin/')
+        self.config.add_route('admin-asset',  '/admin/assets/{object_name:.*}')
         self.config.add_route('admin-page',   '/admin/{page_name}')
         self.config.add_route('admin-object', '/admin/{page_name}/{object_name:.*}')
         self.config.add_view(self.admin, route_name='admin-home')
+        self.config.add_view(self.admin_asset, route_name='admin-asset')
         self.config.add_view(self.admin, route_name='admin-page')
         self.config.add_view(self.admin, route_name='admin-object')
         self.config.add_view(context='pyramid.exceptions.NotFound',
@@ -39,6 +65,45 @@ class ServerApi(ReactorApi):
 
         # Check the endpoint.
         self.check(zk_servers)
+
+    @connected
+    def admin_login(self, context, request):
+        """
+        Logs the admin user in.
+        """
+        login_url = route_url('admin-login', request)
+        referrer = request.url
+        if referrer == login_url:
+            referrer = '/admin/'
+        came_from = request.params.get('came_from', referrer)
+        message = ''
+        # See if the login form was submitted
+        if 'auth_key' in request.params:
+            auth_key = request.params['auth_key']
+            if self.check_admin_auth_key(auth_key):
+                headers = remember(request, 'admin')
+                return HTTPFound(location = came_from,
+                                 headers = headers)
+            message = 'Incorrect password.'
+
+        # Credentials not submitted or incorrect, render login page
+        filename = os.path.join(os.path.dirname(__file__), 'admin', 'login.html')
+        lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
+        lookup = TemplateLookup(directories=[lookup_path])
+        template = Template(filename=filename, lookup=lookup)
+        kwargs = { 'message' :  message,
+                   'url' : route_url('admin-login', request),
+                   'came_from' : came_from }
+        body = template.render(**kwargs)
+        return Response(body=body)
+
+    def admin_logout(self, context, request):
+        """
+        Logs the admin user out.
+        """
+        headers = forget(request)
+        return HTTPFound(location = route_url('admin-home', request),
+                         headers = headers)
 
     @connected
     @authorized_admin_only
@@ -57,6 +122,7 @@ class ServerApi(ReactorApi):
             return Response(status=403)
 
     @connected
+    @authorized_admin_only(forbidden_view='self.admin_login')
     def admin(self, context, request):
         """
         Render a page from the admin directory and write it back.
@@ -66,42 +132,46 @@ class ServerApi(ReactorApi):
             page_name = request.matchdict.get('page_name', 'index')
             object_name = request.matchdict.get('object_name', '')
 
-            if page_name == 'lib':
-                is_lib = True
-                page_name = os.path.join(page_name, object_name)
-            else:
-                is_lib = False
-                if object_name and page_name.endswith('s'):
-                    page_name = page_name[:-1]
-                if page_name.find('.') < 0:
-                    page_name += '.html'
+            if object_name and page_name.endswith('s'):
+                page_name = page_name[:-1]
+            if page_name.find('.') < 0:
+                page_name += '.html'
 
             # Check that the file exists.
             filename = os.path.join(os.path.dirname(__file__), 'admin', page_name)
             if not(os.path.exists(filename)):
                 return Response(status=404)
 
-            if is_lib:
-                # Just open the page and write it out.
-                page_data = open(filename).read()
-            else:
-                # Process the request with all params.
-                # This allows us to generate pages that include
-                # arbitrary parameters (for convenience).
-                lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
-                lookup = TemplateLookup(directories=[lookup_path])
-                template = Template(filename=filename, lookup=lookup)
-                auth_key = get_auth_key(request)
-                kwargs = {}
-                kwargs.update(request.params.items())
-                kwargs["auth_key"] = auth_key
-                kwargs["uuid"]     = str(uuid.uuid4())
-                kwargs["object"]   = object_name
+            # Render it.
+            lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
+            lookup = TemplateLookup(directories=[lookup_path])
+            template = Template(filename=filename, lookup=lookup)
+            kwargs = { "object" : object_name,
+                       "user" : authenticated_userid(request) or '' }
+            try:
+                page_data = template.render(**kwargs)
+            except:
+                page_data = exceptions.html_error_template().render()
 
-                try:
-                    page_data = template.render(**kwargs)
-                except:
-                    page_data = exceptions.html_error_template().render()
+            return Response(body=page_data)
+        else:
+            return Response(status=403)
+
+    def admin_asset(self, context, request):
+        """
+        Render an asset for the admin page
+        """
+        if request.method == 'GET':
+            # Read the page_name from the request.
+            object_name = request.matchdict.get('object_name', '')
+            page_name = os.path.join('assets', object_name)
+
+            # Check that the file exists.
+            filename = os.path.join(os.path.dirname(__file__), 'admin', page_name)
+            if not(os.path.exists(filename)):
+                return Response(status=404)
+
+            page_data = open(filename).read()
 
             # Check for supported types.
             ext = page_name.split('.')[-1]

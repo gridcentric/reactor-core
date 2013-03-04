@@ -90,7 +90,7 @@
     function loadState() {
         $("#state").html('Loading...');
         $.ajax({
-            url: "/v1.0/endpoints/${object}/state?auth_key=${auth_key}",
+            url: "/v1.0/endpoints/${object}/state",
             type: 'GET',
             dataType: 'json',
             success: function(result) {
@@ -114,7 +114,7 @@
             $(sel).click(function(e) {
                 e.preventDefault();
                 $.ajax({
-                    url: "/v1.0/endpoints/${object}/state?auth_key=${auth_key}",
+                    url: "/v1.0/endpoints/${object}/state",
                     type: 'POST',
                     dataType: 'json',
                     data: JSON.stringify(value),
@@ -133,7 +133,7 @@
         $("#config").text("Loading...");
 
         $.ajax({
-            url: "/v1.0/endpoints/${object}?auth_key=${auth_key}",
+            url: "/v1.0/endpoints/${object}",
             type: 'GET',
             dataType: 'json',
             success: function(result) {
@@ -147,7 +147,7 @@
             $("#config").attr("disabled", "disabled");
             var value = $("#config").val();
             $.ajax({
-                url: "/v1.0/endpoints/${object}?auth_key=${auth_key}",
+                url: "/v1.0/endpoints/${object}",
                 type: 'POST',
                 dataType: 'json',
                 data: JSON.stringify({ "config" : value }),
@@ -165,11 +165,11 @@
         $("#deleteConfirm").click(function (e) {
             e.preventDefault();
             $.ajax({
-                url: "/v1.0/endpoints/${object}?auth_key=${auth_key}",
+                url: "/v1.0/endpoints/${object}",
                 type: 'DELETE',
                 processData: false,
                 success: function() {
-                    window.location = '/admin/?auth_key=${auth_key}';
+                    window.location = '/admin/';
                 },
             });
         });
