@@ -14,19 +14,5 @@
 <%include file="/new.html" args="type='endpoint'"/>
 <%include file="/new.html" args="type='manager'"/>
 
-<div class="row" id="logoutDiv" style="display: none">
-<div class="span2 offset5">
-<p><a class="btn" id=logoutButton" href="/admin/logout">Logout</a></p>
-<script type="text/javascript">
-function enableLogout() {
-    if ('${user}' != '') {
-        $("#logoutDiv").show()
-    }
-}
-enableLogout();
-</script>
-</div>
-</div>
-
 </div>
 

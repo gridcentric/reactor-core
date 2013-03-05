@@ -53,10 +53,12 @@ class ServerApi(ReactorApi):
         # admin-object routes (and we want them to go to admin-asset,
         # so that they can be fetched even in unathenticated contexts).
         self.config.add_route('admin-home',   '/admin/')
+        self.config.add_route('admin-passwd', '/admin/passwd')
         self.config.add_route('admin-asset',  '/admin/assets/{object_name:.*}')
         self.config.add_route('admin-page',   '/admin/{page_name}')
         self.config.add_route('admin-object', '/admin/{page_name}/{object_name:.*}')
         self.config.add_view(self.admin, route_name='admin-home')
+        self.config.add_view(self.admin_passwd, route_name='admin-passwd')
         self.config.add_view(self.admin_asset, route_name='admin-asset')
         self.config.add_view(self.admin, route_name='admin-page')
         self.config.add_view(self.admin, route_name='admin-object')
@@ -93,7 +95,9 @@ class ServerApi(ReactorApi):
         template = Template(filename=filename, lookup=lookup)
         kwargs = { 'message' :  message,
                    'url' : route_url('admin-login', request),
-                   'came_from' : came_from }
+                   'came_from' : came_from,
+                   'user' : '',
+                   'loggedin' : False }
         body = template.render(**kwargs)
         return Response(body=body)
 
@@ -147,7 +151,8 @@ class ServerApi(ReactorApi):
             lookup = TemplateLookup(directories=[lookup_path])
             template = Template(filename=filename, lookup=lookup)
             kwargs = { "object" : object_name,
-                       "user" : authenticated_userid(request) or '' }
+                       "user" : 'admin',
+                       "loggedin" : authenticated_userid(request) != None }
             try:
                 page_data = template.render(**kwargs)
             except:
@@ -186,6 +191,29 @@ class ServerApi(ReactorApi):
         else:
             return Response(status=403)
 
+    @connected
+    @authorized_admin_only(forbidden_view='self.admin_login')
+    def admin_passwd(self, context, request):
+        """
+        Sets the admin password
+        """
+        # See if the password form was submitted
+        if 'auth_key' in request.params:
+            # Set the new password
+            auth_key = request.params['auth_key']
+            self.client.set_auth_hash(self._create_admin_auth_token(auth_key))
+            # Route user back to the home screen.
+            return HTTPFound(location = route_url('admin-home', request))
+
+        # New password not submitted, render password page
+        filename = os.path.join(os.path.dirname(__file__), 'admin', 'passwd.html')
+        lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
+        lookup = TemplateLookup(directories=[lookup_path])
+        template = Template(filename=filename, lookup=lookup)
+        kwargs = { 'user' : 'admin',
+                   'loggedin' : authenticated_userid(request) != None }
+        body = template.render(**kwargs)
+        return Response(body=body)
 
     def start_manager(self, zk_servers):
         zk_servers.sort()

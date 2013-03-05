@@ -3,8 +3,8 @@
 //
 
 var options = {
-    lines: { show: true },
-    points: { show: true },
+    lines: { show: true, fill: 0.5 },
+    points: { show: false },
     xaxis: { show: false },
     yaxis: { show: true, ticks: 10, min: 0 },
     grid: { backgroundColor: { colors: ["#fff", "#eee"] } }
@@ -30,9 +30,9 @@ function try_plot(elem, data) {
     }
 }
 
-function updateGraph(elem, path, data, metrics, callback) {
+function updateGraph(elem, path, data, metrics, callback, period) {
     function onData(result) {
-        var timestamp = new Date();
+        var timestamp = new Date().getTime();
 
         // Hit the callback.
         callback(result, timestamp, data, metrics);
@@ -43,8 +43,8 @@ function updateGraph(elem, path, data, metrics, callback) {
         // Reschedule a callback if we're still open.
         if( isInDOM(elem) ) {
             setTimeout(function() {
-                updateGraph(elem, path, data, metrics, callback);
-            }, 5000);
+                updateGraph(elem, path, data, metrics, callback, period);
+            }, period);
         }
     }
     $.ajax({
@@ -55,7 +55,7 @@ function updateGraph(elem, path, data, metrics, callback) {
     });
 }
 
-function setupGraph(elem, path, callback) {
+function setupGraph(elem, path, callback, period) {
     var data = [];
 
     // Do an initial plot on screen.
@@ -65,5 +65,5 @@ function setupGraph(elem, path, callback) {
     elem.resize(function() { elem.plot = false; try_plot(elem, data); });
 
     // Start the update cycle.
-    updateGraph(elem, path, data, {}, callback);
+    updateGraph(elem, path, data, {}, callback, period);
 }

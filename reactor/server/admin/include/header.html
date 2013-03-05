@@ -9,10 +9,11 @@
 <!-- Pull in local libraries. -->
 <link href="/admin/assets/lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
 <link href="/admin/assets/lib/bootstrap/css/bootstrap-responsive.css" rel="stylesheet">
-<script src="http://code.jquery.com/jquery-latest.js"></script>
+<script src="/admin/assets/lib/jquery-1.9.1.min.js"></script>
 <script src="/admin/assets/lib/bootstrap/js/bootstrap.min.js"></script>
 <script src="/admin/assets/lib/jquery.flot.js"></script>
 <script src="/admin/assets/lib/jquery.flot.resize.js"></script>
+<script src="/admin/assets/lib/jquery.validate.min.js"></script>
 
 <!-- Pull in customization. -->
 <link rel="stylesheet" type="text/css" href="/admin/assets/admin.css" media="screen"/>
@@ -25,16 +26,41 @@
 
 <div class="navbar navbar-inverse navbar-fixed-top">
   <div class="navbar-inner">
-     <div class="container">
-        <a class="brand" href="/admin/">Reactor</a>
-        <div class="nav-collapse collapse">
-            <ul class="nav">
-            <!-- Menu -->
-            </ul>
-        </div>
+    <div class="container">
+      <ul class="nav">
+        <li>
+            <a class="brand" href="/admin/">Reactor</a>
+        </li>
+      </ul>
+      <ul id="accountMenu" style="display: none" class="nav pull-right">
+        <li class="dropdown">
+          <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+            Account
+            <b class="caret"></b>
+          </a>
+          <ul class="dropdown-menu">
+            <li><a href="/admin/passwd">Set Password</a></li>
+            <li id="logoutButton" style="display: none"><a href="/admin/logout">Logout</a></li>
+          </ul>
+        </li>
+      </ul>
     </div>
   </div>
 </div>
 
+<script type="text/javascript">
+function enableAccountMenu() {
+    if ('${user}' != '') {
+        $("#accountMenu").show();
+    }
+}
+function enableLogout() {
+    if ('${loggedin}' == 'True') {
+        $("#logoutButton").show();
+    }
+}
+enableAccountMenu();
+enableLogout();
+</script>
 <div class="container">
 <div class="row-fluid">

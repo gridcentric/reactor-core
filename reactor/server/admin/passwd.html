@@ -1,0 +1,54 @@
+<%include file="/navbar.html"/>
+
+<div class="span8">
+  <div class="hero-unit">
+    <form id="passwd-form" class="form-horizontal" method="post">
+      <fieldset>
+        <div id="legend">
+          <h3>Set Password</h3>
+        </div>
+        <div class="control-group">
+          <!-- Password -->
+          <label class="control-label"  for="auth_key">New Password</label>
+          <div class="controls">
+            <input type="password" id="auth_key" name="auth_key" placeholder="" class="input-xlarge">
+          </div>
+        </div>
+
+        <div class="control-group">
+          <!-- Password Confirmation -->
+          <label class="control-label" for="auth_key_conf">Confirm Password</label>
+          <div class="controls">
+            <input type="password" id="auth_key_conf" name="auth_key_conf" placeholder="" class="input-xlarge">
+          </div>
+        </div>
+
+        <div class="control-group">
+          <!-- Button -->
+          <div class="controls">
+            <button class="btn btn-success">Set Password</button>
+          </div>
+        </div>
+      </fieldset>
+    </form>
+  </div>
+</div>
+<script type="text/javascript">
+$(function() {
+   $( "#passwd-form" ).validate({
+        rules: {
+            auth_key: "required",
+            auth_key_conf: {
+                equalTo: "#auth_key"
+            }
+        },
+        messages: {
+            auth_key_conf: {
+                equalTo: $.format("Passwords do not match")
+            }
+        }
+    });
+});
+</script>
+
+<%include file="/footer.html"/>

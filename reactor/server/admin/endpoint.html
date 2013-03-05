@@ -219,7 +219,10 @@
         // Apply uniformly.
         var normalized_data = [];
         $.each(data["data"], function(index, value) {
-            normalized_data.push([value[0], value[1] * delta_scale]);
+            if (value[1] == null)
+                normalized_data.push([value[0], null]);
+            else
+                normalized_data.push([value[0], value[1] * delta_scale]);
         });
 
         // Push the new value.
@@ -232,6 +235,12 @@
         data["label"]     = data["name"] + scales[scale_idx];
     }
 
+    // Graph update period, in ms.
+    var UPDATE_PERIOD = 1000;
+
+    // Number of timeslices to graph.
+    var NUM_TIMESLICES = 60;
+
     function updateLiveMetrics(result, timestamp, data, metrics) {
         $.each(result, function(metric, value) {
             if( !metrics[metric] ) {
@@ -239,31 +248,42 @@
                     "name" : metric,
                     "data" : [] };
                 data.push(metrics[metric]);
+
+                // Initialize data
+                for ( var i = 0; i < NUM_TIMESLICES; i++ ) {
+                    ts = timestamp - ((NUM_TIMESLICES - i) * UPDATE_PERIOD);
+                    metrics[metric]["data"].push([ts , null]);
+                }
             }
 
             // Normalize the metrics.
             normalize(metrics[metric], timestamp, value);
 
             // Limit the size.
-            while( metrics[metric]["data"].length > 60 ) {
+            while( metrics[metric]["data"].length > NUM_TIMESLICES ) {
                 metrics[metric]["data"].shift();
             }
         });
     }
 
     function updateServers(result, timestamp, data, metrics) {
-       if( !metrics["count"] ) {
+        if( !metrics["count"] ) {
             metrics["count"] = { "label" : "count", "data" : [] };
             data.push(metrics["count"]);
-       }
-       $("#ips").html("");
-       $.each(result["ip_addresses"], function(index, value) {
-           $("#ips").append("<li><a href='//" + value + "/'>" + value + "</a></li>");
-       });
-       metrics["count"]["data"].push([timestamp, result["ip_addresses"].length]);
-       while( metrics["count"]["data"].length > 60 ) {
+            // Initialize data
+            for ( var i = 0; i < NUM_TIMESLICES; i++ ) {
+                ts = timestamp - ((NUM_TIMESLICES - i) * UPDATE_PERIOD);
+                metrics["count"]["data"].push([ts , null]);
+            }
+        }
+        $("#ips").html("");
+        $.each(result["ip_addresses"], function(index, value) {
+            $("#ips").append("<li><a href='//" + value + "/'>" + value + "</a></li>");
+        });
+        metrics["count"]["data"].push([timestamp, result["ip_addresses"].length]);
+        while( metrics["count"]["data"].length > NUM_TIMESLICES ) {
             metrics["count"]["data"].shift();
-       }
+        }
     }
 
     // Set everything up.
@@ -275,8 +295,10 @@
     });
     loadConfig();
     loadDelete();
-    setupGraph($("#livemetrics"), "endpoints/${object}/metrics", updateLiveMetrics);
-    setupGraph($("#servers"), "endpoints/${object}/ips", updateServers);
+    setupGraph($("#livemetrics"), "endpoints/${object}/metrics",
+               updateLiveMetrics, UPDATE_PERIOD);
+    setupGraph($("#servers"), "endpoints/${object}/ips", updateServers,
+               UPDATE_PERIOD);
 </script>
 
 <%include file="/footer.html"/>
