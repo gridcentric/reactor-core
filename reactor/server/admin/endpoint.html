@@ -181,13 +181,15 @@
 
     var scales = [ ' (n)', ' (u)', ' (m)', '', ' (K)', ' (M)', ' (G)' ];
     function normalize(data, timestamp, last) {
+        var count       = data["count"];
         var scale       = data["scale"];
         var delta_scale = 1.0;
         var scale_idx   = data["scale_idx"];
         var avg         = data["average"];
 
         // Grab the old scales.
-        if( !scale || !scale_idx ) {
+        if( !count || !scale || !scale_idx ) {
+            count = 0.0;
             scale = 1.0;
             scale_idx = 3;
         }
@@ -197,11 +199,10 @@
         if( !avg ) {
             avg = 0.0;
         }
-        avg = (avg * data["data"].length + last) / (data["data"].length + 1)
+        avg = ((avg * count) + last) / (count + 1.0);
         data["average"] = avg;
 
         // Figure out the up scale.
-        var count = 0;
         while( avg < 1 && avg > 0 ) {
             delta_scale = delta_scale * 1000;
             avg = avg * 1000;
@@ -209,7 +210,6 @@
         }
 
         // Figure out the down scale.
-        var count = 0;
         while( avg > 1000 ) {
             delta_scale = delta_scale / 1000;
             avg = avg / 1000;
@@ -229,6 +229,7 @@
         normalized_data.push([timestamp, last * delta_scale])
 
         data["data"]      = normalized_data;
+        data["count"]     = Math.min(count + 1.0, normalized_data.length);
         data["average"]   = delta_scale * data["average"];
         data["scale"]     = delta_scale * scale;
         data["scale_idx"] = scale_idx;
