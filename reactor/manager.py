@@ -668,10 +668,16 @@ class ScaleManager(object):
     @locked
     def decommission_instance(self, endpoint_name, instance_id, ip_addresses):
         """ Mark the instance id as being decommissioned. """
-        for ip_address in ip_addresses:
-            self.zk_conn.delete(paths.confirmed_ip(endpoint_name, ip_address))
         self.zk_conn.write(paths.decommissioned_instance(endpoint_name, instance_id),
                            json.dumps(ip_addresses))
+
+    @locked
+    def recommission_instance(self, endpoint_name, instance_id):
+        """ Mark the instance id as being recommissioned. """
+        # Delete decommissioned instance path and marked data
+        self.zk_conn.delete(paths.decommissioned_instance(endpoint_name,
+                            instance_id))
+        self.drop_marked_instance(endpoint_name, instance_id)
 
     @locked
     def decommissioned_instances(self, endpoint_name):
@@ -683,8 +689,8 @@ class ScaleManager(object):
         return decommissioned_instances
 
     @locked
-    def decomissioned_instance_ip_addresses(self, endpoint_name, instance_id):
-        """ Return the ip address of a decomissioned instance. """
+    def decommissioned_instance_ip_addresses(self, endpoint_name, instance_id):
+        """ Return the ip address of a decommissioned instance. """
         ip_addresses = self.zk_conn.read(paths.decommissioned_instance(endpoint_name, instance_id))
         if ip_addresses != None:
             ip_addresses = json.loads(ip_addresses)
@@ -697,7 +703,7 @@ class ScaleManager(object):
     @locked
     def drop_decommissioned_instance(self, endpoint_name, instance_id):
         """ Delete the decommissioned instance """
-        ip_addresses = self.decomissioned_instance_ip_addresses(endpoint_name, instance_id)
+        ip_addresses = self.decommissioned_instance_ip_addresses(endpoint_name, instance_id)
         for ip_address in ip_addresses:
             self.drop_ip(endpoint_name, ip_address)
         self.zk_conn.delete(paths.decommissioned_instance(endpoint_name, instance_id))
@@ -844,7 +850,7 @@ class ScaleManager(object):
 
         for instance_id in self.decommissioned_instances(endpoint.name):
             # Also check the metrics of decommissioned instances looking for any active counts.
-            for ip_address in self.decomissioned_instance_ip_addresses(endpoint.name, instance_id):
+            for ip_address in self.decommissioned_instance_ip_addresses(endpoint.name, instance_id):
                 if ip_address:
                     ip_metrics = self.zk_conn.read(paths.endpoint_ip_metrics(endpoint.name, ip_address))
                     if ip_metrics:
@@ -900,7 +906,9 @@ class ScaleManager(object):
                 endpoint.health_check(active)
 
                 # Do the endpoint update.
-                endpoint.update(reconfigure=False, metrics=metrics, metric_instances=len(metric_ips))
+                endpoint.update(reconfigure=False, metrics=metrics,
+                                metric_instances=len(metric_ips),
+                                active_ips=active)
             except:
                 error = traceback.format_exc()
                 logging.error("Error updating endpoint %s: %s" % (endpoint.name, error))

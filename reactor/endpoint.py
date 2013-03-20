@@ -3,6 +3,7 @@ import logging
 import traceback
 import socket
 import sys
+import copy
 
 from reactor.config import Config
 from reactor.config import ConfigView
@@ -137,9 +138,10 @@ class Endpoint(object):
         # Do nothing.
         logging.info("Unmanaging endpoint %s" % (self.name))
 
-    def update(self, reconfigure=True, metrics={}, metric_instances=None):
+    def update(self, reconfigure=True, metrics={}, metric_instances=None,
+               active_ips=[]):
         try:
-            self._update(reconfigure, metrics, metric_instances)
+            self._update(reconfigure, metrics, metric_instances, active_ips)
         except:
             logging.error("Error updating endpoint %s: %s" % \
                 (self.name, traceback.format_exc()))
@@ -190,7 +192,13 @@ class Endpoint(object):
 
         return (target_min, target_max)
 
-    def _update(self, reconfigure, metrics, metric_instances=None):
+    def _instance_is_active(self, instance, active_ips):
+        for ip in self.extract_addresses_from([instance]):
+            if ip in active_ips:
+                return True
+        return False
+
+    def _update(self, reconfigure, metrics, metric_instances, active_ips):
         if self.state == State.paused:
             # Do nothing while paused, this will keep the current
             # instances alive and continue to process requests.
@@ -225,27 +233,39 @@ class Endpoint(object):
             logging.error("Unknown state '%s' ?!?" % self.state)
             return
 
-        logging.debug("Target number of instances for endpoint %s determined to be %s (current: %s)"
-                      % (self.name, target, num_instances))
+        if target != num_instances:
+            logging.info("Target number of instances for endpoint %s determined to be %s (current: %s)"
+                          % (self.name, target, num_instances))
 
         # Perform only 'ramp' actions per iterations.
         action_count = 0
 
         # Launch instances until we reach the min setting value.
+        # First, recommission instances that have been decommissioned.
+        if num_instances < target and len(self.decommissioned_instances) > 0:
+            self.recommission_instances(target - num_instances,
+                "bringing instance total up to target %s" % target)
+            instances = self.instances()
+            num_instances = len(instances)
+
+        # Then, launch new instances
         while num_instances < target and action_count < ramp_limit:
             self._launch_instance("bringing instance total up to target %s" % target)
             num_instances += 1
             action_count += 1
 
         # Delete instances until we reach the max setting value.
-        instances_to_delete = []
-        while target < num_instances and action_count < ramp_limit:
-            instances_to_delete.append(instances.pop())
-            num_instances -= 1
-            action_count += 1
+        if target < num_instances:
+            instances_to_delete = []
+            instances_sorted = sorted(instances,
+                key=lambda x: self._instance_is_active(x, active_ips))
+            while target < num_instances and action_count < ramp_limit:
+                instances_to_delete.append(instances_sorted.pop(0))
+                num_instances -= 1
+                action_count += 1
 
-        self.decommission_instances(instances_to_delete,
-            "bringing instance total down to target %s" % target)
+            self.decommission_instances(instances_to_delete,
+                "bringing instance total down to target %s" % target)
 
     def update_state(self, state):
         self.state = state or State.default
@@ -298,10 +318,24 @@ class Endpoint(object):
              old_redirect != new_redirect:
             self._update_loadbalancer()
 
+    def recommission_instances(self, num_instances, reason):
+        """
+        Recommission formerly decommissioned instances. Note: a reason
+        should be given for why the instances are being recommissioned.
+        """
+        while num_instances > 0 and len(self.decommissioned_instances) > 0:
+            instance_id = self.decommissioned_instances.pop()
+            logging.info("Recommissioning instance %s for server %s (reason: %s)" %
+                    (instance_id, self.name, reason))
+            self.scale_manager.recommission_instance(self.name, instance_id)
+
+        # Update the load balancer.
+        self._update_loadbalancer()
+
     def decommission_instances(self, instances, reason):
         """
-        Drop the instances from the system. Note: a reason should be given for why
-        the instances are being dropped.
+        Drop the instances from the system. Note: a reason should be given
+        for why the instances are being dropped.
         """
         # It might be good to wait a little bit for the servers to clear out
         # any requests they are currently serving.
@@ -397,6 +431,7 @@ class Endpoint(object):
         associated_confirmed_ips = set()
         inactive_instance_ids = []
         for instance in instances:
+            instance_id = str(instance['id'])
             expected_ips = set(self.extract_addresses_from([instance]))
             # As long as there is one expected_ip in the confirmed_ip,
             # everything is good. Otherwise This instance has not checked in.
@@ -407,7 +442,7 @@ class Endpoint(object):
             if len(instance_confirmed_ips) == 0:
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
-                if self.scale_manager.mark_instance(self.name, str(instance['id']), 'unregistered'):
+                if self.scale_manager.mark_instance(self.name, instance_id, 'unregistered'):
                     # This instance has been deemed to be dead and should be cleaned up.
                     dead_instances += [instance]
             else:
@@ -416,7 +451,7 @@ class Endpoint(object):
             # Check if any of these expected_ips are not in our active set. If
             # so that this instance is currently considered inactive.
             if len(expected_ips.intersection(active_ips)) == 0:
-                inactive_instance_ids += [str(instance['id'])]
+                inactive_instance_ids += [instance_id]
 
         # TODO(dscannell) We also need to ensure that the confirmed IPs are
         # still valid. In other words, we have a running instance with the
@@ -436,7 +471,7 @@ class Endpoint(object):
         self.decommission_instances(dead_instances, "instance has been marked for destruction")
 
         # See if there are any decommissioned instances that are now inactive.
-        decommissioned_instance_ids = self.decommissioned_instances
+        decommissioned_instance_ids = copy.copy(self.decommissioned_instances)
         logging.debug("Active instances: %s:%s:%s" % \
             (active_ips, inactive_instance_ids, decommissioned_instance_ids))
 
