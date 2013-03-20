@@ -171,12 +171,16 @@ class ConnectionProducer(threading.Thread):
                     self.sockets[port] = sock
                     self.filemap[sock.fileno()] = sock
                     self.portmap[sock.fileno()] = port
+            ports_to_delete = []
             for port in self.sockets:
                 if not(port in ports):
                     sock = self.sockets[port]
-                    del self.sockets[port]
                     del self.filemap[sock.fileno()]
                     del self.portmap[sock.fileno()]
+                    ports_to_delete.append(port)
+            # Clean old ports out after iterating.
+            for port in ports_to_delete:
+                del self.sockets[port]
             self._update_epoll()
         finally:
             self.cond.release()

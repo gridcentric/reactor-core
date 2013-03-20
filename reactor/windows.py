@@ -53,10 +53,11 @@ COMPUTER_RECORD = {
 }
 
 class LdapConnection:
-    def __init__(self, domain, username, password):
+    def __init__(self, domain, username, password, orgunit = ''):
         self.domain   = domain
         self.username = username
         self.password = password
+        self.orgunit  = orgunit
         self.con      = None
 
     def _wrap_and_retry(fn):
@@ -88,11 +89,33 @@ class LdapConnection:
         except:
             pass
 
+    # Returns the properly formatted "ou=," string.
+    def _orgpath_from_ou(self):
+        if self.orgunit:
+            orgpath = self.orgunit.split("\\")
+            orgpath.reverse()
+            ou = ",".join(map(lambda x: 'ou=%s' % x, orgpath))
+            return ou
+        else:
+            return "cn=Computers"
+
+    # Returns the properly formatted "dc=," string.
+    def _dom_from_domain(self):
+        return ",".join(map(lambda x: 'dc=%s' % x, self.domain.split(".")))
+
+    def _machine_description(self, name=None):
+        dom      = self._dom_from_domain()
+        ou       = self._orgpath_from_ou()
+        if name:
+            return "cn=%s,%s,%s" % (name, ou, dom)
+        else:
+            return "%s,%s" % (ou, dom)
+
     @_wrap_and_retry
     def list_machines(self):
-        dom      = ",".join(map(lambda x: 'dc=%s' % x, self.domain.split(".")))
         filter   = '(objectclass=computer)'
-        machines = self._open().search_s(dom, ldap.SCOPE_SUBTREE, filter, COMPUTER_ATTRS)
+        desc     = self._machine_description()
+        machines = self._open().search_s(desc, ldap.SCOPE_SUBTREE, filter, COMPUTER_ATTRS)
         rval     = {}
 
         # Synthesize the machines into a simple form.
@@ -138,16 +161,26 @@ class LdapConnection:
 
         return True
 
+    # Removes a machine from the LDAP directory
+    @_wrap_and_retry
+    def remove_machine(self, machine):
+        connection = self._open()
+        try:
+            connection.delete_s(machine['distinguishedName'][0])
+        except:
+            # Ignore, as long as we can create a new account we are okay.
+            pass
+
     @_wrap_and_retry
     def clean_machines(self, template):
-        template.replace("#", "\d")
+        template = template.replace("#", "\d")
         machines = self.list_machines()
 
         for (name, machine) in machines.items():
             if re.match(template, name):
                 if not(self.check_logged_on(machine)) or \
                     self.check_dead(machine):
-                    self.remove_machine(name)
+                    self.remove_machine(machine)
 
     @_wrap_and_retry
     def create_machine(self, template):
@@ -165,12 +198,17 @@ class LdapConnection:
         # Compute an integer in the range we want.
         fmt = "%%0%sd" % size
         maximum = pow(10, size)
-        while True:
-            # Create the random name.
-            n = random.randint(0, maximum-1)
+        n = 1
+        while n < maximum:
+            # Find the next unused machine name that fits template
             name = template.replace("#" * size, fmt % n)
             if not(name.lower() in machines):
                 break
+            n = n + 1
+
+            # Fail out if we've run out of machine names.
+            if n == maximum:
+                return False
 
         # Generate a password.  
         # TODO: We need some way to deal with password strength requirements.
@@ -203,9 +241,7 @@ class LdapConnection:
         password_change_attr = [(ldap.MOD_REPLACE, 'unicodePwd', utf_quoted_password)]
         account_enabled_attr = [(ldap.MOD_REPLACE, 'userAccountControl', '4096')]
 
-        dom   = ",".join(map(lambda x: 'dc=%s' % x, self.domain.split(".")))
-        descr = "cn=%s,cn=Computers,%s" % (name, dom)
-
+        descr = self._machine_description(name)
         connection = self._open()
 
         # Create the new account.
@@ -228,6 +264,9 @@ class WindowsConfig(SubConfig):
     def password(self):
         return self._get("password", '')
 
+    def orgunit(self):
+        return self._get("orgunit", '')
+
     def template(self):
         return self._get("template", "gc#############")
 
@@ -248,7 +287,8 @@ class WindowsConnection:
             self.connections[key] = \
                 LdapConnection(config.domain(), 
                                config.username(),
-                               config.password())
+                               config.password(),
+                               config.orgunit())
         return self.connections[key]
 
     def start_params(self, config_view):
