@@ -24,6 +24,8 @@ class Connection(BaseOsConnection):
         return server.list_launched()
 
     def _start_instance(self, params={}):
-        launch_params = { 'guest' : params }
         server = self._novaclient().gridcentric.get(self.config.instance_id())
-        server.launch(guest_params=params)
+        if 'name' in params:
+            server.launch(name=params['name'], guest_params=params)
+        else:
+            server.launch(guest_params=params)

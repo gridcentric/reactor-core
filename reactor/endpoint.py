@@ -353,11 +353,13 @@ class Endpoint(object):
         if len(instances) > 0:
             self._update_loadbalancer()
 
-    def _delete_instance(self, instance_id):
+    def _delete_instance(self, instance):
+        instance_id = instance['id']
         # Delete the instance from nova
         logging.info("Deleting instance %s for server %s" % (instance_id, self.name))
         self.cloud_conn.delete_instance(instance_id)
-        self.scale_manager.drop_decommissioned_instance(self.name, instance_id)
+        self.scale_manager.drop_decommissioned_instance(self.name, instance_id,
+                                                        instance.get('name'))
         try:
             self.decommissioned_instances.remove(instance_id)
         except:
@@ -403,6 +405,12 @@ class Endpoint(object):
                 for network_addrs in network_addresses:
                     addresses.append(network_addrs['addr'])
         return addresses
+
+    def instance_by_id(self, instances, instance_id):
+        instance_list = filter(lambda x: x['id'] == instance_id, instances)
+        if len(instance_list) == 1:
+            return instance_list[0]
+        raise KeyError('instance with id %s not found' % (instance_id))
 
     def _update_loadbalancer(self, remove=False):
         self.scale_manager.update_loadbalancer(self, remove=remove)
@@ -480,4 +488,6 @@ class Endpoint(object):
                 if self.scale_manager.mark_instance(self.name,
                                                     inactive_instance_id,
                                                     'decommissioned'):
-                        self._delete_instance(inactive_instance_id)
+                        instance = self.instance_by_id(instances,
+                                                       inactive_instance_id)
+                        self._delete_instance(instance)

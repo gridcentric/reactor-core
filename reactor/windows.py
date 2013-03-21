@@ -1,3 +1,4 @@
+import logging
 import time
 import datetime
 import re
@@ -112,9 +113,9 @@ class LdapConnection:
             return "%s,%s" % (ou, dom)
 
     @_wrap_and_retry
-    def list_machines(self):
+    def list_machines(self, name=None):
         filter   = '(objectclass=computer)'
-        desc     = self._machine_description()
+        desc     = self._machine_description(name)
         machines = self._open().search_s(desc, ldap.SCOPE_SUBTREE, filter, COMPUTER_ATTRS)
         rval     = {}
 
@@ -285,7 +286,7 @@ class WindowsConnection:
         key = (config.domain(), config.username(), config.password())
         if not(self.connections.has_key(key)):
             self.connections[key] = \
-                LdapConnection(config.domain(), 
+                LdapConnection(config.domain(),
                                config.username(),
                                config.password(),
                                config.orgunit())
@@ -302,7 +303,22 @@ class WindowsConnection:
         connection.clean_machines(config.template())
         info = connection.create_machine(config.template())
         if info:
+            logging.info("Created new machine account %s" % info[0])
             # Return the relevant information about the machine.
             return { "name" : info[0], "machinepassword" : info[1] }
         else:
             return {}
+
+    def cleanup(self, config_view, name):
+        config = WindowsConfig(config_view)
+
+        connection = self._get_connection(config)
+        if connection:
+            # Look for machine
+            try:
+                machines = connection.list_machines(name)
+                connection.remove_machine(machines[name])
+            except:
+                logging.warn("Unable to remove machine account %s" % name)
+            else:
+                logging.info("Removed machine account %s" % name)

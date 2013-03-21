@@ -701,12 +701,18 @@ class ScaleManager(object):
         return ip_addresses
 
     @locked
-    def drop_decommissioned_instance(self, endpoint_name, instance_id):
+    def drop_decommissioned_instance(self, endpoint_name, instance_id,
+                                     instance_name=None):
         """ Delete the decommissioned instance """
         ip_addresses = self.decommissioned_instance_ip_addresses(endpoint_name, instance_id)
         for ip_address in ip_addresses:
             self.drop_ip(endpoint_name, ip_address)
         self.zk_conn.delete(paths.decommissioned_instance(endpoint_name, instance_id))
+        # For windows machines we also do some cleanup
+        if instance_name and self.windows and endpoint_name in self.endpoints:
+            endpoint = self.endpoints[endpoint_name]
+            self.windows.cleanup(ConfigView(endpoint.config, "windows"),
+                                 instance_name)
 
     def metric_indicates_active(self, metrics):
         """ Returns true if the metrics indicate that there are active connections. """
