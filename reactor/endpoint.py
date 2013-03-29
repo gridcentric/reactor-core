@@ -372,7 +372,13 @@ class Endpoint(object):
         logging.info(("Launching new instance for server %s " +
                      "(reason: %s)") %
                      (self.name, reason))
-        self.cloud_conn.start_instance(params=self.scale_manager.start_params(self))
+        start_params = self.scale_manager.start_params(self)
+        try:
+            self.cloud_conn.start_instance(params=start_params)
+        except:
+            logging.error("Error launching instance for server %s: %s" % \
+                (self.name, traceback.format_exc()))
+            self.scale_manager.cleanup_start_params(self, start_params)
 
     def static_addresses(self):
         return self.config.static_ips()

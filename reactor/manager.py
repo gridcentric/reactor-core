@@ -625,6 +625,13 @@ class ScaleManager(object):
         return params
 
     @locked
+    def cleanup_start_params(self, endpoint, start_params):
+        # We've failed to launch a machine, so clean up any work we've done
+        if self.windows:
+            self.windows.cleanup_start_params(ConfigView(endpoint.config, "windows"),
+                                              start_params)
+
+    @locked
     def marked_instances(self, endpoint_name):
         """ Return a list of all the marked instances. """
         marked_instances = self.zk_conn.list_children(paths.marked_instances(endpoint_name))

@@ -299,8 +299,7 @@ class WindowsConnection:
         if not(connection):
             return {}
 
-        # Clean existing machines and create a new one.
-        connection.clean_machines(config.template())
+        # Create a new machine accout.
         info = connection.create_machine(config.template())
         if info:
             logging.info("Created new machine account %s" % info[0])
@@ -322,3 +321,9 @@ class WindowsConnection:
                 logging.warn("Unable to remove machine account %s" % name)
             else:
                 logging.info("Removed machine account %s" % name)
+
+    def cleanup_start_params(self, config_view, start_params):
+        # Extract name from start_params
+        name = start_params.get("name")
+        if name:
+            self.cleanup(config_view, name)
