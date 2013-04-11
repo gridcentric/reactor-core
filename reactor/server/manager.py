@@ -23,7 +23,7 @@ class ReactorScaleManager(ScaleManager):
         # Pass a parameter pointed back to this instance.
         params = super(ReactorScaleManager, self).start_params(endpoint=endpoint)
         if self.domain:
-            params["reactor"] = self.domain
+            params["reactor"] = "api.%s" % self.domain
         else:
             params["reactor"] = ips.find_global()[0]
 
