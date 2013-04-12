@@ -211,7 +211,7 @@ class LdapConnection:
             if n == maximum:
                 return False
 
-        # Generate a password.  
+        # Generate a password.
         # TODO: We need some way to deal with password strength requirements.
         # We'll probably need to pass in a password schema through the configs
         # since the strength requirements will vary between deployments. For
@@ -238,19 +238,14 @@ class LdapConnection:
             'RestrictedKrbHost/%s' % name.upper(),
             'RestrictedKrbHost/%s.%s' % (name, self.domain)
         ]
-
-        password_change_attr = [(ldap.MOD_REPLACE, 'unicodePwd', utf_quoted_password)]
-        account_enabled_attr = [(ldap.MOD_REPLACE, 'userAccountControl', '4096')]
+        new_record['unicodePwd'] = utf_quoted_password
+        new_record['userAccountControl'] = '4096' # Enable account.
 
         descr = self._machine_description(name)
         connection = self._open()
 
         # Create the new account.
         connection.add_s(descr, modlist.addModlist(new_record))
-        # Set the account password.
-        connection.modify_s(descr, password_change_attr)
-        # Enable the computer account.
-        connection.modify_s(descr, account_enabled_attr)
 
         return (name, base64_password)
 
