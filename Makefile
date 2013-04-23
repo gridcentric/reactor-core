@@ -92,5 +92,15 @@ server.deb: $(DEBBUILD)
 	@fakeroot dpkg -b $(DEBBUILD)/reactor-server .
 .PHONY: server.deb
 
+server.rpm: $(RPMBUILD)
+	@rm -rf $(CURDIR)/$(RPMBUILD)/BUILDROOT/*
+	@$(MAKE) dist_install DESTDIR=$(CURDIR)/$(RPMBUILD)/BUILDROOT
+	@rpmbuild -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
+	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \
+	    --define="%version $(PACKAGE_VERSION)" \
+	    packagers/rpm/reactor-server.spec
+	@find $(RPMBUILD) -name \*.rpm -exec mv {} . \;
+.PHONY: server.rpm
+
 packages: agent.deb agent.rpm server.deb
 .PHONY: packages
