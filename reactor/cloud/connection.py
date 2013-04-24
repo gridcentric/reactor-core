@@ -34,6 +34,18 @@ class CloudConnection(object):
     def __init__(self, config):
         pass
 
+    def id(self, instance):
+        """ Return a unique string identifier for this instance. """
+        raise NotImplementedError()
+
+    def name(self, instance):
+        """ Return the user-given name for this instance. """
+        raise NotImplementedError()
+
+    def addresses(self, instance):
+        """ Return the set of (string) addresses for this instance. """
+        raise NotImplementedError()
+
     def list_instances(self):
         """
         Lists the instances related to a endpoint. Note that this list should be 
@@ -43,12 +55,12 @@ class CloudConnection(object):
 
     def start_instance(self, params={}):
         """
-        Starts a new instance in the cloud using the endpoint
+        Starts a new instance in the cloud using the endpoint.
         """
-        pass
+        raise NotImplementedError()
 
     def delete_instance(self, instance_id):
         """
-        Remove the instance from the cloud
+        Remove the instance from the cloud.
         """
-        pass
+        raise NotImplementedError()

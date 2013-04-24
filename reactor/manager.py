@@ -643,8 +643,7 @@ class ScaleManager(object):
     def mark_instance(self, endpoint_name, instance_id, label):
         # Increment the mark counter.
         remove_instance = False
-        mark_counters = \
-                self.zk_conn.read(paths.marked_instance(endpoint_name, instance_id), '{}')
+        mark_counters = self.zk_conn.read(paths.marked_instance(endpoint_name, instance_id), '{}')
         mark_counters = json.loads(mark_counters)
         mark_counter = mark_counters.get(label, 0)
         mark_counter += 1
@@ -653,7 +652,7 @@ class ScaleManager(object):
             # This instance has been marked too many times. There is likely
             # something really wrong with it, so we'll clean it up.
             logging.warning("Instance %s for endpoint %s has been marked too many times and"
-                         " will be removed. (count=%s)" % (instance_id, endpoint_name, mark_counter))
+                            " will be removed. (count=%s)" % (instance_id, endpoint_name, mark_counter))
             remove_instance = True
             self.zk_conn.delete(paths.marked_instance(endpoint_name, instance_id))
 
@@ -681,7 +680,10 @@ class ScaleManager(object):
     @locked
     def recommission_instance(self, endpoint_name, instance_id):
         """ Mark the instance id as being recommissioned. """
-        # Delete decommissioned instance path and marked data
+        # Re-register all associated IPs.
+        ips = self.decommissioned_instance_ip_addresses(endpoint_name, instance_id)
+        self.register_ip(ips)
+        # Delete decommissioned instance path and marked data.
         self.zk_conn.delete(paths.decommissioned_instance(endpoint_name,
                             instance_id))
         self.drop_marked_instance(endpoint_name, instance_id)
@@ -708,18 +710,17 @@ class ScaleManager(object):
         return ip_addresses
 
     @locked
-    def drop_decommissioned_instance(self, endpoint_name, instance_id,
-                                     instance_name=None):
+    def drop_decommissioned_instance(self, endpoint_name, instance_id, instance_name=None):
         """ Delete the decommissioned instance """
         ip_addresses = self.decommissioned_instance_ip_addresses(endpoint_name, instance_id)
         for ip_address in ip_addresses:
             self.drop_ip(endpoint_name, ip_address)
         self.zk_conn.delete(paths.decommissioned_instance(endpoint_name, instance_id))
-        # For windows machines we also do some cleanup
+
+        # For windows machines we also do some cleanup.
         if instance_name and self.windows and endpoint_name in self.endpoints:
             endpoint = self.endpoints[endpoint_name]
-            self.windows.cleanup(ConfigView(endpoint.config, "windows"),
-                                 instance_name)
+            self.windows.cleanup(ConfigView(endpoint.config, "windows"), instance_name)
 
     def metric_indicates_active(self, metrics):
         """ Returns true if the metrics indicate that there are active connections. """

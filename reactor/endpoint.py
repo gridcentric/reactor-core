@@ -193,7 +193,7 @@ class Endpoint(object):
         return (target_min, target_max)
 
     def _instance_is_active(self, instance, active_ips):
-        for ip in self.extract_addresses_from([instance]):
+        for ip in self.cloud_conn.addresses(instance):
             if ip in active_ips:
                 return True
         return False
@@ -248,7 +248,7 @@ class Endpoint(object):
             instances = self.instances()
             num_instances = len(instances)
 
-        # Then, launch new instances
+        # Then, launch new instances.
         while num_instances < target and action_count < ramp_limit:
             self._launch_instance("bringing instance total up to target %s" % target)
             num_instances += 1
@@ -340,12 +340,13 @@ class Endpoint(object):
         # It might be good to wait a little bit for the servers to clear out
         # any requests they are currently serving.
         for instance in instances:
+            instance_id = self.cloud_conn.id(instance)
             logging.info("Decommissioning instance %s for server %s (reason: %s)" %
-                    (instance['id'], self.name, reason))
+                    (instance_id, self.name, reason))
             self.scale_manager.decommission_instance(\
-                self.name, str(instance['id']), self.extract_addresses_from([instance]))
-            if not(str(instance['id']) in self.decommissioned_instances):
-                self.decommissioned_instances += [str(instance['id'])]
+                self.name, instance_id, self.cloud_conn.addresses(instance))
+            if not(instance_id in self.decommissioned_instances):
+                self.decommissioned_instances += [instance_id]
 
         # update the load balancer. This can be done after decommissioning
         # because these instances will stay alive as long as there is an active
@@ -354,12 +355,14 @@ class Endpoint(object):
             self._update_loadbalancer()
 
     def _delete_instance(self, instance):
-        instance_id = instance['id']
-        # Delete the instance from nova
+        instance_id = self.cloud_conn.id(instance)
+
+        # Delete the instance from the cloud.
         logging.info("Deleting instance %s for server %s" % (instance_id, self.name))
         self.cloud_conn.delete_instance(instance_id)
-        self.scale_manager.drop_decommissioned_instance(self.name, instance_id,
-                                                        instance.get('name'))
+        self.scale_manager.drop_decommissioned_instance(
+            self.name, instance_id, self.cloud_conn.name(instance))
+
         try:
             self.decommissioned_instances.remove(instance_id)
         except:
@@ -391,29 +394,24 @@ class Endpoint(object):
             all_instances = instances
             instances = []
             for instance in all_instances:
-                if not(str(instance['id']) in self.decommissioned_instances):
+                if not(self.cloud_conn.id(instance) in self.decommissioned_instances):
                     instances.append(instance)
 
         return instances
 
     def addresses(self):
         try:
-            return self.extract_addresses_from(self.instances())
+            all_addresses = set()
+            for instance in self.instances():
+                all_addresses.update(self.cloud_conn.addresses(instance))
+            return list(all_addresses)
         except:
             logging.error("Error querying endpoint %s addresses: %s" % \
                 (self.name, traceback.format_exc()))
             return []
 
-    def extract_addresses_from(self, instances):
-        addresses = []
-        for instance in instances:
-            for network_addresses in instance.get('addresses', {}).values():
-                for network_addrs in network_addresses:
-                    addresses.append(network_addrs['addr'])
-        return addresses
-
     def instance_by_id(self, instances, instance_id):
-        instance_list = filter(lambda x: x['id'] == instance_id, instances)
+        instance_list = filter(lambda x: self.cloud_conn.id(x) == instance_id, instances)
         if len(instance_list) == 1:
             return instance_list[0]
         raise KeyError('instance with id %s not found' % (instance_id))
@@ -423,21 +421,19 @@ class Endpoint(object):
 
     def health_check(self, active_ips):
         instances = self.instances(filter=False)
-        instance_ids = map(lambda x: str(x['id']), instances)
+        instance_ids = map(lambda x: self.cloud_conn.id(x), instances)
 
         # Mark sure that the manager does not contain any scale data, which
         # may result in some false metric data and clogging up Zookeeper.
-        for instance in self.scale_manager.marked_instances(self.name):
-            if not(instance in instance_ids):
-                self.scale_manager.drop_marked_instance(self.name, instance)
-        for instance in self.scale_manager.decommissioned_instances(self.name):
-            if not(instance in instance_ids):
-                self.scale_manager.drop_decommissioned_instance(self.name, instance)
+        for instance_id in self.scale_manager.marked_instances(self.name):
+            if not(instance_id in instance_ids):
+                self.scale_manager.drop_marked_instance(self.name, instance_id)
+        for instance_id in self.scale_manager.decommissioned_instances(self.name):
+            if not(instance_id in instance_ids):
+                self.scale_manager.drop_decommissioned_instance(self.name, instance_id)
 
-        # Check if any expected machines have failed to come up and confirm
-        # their IP address.
+        # Check if any expected machines have failed to come up and confirm their IP address.
         confirmed_ips = set(self.scale_manager.confirmed_ips(self.name))
-        dead_instances = []
 
         # There are the confirmed ips that are actually associated with an
         # instance. Other confirmed ones will need to be dropped because the
@@ -445,20 +441,23 @@ class Endpoint(object):
         associated_confirmed_ips = set()
         inactive_instance_ids = []
         for instance in instances:
-            instance_id = str(instance['id'])
-            expected_ips = set(self.extract_addresses_from([instance]))
+            instance_id = self.cloud_conn.id(instance)
+            expected_ips = set(self.cloud_conn.addresses(instance))
             # As long as there is one expected_ip in the confirmed_ip,
             # everything is good. Otherwise This instance has not checked in.
             # We need to mark it, and it if has enough marks it will be
             # destroyed.
             logging.info("expected ips=%s, confirmed ips=%s" % (expected_ips, confirmed_ips))
             instance_confirmed_ips = confirmed_ips.intersection(expected_ips)
-            if len(instance_confirmed_ips) == 0:
+            if len(instance_confirmed_ips) == 0 and \
+               not instance_id in self.decommissioned_instances:
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
                 if self.scale_manager.mark_instance(self.name, instance_id, 'unregistered'):
                     # This instance has been deemed to be dead and should be cleaned up.
-                    dead_instances += [instance]
+                    # We don't decomission it because we have never heard from it in the
+                    # first place. So there's no sense in decomissioning it.
+                    self._delete_instance(instance)
             else:
                 associated_confirmed_ips = associated_confirmed_ips.union(instance_confirmed_ips)
 
@@ -468,21 +467,17 @@ class Endpoint(object):
                 inactive_instance_ids += [instance_id]
 
         # TODO(dscannell) We also need to ensure that the confirmed IPs are
-        # still valid. In other words, we have a running instance with the
-        # confirmed IP.
+        # still valid. In other words, we have a running instance for it.
         orphaned_confirmed_ips = confirmed_ips.difference(associated_confirmed_ips)
         if len(orphaned_confirmed_ips) > 0:
             # There are orphaned ip addresses. We need to drop them and then
             # update the load balancer because there is no actual instance
             # backing them.
-            logging.info("Dropping ip addresses %s for endpoint %s because they do not have"
-                         "backing instances." % (orphaned_confirmed_ips, self.name))
+            logging.info("Dropping ips %s for endpoint %s because they do not have"
+                         " backing instances." % (orphaned_confirmed_ips, self.name))
             for orphaned_address in orphaned_confirmed_ips:
                 self.scale_manager.drop_ip(self.name, orphaned_address)
             self._update_loadbalancer()
-
-        # We assume they're dead, so we can prune them.
-        self.decommission_instances(dead_instances, "instance has been marked for destruction")
 
         # See if there are any decommissioned instances that are now inactive.
         decommissioned_instance_ids = copy.copy(self.decommissioned_instances)
@@ -494,6 +489,5 @@ class Endpoint(object):
                 if self.scale_manager.mark_instance(self.name,
                                                     inactive_instance_id,
                                                     'decommissioned'):
-                        instance = self.instance_by_id(instances,
-                                                       inactive_instance_id)
+                        instance = self.instance_by_id(instances, inactive_instance_id)
                         self._delete_instance(instance)
