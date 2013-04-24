@@ -1,10 +1,11 @@
-import logging
-import time
-import datetime
-import re
-import random
-import uuid
 import base64
+import datetime
+import logging
+import os
+import random
+import re
+import time
+import uuid
 
 import ldap
 import ldap.modlist as modlist
@@ -52,6 +53,13 @@ COMPUTER_ATTRS = [
 COMPUTER_RECORD = {
     'objectclass' : ['top', 'person', 'organizationalPerson', 'user', 'computer'],
 }
+
+PASSWORD_ALPHABET = "abcdefghijklmnmoqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" + \
+    "0123456789 `~!@#$%^&*()_-+={}[]\|:;\"'<>,.?/"
+
+def generate_password(length=18, alpha=PASSWORD_ALPHABET):
+    alpha_len = len(alpha)
+    return "".join([ alpha[ord(byte) % alpha_len] for byte in os.urandom(length) ])
 
 class LdapConnection:
     def __init__(self, domain, username, password, orgunit = ''):
@@ -212,12 +220,7 @@ class LdapConnection:
                 return False
 
         # Generate a password.
-        # TODO: We need some way to deal with password strength requirements.
-        # We'll probably need to pass in a password schema through the configs
-        # since the strength requirements will vary between deployments. For
-        # now we ensure the generated password will meet the default strength
-        # requirements.
-        password = str(uuid.uuid4())[:8] + '!'
+        password = generate_password()
         quoted_password = '"' + password + '"'
         utf_password = password.encode('utf-16-le')
         utf_quoted_password = quoted_password.encode('utf-16-le')
