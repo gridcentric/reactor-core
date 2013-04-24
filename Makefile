@@ -102,5 +102,5 @@ server.rpm: $(RPMBUILD)
 	@find $(RPMBUILD) -name \*.rpm -exec mv {} . \;
 .PHONY: server.rpm
 
-packages: agent.deb agent.rpm server.deb
+packages: agent.deb agent.rpm server.deb server.rpm
 .PHONY: packages
