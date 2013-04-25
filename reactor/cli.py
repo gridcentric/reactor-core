@@ -12,6 +12,12 @@ from ConfigParser import SafeConfigParser
 from reactor.apiclient import ReactorApiClient
 from reactor import log
 
+# Resolve internal threading bug, that spams log output.
+# For more information see --
+# http://stackoverflow.com/questions/13193278/understand-python-threading-bug
+import threading
+threading._DummyThread._Thread__stop = lambda x: 42
+
 def main_usage():
     print "usage: %s < -h|--help | [options] command >" % sys.argv[0]
     print ""

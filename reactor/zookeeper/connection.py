@@ -60,6 +60,8 @@ def wrap_exceptions(fn):
             raise
         except:
             raise ZookeeperException("Unknown error: %s" % str(traceback.format_exc()))
+    wrapped_fn.__name__ = fn.__name__
+    wrapped_fn.__doc__ = fn.__doc__
     return wrapped_fn
 
 class ZookeeperConnection(object):

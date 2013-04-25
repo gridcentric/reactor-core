@@ -63,6 +63,8 @@ def locked(fn):
             return fn(self, *args, **kwargs)
         finally:
             self.cond.release()
+    wrapped_fn.__name__ = fn.__name__
+    wrapped_fn.__doc__ = fn.__doc__
     return wrapped_fn
 
 class ScaleManager(object):
@@ -388,6 +390,8 @@ class ScaleManager(object):
                     return fn(*args, **kwargs)
                 finally:
                     self.cond.release()
+            wrapped_fn.__name__ = fn.__name__
+            wrapped_fn.__doc__ = fn.__doc__
             return wrapped_fn
 
         @local_lock
