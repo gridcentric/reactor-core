@@ -76,7 +76,7 @@ agent.deb: $(DEBBUILD)
 
 # Build an agent rpm.
 agent.rpm: $(RPMBUILD)
-	@rpmbuild -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
+	@rpmbuild --with=suggests -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
 	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \
 	    --define="%version $(PACKAGE_VERSION)" \
 	    packagers/rpm/reactor-agent.spec
@@ -96,7 +96,7 @@ server.deb: $(DEBBUILD)
 server.rpm: $(RPMBUILD)
 	@rm -rf $(CURDIR)/$(RPMBUILD)/BUILDROOT/*
 	@$(MAKE) dist_install DESTDIR=$(CURDIR)/$(RPMBUILD)/BUILDROOT
-	@rpmbuild -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
+	@rpmbuild --with=suggests -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
 	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \
 	    --define="%version $(PACKAGE_VERSION)" \
 	    packagers/rpm/reactor-server.spec
