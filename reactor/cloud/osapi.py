@@ -15,6 +15,19 @@ class BaseOsConnection(cloud_connection.CloudConnection):
         self.deleted_instance_ids = []
         self.config = self.create_config(config)
 
+    def id(self, instance):
+        return str(instance['id'])
+
+    def name(self, instance):
+        return instance.get('name', None)
+
+    def addresses(self, instance):
+        addresses = []
+        for network_addresses in instance.get('addresses', {}).values():
+            for network_addrs in network_addresses:
+                addresses.append(str(network_addrs['addr']))
+        return addresses
+
     def create_config(self, config):
         return BaseOsConfig(config)
 
@@ -50,10 +63,10 @@ class BaseOsConnection(cloud_connection.CloudConnection):
         non_deleted_instances = []
         instance_ids_still_deleting = []
         for instance in instances:
-            if str(instance['id']) not in self.deleted_instance_ids:
+            if instance['id'] not in self.deleted_instance_ids:
                 non_deleted_instances.append(instance)
             else:
-                instance_ids_still_deleting.append(str(instance['id']))
+                instance_ids_still_deleting.append(instance['id'])
 
         self.deleted_instance_ids = instance_ids_still_deleting
         return sorted(non_deleted_instances, key=lambda x: x.get('created', ""))
