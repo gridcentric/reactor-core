@@ -1,24 +1,39 @@
 #!/usr/bin/env python
 
+import os
 import sys
 import httplib
 import time
 import socket
 
-sys.path.append('/etc/gridcentric/common')
-import common
+# We need to retrieve the reactor parameter passed to vmsagent. The latest
+# vmsagent passes the parameter via an environment variable. Older vmsagents
+# provide a parameter parsing library. We assume the latest agent and fall back
+# to the older agents.
+try:
+    reactor = os.environ['VMS_reactor']
+except KeyError:
+    sys.path.append('/etc/gridcentric/common')
+    try:
+        import common
+    except ImportError:
+        # We're probably using the latest vmsagent but a reactor parameter
+        # wasn't passed in to this clone for whatever reason (perhaps testing).
+        reactor = None
+    else:
+        data = common.parse_params()
+        # In the oldest vmsagent, parse_params returns a dict. In more recent
+        # agents, parse_params returns an object.
+        if not isinstance(data, dict):
+            data = data.get_dict()
+        reactor = data.get('reactor')
 
-# Post to a reactor URL if given.
-data = common.parse_params()
-if not(isinstance(data, dict)):
-    data = data.get_dict()
-
-if "reactor" in data and data["reactor"]:
+if reactor:
     rest_time = 0.01 # Start at 10ms.
 
     while True:
         try:
-            conn = httplib.HTTPConnection(data["reactor"])
+            conn = httplib.HTTPConnection(reactor)
             conn.request("POST", "/v1.0/register", "", {})
             resp = conn.getresponse()
             if resp.status == 200:
