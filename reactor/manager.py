@@ -10,13 +10,15 @@ import socket
 from StringIO import StringIO
 
 from reactor.config import Config
-from reactor.config import ConfigView
+from reactor.config import Connection
+from reactor.config import fromini
 
 from reactor.endpoint import Endpoint
 from reactor.endpoint import State
 
 import reactor.loadbalancer.connection as lb_connection
 from reactor.loadbalancer.connection import BackendIP
+import reactor.cloud.connection as cloud_connection
 
 from reactor.zookeeper.connection import ZookeeperConnection
 from reactor.zookeeper.connection import ZookeeperException
@@ -28,27 +30,36 @@ from reactor.metrics.calculator import calculate_weighted_averages
 
 class ManagerConfig(Config):
 
-    def ips(self):
-        """ The IPs on the public interface. """
-        return self._getlist("manager", "ips")
+    def __init__(self, **kwargs):
+        Config.__init__(self, "manager", **kwargs)
 
-    def loadbalancer_names(self):
-        """ The name of the loadbalancer. """
-        return self._getlist("manager", "loadbalancer")
+    ips = Config.list("ips", order=1,
+        description="Floating or public IPs.")
 
-    def loadbalancer_config(self, name):
-        """ The set of keys required to configure the loadbalancer. """
-        return ConfigView(self, "loadbalancer:%s" % name)
+    loadbalancers = Config.list("loadbalancers", order=1,
+        description="List of supported loadbalancers (e.g. nginx).")
 
-    def mark_maximum(self, label):
-        if label in ['unregistered', 'decommissioned']:
-            return self._getint("manager", "%s_wait" % (label), 20)
+    clouds = Config.list("clouds", order=1,
+        description="List of supported clouds (e.g. osapi).")
 
-    def keys(self):
-        return self._getint("manager", "keys", 64)
+    health_check = Config.integer("health_check", default=5, order=1,
+        description="Period for decomissioning and timing out instances.")
 
-    def health_check(self):
-        return self._getint("manager", "health_check", 5)
+    marks = Config.integer("marks", default=10, order=2,
+        description="Timeout for unregistered and decomissioned VMs.")
+
+    keys = Config.integer("keys", default=64, order=2,
+        description="Key count for managing services on the ring.")
+
+    def _validate(self):
+        Config._validate(self)
+        for lb in self.loadbalancers:
+            lb_connection.get_connection(lb, config=self, scale_manager=None)
+        for cloud in self.clouds:
+            cloud_connection.get_connection(cloud, config=self)
+        assert self.health_check > 0
+        assert self.marks >= 0
+        assert self.keys >= 0
 
 def locked(fn):
     """
@@ -75,9 +86,11 @@ class ScaleManager(object):
         self.zk_servers = zk_servers
         self.zk_conn    = None
         self.running    = False
-        self.config     = ManagerConfig("")
         self.cond       = threading.Condition()
         self.uuid       = str(uuid.uuid4()) # Manager uuid (generated).
+
+        self.health_check = 5  # Health check interval.
+        self.marks        = 10 # Mark interval.
 
         self.endpoints = {}        # Endpoint map (name -> endpoint)
         self.key_to_endpoints = {} # Endpoint map (key() -> [names...])
@@ -90,19 +103,20 @@ class ScaleManager(object):
         self.key_to_manager = {}  # Reverse map for manager keys.
         self.key_to_owned = {}    # Endpoint to ownership.
 
-        self.load_balancer = None # Load balancer connections.
+        self.loadbalancers = {}   # Load balancer connections.
+        self.clouds = {}          # Cloud connections.
 
         # Setup logging.
         self.log = self.setup_logging()
 
         # The Windows domain connection.
-        self.windows = windows.WindowsConnection()
+        self.windows = None
 
         # The reactor domain.
         self.domain = ""
 
     @locked
-    def __connect_to_zookeeper(self):
+    def _connect_to_zookeeper(self):
         # Create a Zookeeper connection.
         if self.zk_conn:
             self.zk_conn.close()
@@ -120,7 +134,7 @@ class ScaleManager(object):
         return log_buffer
 
     def serve(self):
-        self.__connect_to_zookeeper()
+        self._connect_to_zookeeper()
 
         # Load our configuration and register ourselves.
         self.manager_register()
@@ -185,22 +199,66 @@ class ScaleManager(object):
             if endpoint_name not in endpoints:
                 self.remove_endpoint(endpoint_name, unmanage=True)
 
-    def update_config(self, config_str):
-        self.manager_register(config_str)
+    def update_config(self, config):
+        self.manager_register(config)
         self.reload_loadbalancer()
 
-    def __configure(self, config_str):
+    def _endpoint_config_spec(self):
+        """ Return the specification for a configured endpoint. """
+        spec = {}
+        Endpoint.spec_config(spec)
+        for lb in self.loadbalancers.values():
+            lb._endpoint_config(config=spec)
+        for cloud in self.clouds.values():
+            cloud._endpoint_config(config=spec)
+        if self.windows:
+            self.windows._endpoint_config(config=spec)
+        return spec
+
+    def _endpoint_config_validate(self, config):
+        """ Validate a given endpoint configuration. """
+        Endpoint.validate_config(config, self.clouds)
+        for lb in self.loadbalancers.values():
+            lb._endpoint_config(values=config)._validate()
+        if self.windows:
+            self.windows._endpoint_config(values=config)._validate()
+
+    def _manager_config_spec(self):
+        """ Return the specification for a configured manager. """
+        spec = {}
+        ManagerConfig(obj=spec)
+        for lb in self.loadbalancers.values():
+            lb._manager_config(config=spec)
+        for cloud in self.clouds.values():
+            cloud._manager_config(config=spec)
+        if self.windows:
+            self.windows._manager_config(config=spec)
+        return spec
+
+    def _manager_config_validate(self, config):
+        """ Validate a given manager configuration. """
+        ManagerConfig(values=config)._validate()
+        for lb in self.loadbalancers.values():
+            lb._manager_config(values=config)._validate()
+        for cloud in self.clouds.values():
+            cloud._manager_config(values=config)._validate()
+        if self.windows:
+            self.windows._manager_config(values=config)._validate()
+
+    def _configure(self, config=None):
         """
         This setups up the base manager configuration by combining
         the global configuration and config_str into a single configuration.
         """
+        # Clear out the old watch.
         self.zk_conn.clear_watch_fn(self.update_config)
-        global_config = self.zk_conn.watch_contents(paths.config(), self.update_config)
-        # Load our given configuration.
-        base_config = ManagerConfig(config_str)
 
-        if global_config:
-            base_config.reload(global_config)
+        # Load our given configuration.
+        # This instantiates the manager class and builds the config
+        # object. We will augment this configuration once we load the
+        # loadbalancers and cloud connections.
+        spec = self._manager_config_spec()
+        manager_config = ManagerConfig(obj=spec, values=config)
 
         # NOTE: We may have multiple global IPs (especially in the case of
         # provisioning a cluster that could have floating IPs that move around.
@@ -208,26 +266,28 @@ class ScaleManager(object):
         # they are not somehow mutually incompatible.
         configured_ips = None
         if self.names:
-
             def load_ip_config(ip):
                 # Reload our local config.
-                local_config = self.zk_conn.watch_contents(
-                                    paths.manager_config(ip),
-                                    self.update_config)
-                if local_config:
-                    base_config.reload(local_config)
+                manager_config._update(self.zk_conn.watch_contents(
+                                        paths.manager_config(ip),
+                                        self.update_config))
 
             # Read all configured IPs.
             for ip in self.names:
                 load_ip_config(ip)
-            configured_ips = base_config.ips()
+            configured_ips = manager_config.ips
             for ip in configured_ips:
                 load_ip_config(ip)
 
-        return base_config
+        # Load the loadbalancer, cloud and windows connections.
+        self._setup_loadbalancer_connections(manager_config)
+        self._setup_cloud_connections(manager_config)
+        self.windows = windows.WindowsConnection(name="windows", config=manager_config)
+
+        return manager_config
 
     @locked
-    def __register_manager_ips(self, configured_ips):
+    def _register_manager_ips(self, configured_ips):
         """
         Register all of the manager's configured ips.
         """
@@ -258,7 +318,7 @@ class ScaleManager(object):
                     register_ip(name)
 
     @locked
-    def __determine_manager_keys(self, key_num):
+    def _determine_manager_keys(self, key_num):
         # Generate keys.
         while len(self.manager_keys) < key_num:
             # Generate a random hash key to associate with this manager.
@@ -273,39 +333,46 @@ class ScaleManager(object):
         logging.info("Generated %d keys." % len(self.manager_keys))
 
     @locked
-    def __select_endpoints(self):
+    def _select_endpoints(self):
         # If we're not doing initial setup, refresh endpoints.
         for endpoint in self.endpoints.values():
             self.manager_select(endpoint)
 
     @locked
-    def __setup_loadbalancer_connections(self, loadbalancer_names):
+    def _setup_loadbalancer_connections(self, config):
         # Create the loadbalancer connections.
         # NOTE: Any old loadbalancer object should be cleaned
         # up automatically (i.e. the objects should implement
         # fairly sensible __del__ methods when necessary).
-        self.load_balancer = lb_connection.LoadBalancers()
-        for name in self.config.loadbalancer_names():
-            self.load_balancer.append(\
-                lb_connection.get_connection(\
-                    name, self.config.loadbalancer_config(name), self))
+        self.loadbalancers = {}
+        for name in config.loadbalancers:
+            self.loadbalancers[name] = \
+                lb_connection.get_connection( \
+                    name, config=config, scale_manager=self)
 
     @locked
-    def __set_config(self, config):
-        self.config = config
+    def _setup_cloud_connections(self, config):
+        # Create the cloud connections.
+        # NOTE: Same restrictions apply to cloud connections.
+        self.clouds = {}
+        for name in config.clouds:
+            self.clouds[name] = \
+                cloud_connection.get_connection( \
+                    name, config=config)
 
-    def manager_register(self, config_str=''):
+    @locked
+    def _find_cloud_connection(self, name=None):
+        # Try to find a matching cloud connection, or return an unconfigured stub.
+        return self.clouds.get(name, cloud_connection.CloudConnection(name))
+
+    def manager_register(self, config=None):
         # Figure out our global IPs.
         logging.info("Manager %s has key %s." % (str(self.names), self.uuid))
 
-        manager_config = self.__configure(config_str)
-        self.__register_manager_ips(manager_config.ips())
-        self.__determine_manager_keys(manager_config.keys())
-
-        self.__set_config(manager_config)
-        self.__select_endpoints()
-
-        self.__setup_loadbalancer_connections(manager_config.loadbalancer_names())
+        manager_config = self._configure(config)
+        self._register_manager_ips(manager_config.ips)
+        self._determine_manager_keys(manager_config.keys)
+        self._select_endpoints()
 
         # Reload the domain.
         self.reload_domain(self.zk_conn.watch_contents(\
@@ -365,11 +432,11 @@ class ScaleManager(object):
         # configuration or in the global configuration. 
         # This does mean however, that the ManagerConfig and EndpointConfig
         # should have disjoint sections for the most part.
-        endpoint = Endpoint(endpoint_name, str(self.config), self)
+        endpoint = Endpoint(endpoint_name, self)
         self.add_endpoint(endpoint)
 
     @locked
-    def __add_endpoint(self, endpoint):
+    def _add_endpoint(self, endpoint):
         self.endpoints[endpoint.name] = endpoint
         endpoint_key = endpoint.key()
 
@@ -381,7 +448,7 @@ class ScaleManager(object):
 
     def add_endpoint(self, endpoint):
 
-        self.__add_endpoint(endpoint)
+        self._add_endpoint(endpoint)
 
         def local_lock(fn):
             def wrapped_fn(*args, **kwargs):
@@ -401,8 +468,9 @@ class ScaleManager(object):
                 endpoint.update()
 
         @local_lock
-        def update_config(value):
-            endpoint.update_config(value)
+        def update_config(config):
+            config = Config(obj=self._endpoint_config_spec(), values=config)
+            endpoint.update_config(config)
             if self.endpoint_owned(endpoint):
                 endpoint.update()
 
@@ -443,7 +511,7 @@ class ScaleManager(object):
         endpoint.update()
 
     @locked
-    def __remove_endpoint(self, endpoint, unmanage):
+    def _remove_endpoint(self, endpoint, unmanage):
 
         endpoint_name = endpoint.name
         logging.info("Unmanaging endpoint %s" % (endpoint_name))
@@ -473,7 +541,7 @@ class ScaleManager(object):
 
             # Update the loadbalancer for this endpoint.
             self.update_loadbalancer(endpoint, remove=True)
-            self.__remove_endpoint(endpoint, unmanage)
+            self._remove_endpoint(endpoint, unmanage)
             self.manager_remove(endpoint)
 
     @locked
@@ -501,8 +569,8 @@ class ScaleManager(object):
         self.zk_conn.delete(paths.endpoint_ip_metrics(endpoint_name, ip))
         self.zk_conn.delete(paths.confirmed_ip(endpoint_name, ip))
         self.zk_conn.delete(paths.ip_address(ip))
-        for name in self.config.loadbalancer_names():
-            self.zk_conn.delete(paths.loadbalancer_ip(name, ip))
+        for lb in self.loadbalancers.values():
+            lb._forget_ip(ip)
 
     @locked
     def confirm_ip(self, endpoint_name, ip):
@@ -547,14 +615,11 @@ class ScaleManager(object):
             self.zk_conn.delete(paths.drop_ip(ip))
 
     @locked
-    def collect_endpoint(self, endpoint, public_ips, private_ips, redirects):
+    def collect_endpoint(self, endpoint, ips, redirects):
         # Collect all availble IPs.
         for ip in self.active_ips(endpoint.name):
             ip = BackendIP(ip, endpoint.port(), endpoint.weight())
-            if endpoint.public():
-                public_ips.append(ip)
-            else:
-                private_ips.append(ip)
+            ips.append(ip)
 
         # Collect all available redirects.
         redirect = endpoint.redirect()
@@ -562,27 +627,17 @@ class ScaleManager(object):
             redirects.append(redirect)
 
     @locked
-    def collect_update_loadbalancer(self, url, names,
-                                    public_ips, private_ips, redirects):
-
-        if len(public_ips) > 0 or \
-           len(private_ips) > 0 or \
-           len(redirects) == 0:
-            self.load_balancer.change(url,
-                                      names,
-                                      public_ips,
-                                      self.manager_ips,
-                                      private_ips)
+    def collect_update_loadbalancer(self, url, names, ips, redirects, **kwargs):
+        if len(ips) > 0 or len(redirects) == 0:
+            for lb in self.loadbalancers.values():
+                lb.change(url, names, ips, **kwargs)
         else:
-            self.load_balancer.redirect(url,
-                                        names,
-                                        redirects[0],
-                                        self.manager_ips)
+            for lb in self.loadbalancers.values():
+                lb.redirect(url, names, redirects[0], **kwargs)
 
     @locked
     def update_loadbalancer(self, endpoint, remove=False):
-        public_ips = []
-        private_ips = []
+        ips = []
         redirects = []
         names = []
 
@@ -592,48 +647,49 @@ class ScaleManager(object):
                 continue
             else:
                 names.append(endpoint_name)
-                self.collect_endpoint(
-                    self.endpoints[endpoint_name],
-                    public_ips, private_ips, redirects)
+                self.collect_endpoint(self.endpoints[endpoint_name], ips, redirects)
 
-        self.collect_update_loadbalancer(endpoint.url(), names,
-                                         public_ips, private_ips, redirects)
-        self.load_balancer.save()
+        self.collect_update_loadbalancer(
+            endpoint.url(), names, ips, redirects, config=endpoint.config)
+
+        for lb in self.loadbalancers.values():
+            lb.save()
 
     @locked
     def reload_loadbalancer(self):
-        self.load_balancer.clear()
+        for lb in self.loadbalancers.values():
+            lb.clear()
 
         for (key, endpoint_names) in self.key_to_endpoints.items():
-            public_ips = []
-            private_ips = []
+            ips = []
             names = []
             redirects = []
 
             for endpoint in map(lambda x: self.endpoints[x], endpoint_names):
                 names.append(endpoint.name)
-                self.collect_endpoint(endpoint, public_ips, private_ips, redirects)
-            self.collect_update_loadbalancer(endpoint.url(), names,
-                                             public_ips, private_ips, redirects)
+                self.collect_endpoint(endpoint, ips, redirects)
+            self.collect_update_loadbalancer(endpoint.url(), names, ips, redirects)
 
-        self.load_balancer.save()
+        for lb in self.loadbalancers.values():
+            lb.save()
 
     @locked
     def start_params(self, endpoint=None):
         params = {}
+
         # If a Windows connection is available, get start params for this service.
         # This will generally create the appropriate accounts on the Windows domain,
         # and give them back to the VMs for the agent to use in configuration.
         if endpoint and self.windows:
-            params.update(self.windows.start_params(ConfigView(endpoint.config, "windows")))
+            params.update(self.windows.start_params(endpoint.config))
+
         return params
 
     @locked
     def cleanup_start_params(self, endpoint, start_params):
         # We've failed to launch a machine, so clean up any work we've done
         if self.windows:
-            self.windows.cleanup_start_params(ConfigView(endpoint.config, "windows"),
-                                              start_params)
+            self.windows.cleanup_start_params(endpoint.config, start_params)
 
     @locked
     def marked_instances(self, endpoint_name):
@@ -652,7 +708,7 @@ class ScaleManager(object):
         mark_counter = mark_counters.get(label, 0)
         mark_counter += 1
 
-        if mark_counter >= self.config.mark_maximum(label):
+        if mark_counter >= self.marks:
             # This instance has been marked too many times. There is likely
             # something really wrong with it, so we'll clean it up.
             logging.warning("Instance %s for endpoint %s has been marked too many times and"
@@ -687,6 +743,7 @@ class ScaleManager(object):
         # Re-register all associated IPs.
         ips = self.decommissioned_instance_ip_addresses(endpoint_name, instance_id)
         self.register_ip(ips)
+
         # Delete decommissioned instance path and marked data.
         self.zk_conn.delete(paths.decommissioned_instance(endpoint_name,
                             instance_id))
@@ -715,7 +772,7 @@ class ScaleManager(object):
 
     @locked
     def drop_decommissioned_instance(self, endpoint_name, instance_id, instance_name=None):
-        """ Delete the decommissioned instance """
+        """ Delete the decommissioned instance. """
         ip_addresses = self.decommissioned_instance_ip_addresses(endpoint_name, instance_id)
         for ip_address in ip_addresses:
             self.drop_ip(endpoint_name, ip_address)
@@ -724,7 +781,7 @@ class ScaleManager(object):
         # For windows machines we also do some cleanup.
         if instance_name and self.windows and endpoint_name in self.endpoints:
             endpoint = self.endpoints[endpoint_name]
-            self.windows.cleanup(ConfigView(endpoint.config, "windows"), instance_name)
+            self.windows.cleanup(endpoint.config, instance_name)
 
     def metric_indicates_active(self, metrics):
         """ Returns true if the metrics indicate that there are active connections. """
@@ -736,6 +793,27 @@ class ScaleManager(object):
             logging.warning("Malformed metrics found: %s" % (active_metrics))
             return False
 
+    def _collect_metrics(self):
+        # This is the only complex metric (that requires multiplexing).  We
+        # combine the load balancer metrics by hostname, adding weights where
+        # they are not unique.
+        results = {}
+        for lb in self.loadbalancers.values():
+            result = lb.metrics()
+            for (host, metrics) in result.items():
+                if not(host in results):
+                    results[host] = metrics
+                    continue
+
+                for key in metrics:
+                    (oldweight, oldvalue) = results[host][key]
+                    (newweight, newvalue) = metrics[key]
+                    weight = (oldweight + newweight)
+                    value  = ((oldvalue * oldweight) + (newvalue * newweight)) / weight
+                    results[host][key] = (weight, value)
+
+        return results
+
     @locked
     def update_metrics(self):
         """ 
@@ -743,12 +821,10 @@ class ScaleManager(object):
         the metrics posted by other managers.
         
         returns a tuple (metrics, active_connections) both of which are dictionaries. Metrics
-        is indexed by the endpoint key and active connections is indexed by endpoint name
+        is indexed by the endpoint key and active connections is indexed by endpoint name.
         """
-
-        # Update all the endpoint metrics from the loadbalancer.
-        metrics = self.load_balancer.metrics()
-        logging.debug("Load balancer returned metrics: %s" % metrics)
+        metrics = self._collect_metrics()
+        logging.debug("Loadbalancers returned metrics: %s" % metrics)
 
         # The metrics_by_key dictionary maps to a tuple (active, metrics).
         # The active value is a list of all IPs used to generate the metrics.
@@ -888,7 +964,7 @@ class ScaleManager(object):
         return metrics, list(set(metric_ips)), active_connections
 
     @locked
-    def health_check(self):
+    def do_health_check(self):
         # Save and load the current metrics.
         endpoint_metrics, active_connections = self.update_metrics()
 
@@ -952,16 +1028,16 @@ class ScaleManager(object):
 
                 # Perform continuous health checks.
                 while self.running:
-                    self.health_check()
+                    self.do_health_check()
                     if self.running:
-                        time.sleep(self.config.health_check())
+                        time.sleep(self.health_check)
 
             except ZookeeperException:
                 # Sleep on ZooKeeper exception and retry.
                 error = traceback.format_exc()
                 logging.debug("Received ZooKeeper exception, retrying: %s" % (error))
                 if self.running:
-                    time.sleep(self.config.health_check())
+                    time.sleep(self.health_check)
 
     def clean_stop(self):
         self.running = False

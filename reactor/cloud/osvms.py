@@ -1,31 +1,41 @@
+from reactor.config import Config
 
-from reactor.cloud.osapi import BaseOsConfig
+from reactor.cloud.osapi import BaseOsEndpointConfig
 from reactor.cloud.osapi import BaseOsConnection
 
-class OsVmsConfig(BaseOsConfig):
+class OsVmsEndpointConfig(BaseOsEndpointConfig):
 
-    def instance_id(self):
-        return self._get("instance_id", "0")
+    instance_id = Config.string("instance_id", order=2,
+        description="The live-image to use.")
+
+    def _validate(self):
+        BaseOsEndpointConfig._validate(self)
+        client = self._novaclient()
+        instance = client.servers.get(self.instance_id)
+        assert instance._info['status'] == 'BLESSED'
 
 class Connection(BaseOsConnection):
     """ Connects to a nova cloud that has the Gridcentric VMS extension enabled. """
 
-    def __init__(self, config):
-        super(Connection, self).__init__(config)
+    _ENDPOINT_CONFIG_CLASS = OsVmsEndpointConfig
 
-    def create_config(self, config):
-        return OsVmsConfig(config)
-
-    def _list_instances(self):
+    def _list_instances(self, config):
         """ 
         Returns a list of instances from the endpoint.
         """
-        server = self._novaclient().gridcentric.get(self.config.instance_id())
+        config = self._endpoint_config(config)
+        server = config._novaclient().gridcentric.get(config.instance_id)
         return server.list_launched()
 
-    def _start_instance(self, params={}):
-        server = self._novaclient().gridcentric.get(self.config.instance_id())
+    def _start_instance(self, config, params={}):
+        config = self._endpoint_config(config)
+        server = config._novaclient().gridcentric.get(config.instance_id)
         if 'name' in params:
-            server.launch(name=params['name'], guest_params=params)
+            server.launch(name=params['name'],
+                          security_groups=config.security_groups,
+                          availability_zone=config.availability_zone,
+                          guest_params=params)
         else:
-            server.launch(guest_params=params)
+            server.launch(security_groups=config.security_groups,
+                          availability_zone=config.availability_zone,
+                          guest_params=params)

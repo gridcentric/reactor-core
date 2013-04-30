@@ -11,7 +11,7 @@ import logging
 
 from mako.template import Template
 
-from reactor.config import SubConfig
+from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
 from reactor.loadbalancer.netstat import connection_count
 
@@ -131,29 +131,34 @@ class NginxLogWatcher(threading.Thread):
                 finally:
                     self.lock.release()
 
-class NginxLoadBalancerConfig(SubConfig):
+class NginxManagerConfig(Config):
 
-    def config_path(self):
-        return self._get("config_path", "/etc/nginx/conf.d")
+    config_path = Config.string("config_path", default="/etc/nginx/conf.d",
+        description="The configuration directory for nginx.")
 
-    def site_path(self):
-        return self._get("site_path", "/etc/nginx/sites-enabled")
+    site_path = Config.string("site_path", default="/etc/nginx/sites-enabled",
+        description="The site path for nginx.")
 
-    def sticky_sessions(self):
-        return self._get("sticky_sessions", "false").lower() == "true"
+class NginxEndpointConfig(Config):
 
-    def keepalive(self):
-        try:
-            return int(self._get("keepalive", '0'))
-        except:
-            return 0
+    sticky_sessions = Config.boolean("sticky_sessions", default=False,
+        description="Whether or use nginx's sticky session feature.")
+
+    keepalive = Config.integer("keepalive", default=0,
+        description="Number of backend connections to keep alive.")
+
+    def _validate(self):
+        Config._validate(self)
+        assert self.keepalive >= 0
 
 class Connection(LoadBalancerConnection):
 
-    def __init__(self, name, scale_manager, config):
-        LoadBalancerConnection.__init__(self, name, scale_manager)
+    _MANAGER_CONFIG_CLASS = NginxManagerConfig
+    _ENDPOINT_CONFIG_CLASS = NginxEndpointConfig
+
+    def __init__(self, name, config, scale_manager):
+        LoadBalancerConnection.__init__(self, name, config, scale_manager)
         self.tracked = {}
-        self.config = NginxLoadBalancerConfig(config)
         template_file = os.path.join(os.path.dirname(__file__), 'nginx.template')
         self.template = Template(filename=template_file)
         self.log_reader = NginxLogWatcher("/var/log/nginx/access.log")
@@ -173,7 +178,7 @@ class Connection(LoadBalancerConnection):
 
     def clear(self):
         # Remove all sites configurations.
-        for conf in glob.glob(os.path.join(self.config.site_path(), "*")):
+        for conf in glob.glob(os.path.join(self._manager_config().site_path, "*")):
             try:
                 os.remove(conf)
             except OSError:
@@ -182,19 +187,14 @@ class Connection(LoadBalancerConnection):
         # Remove all tracked connections.
         self.tracked = {}
 
-    def redirect(self, url, names, other, manager_ips):
-        self.change(url, names, [], [], [], redirect=other)
+    def redirect(self, url, names, other, config=None):
+        self.change(url, names, [], [], redirect=other)
 
-    def change(self, url, names, public_ips, manager_ips, private_ips, redirect=False):
+    def change(self, url, names, ips, redirect=False, config=None):
         # We use a simple hash of the URL as the file name for the
         # configuration file.
         uniq_id = hashlib.md5(url).hexdigest()
         conf_filename = "%s.conf" % uniq_id
-
-        # There are no privacy concerns here, so we can mix all public and
-        # private addresses. (But it doesn't make sense to include the IPs
-        # for the managers).
-        ips = public_ips + private_ips
 
         # Check for a removal.
         if not(redirect) and len(ips) == 0:
@@ -203,7 +203,7 @@ class Connection(LoadBalancerConnection):
                 del self.tracked[uniq_id]
 
             try:
-                os.remove(os.path.join(self.config.site_path(), conf_filename))
+                os.remove(os.path.join(self._manager_config().site_path, conf_filename))
             except OSError:
                 logging.warn("Unable to remove file: %s" % conf_filename)
             return
@@ -251,10 +251,10 @@ class Connection(LoadBalancerConnection):
                 self.tracked[uniq_id].append((backend.ip, port))
 
             # Compute any extra bits for the template.
-            if self.config.sticky_sessions():
+            if self._endpoint_config(config).sticky_sessions:
                 extra += '    sticky;\n'
-            if self.config.keepalive():
-                extra += '    keepalive %d single;\n' % self.config.keepalive()
+            if self._endpoint_config(config).keepalive:
+                extra += '    keepalive %d single;\n' % self._endpoint_config(config).keepalive
 
         # Render our given template.
         conf = self.template.render(id=uniq_id,
@@ -268,7 +268,7 @@ class Connection(LoadBalancerConnection):
                                     extra=extra)
 
         # Write out the config file.
-        config_file = file(os.path.join(self.config.site_path(), conf_filename), 'wb')
+        config_file = file(os.path.join(self._manager_config().site_path, conf_filename), 'wb')
         config_file.write(conf)
         config_file.flush()
         config_file.close()
@@ -276,7 +276,7 @@ class Connection(LoadBalancerConnection):
     def save(self):
         # Copy over our base configuration.
         shutil.copyfile(os.path.join(os.path.dirname(__file__), 'reactor.conf'),
-                        os.path.join(self.config.config_path(), 'reactor.conf'))
+                        os.path.join(self._manager_config().config_path, 'reactor.conf'))
 
         # Send a signal to NginX to reload the configuration
         # (Note: we might need permission to do this!!)

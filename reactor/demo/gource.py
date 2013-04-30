@@ -156,9 +156,9 @@ def usage():
     print "This tool requires 'gource' to be installed."
     print ""
     print "Optional arguments:"
-    print "   -h, --help             Display this help message"
+    print "   -h, --help             Display this help message."
     print ""
-    print "   -a, --api=             The API url (default is %s)." % api_server
+    print "   -a, --api=             The API url."
     print ""
     print "   -p, --password=        The password used to connect to the API."
     print ""

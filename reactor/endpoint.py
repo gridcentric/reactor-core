@@ -6,7 +6,6 @@ import sys
 import copy
 
 from reactor.config import Config
-from reactor.config import ConfigView
 import reactor.cloud.connection as cloud_connection
 import reactor.metrics.calculator as metric_calculator
 
@@ -32,50 +31,42 @@ class State:
 
 class EndpointConfig(Config):
 
-    def url(self):
-        return self._get("endpoint", "url", '')
+    def __init__(self, **kwargs):
+        Config.__init__(self, section="endpoint", **kwargs)
 
-    def port(self):
-        return self._getint("endpoint", "port", 0)
+    url = Config.string("url", order=0,
+        description="The URL for this endpoint.")
 
-    def redirect(self):
-        return self._get("endpoint", "redirect", '')
+    port = Config.integer("port", order=1,
+        description="The backend port for this service.")
 
-    def public(self):
-        return self._getbool("endpoint", "public", True)
+    redirect = Config.string("redirect", order=1,
+        description="A redirect URL for when no instances are available.")
 
-    def weight(self):
-        return self._getint("endpoint", "weight", 1)
+    weight = Config.integer("weight", default=1, order=1,
+        description="Relative weight (if sharing URLs).")
 
-    def min_instances(self):
-        return self._getint("scaling", "min_instances", 1)
+    cloud = Config.string("cloud", order=2,
+        description="The cloud type (e.g. osvms, osapi).")
 
-    def max_instances(self):
-        return self._getint("scaling", "max_instances", 1)
+    auth_hash = Config.string("auth_hash", default=None, order=3,
+        description="The authentication token for this endpoint.")
 
-    def rules(self):
-        return self._getlist("scaling", "rules")
+    auth_salt = Config.string("auth_salt", default="", order=3,
+        description="The salt used for computing authentication tokens.")
 
-    def ramp_limit(self):
-        return self._getint("scaling", "ramp_limit", 5)
+    auth_algo = Config.string("auth_algo", default="sha1", order=3,
+        description="The algorithm used for computing authentication tokens.")
 
-    def source_url(self):
-        return self._get("scaling", "url", "")
+    def _get_endpoint_auth(self):
+        return (self.auth_hash, self.auth_salt, self.auth_algo)
 
-    def cloud_type(self):
-        return self._get("endpoint", "cloud", "none")
+    static_instances = Config.list("static_instances", order=1,
+        description="Static hosts for the endpoint.")
 
-    def cloud_config(self):
-        return ConfigView(self, "cloud:%s" % self.cloud_type())
-
-    def get_endpoint_auth(self):
-        return (self._get("endpoint", "auth_hash", ""),
-                self._get("endpoint", "auth_salt", ""),
-                self._get("endpoint", "auth_algo", ""))
-
-    def static_ips(self):
+    def _static_ips(self):
         """ Returns a list of static ips associated with the configured static instances. """
-        static_instances = self._get("endpoint", "static_instances", "").split(",")
+        static_instances = self.static_instances
 
         # (dscannell) The static instances can be specified either as IP
         # addresses or hostname.  If its an IP address then we are done. If its
@@ -90,40 +81,72 @@ class EndpointConfig(Config):
                              "for the static instance %s." % static_instance)
         return ip_addresses
 
+    def _validate(self):
+        Config._validate(self)
+        assert self.port >= 0
+        assert self.weight >= 0
+
+class ScalingConfig(Config):
+
+    def __init__(self, **kwargs):
+        Config.__init__(self, "scaling", **kwargs)
+
+    min_instances = Config.integer("min_instances", default=1, order=0,
+        description="Lower limit on dynamic instances.")
+
+    max_instances = Config.integer("max_instances", default=1, order=0,
+        description="Upper limit on dynamic instances.")
+
+    rules = Config.list("rules", order=1,
+        description="List of scaling rules (e.g. 0.5<active<0.8).")
+
+    ramp_limit = Config.integer("ramp_limit", default=5, order=2,
+        description="The maximum operations (start and stop instances) per round.")
+
+    url = Config.string("url", order=3,
+        description="The source url for metrics.")
+
+    def _validate(self):
+        Config._validate(self)
+        assert self.min_instances >= 0
+        assert self.max_instances >= 0
+        assert self.min_instances <= self.max_instances
+        assert self.ramp_limit > 0
+
 class Endpoint(object):
 
-    def __init__(self, name, config_str, scale_manager):
+    def __init__(self, name, scale_manager):
         self.name = name
-        self.config = EndpointConfig(config_str)
         self.scale_manager = scale_manager
-        self.state = State.default
 
-        self.cloud = self.config.cloud_type()
+        # Initialize (currently empty) configurations.
+        self.config = EndpointConfig()
+        self.scaling = ScalingConfig()
+
+        # Endpoint state.
+        self.state = State.default
         self.decommissioned_instances = []
-        self.cloud_conn = cloud_connection.get_connection(
-                            self.cloud,
-                            self.config.cloud_config())
+
+        # Default to no cloud connection.
+        self.cloud_conn = scale_manager._find_cloud_connection()
 
     def key(self):
         return compute_key(self.url())
 
     def url(self):
-        return self.config.url() or "none://%s" % self.name
+        return self.config.url or "none://%s" % self.name
 
     def port(self):
-        return self.config.port()
+        return self.config.port
 
     def redirect(self):
-        return self.config.redirect()
-
-    def public(self):
-        return self.config.public()
+        return self.config.redirect
 
     def weight(self):
-        return self.config.weight()
+        return self.config.weight
 
     def source_key(self):
-        source_url = self.config.source_url()
+        source_url = self.scaling.url
         if source_url:
             return compute_key(source_url)
         else:
@@ -138,8 +161,7 @@ class Endpoint(object):
         # Do nothing.
         logging.info("Unmanaging endpoint %s" % (self.name))
 
-    def update(self, reconfigure=True, metrics={}, metric_instances=None,
-               active_ips=[]):
+    def update(self, reconfigure=True, metrics={}, metric_instances=None, active_ips=[]):
         try:
             self._update(reconfigure, metrics, metric_instances, active_ips)
         except:
@@ -155,7 +177,7 @@ class Endpoint(object):
         # Evaluate the metrics on these instances and get the ideal bounds on the number
         # of servers that should exist.
         ideal_min, ideal_max = metric_calculator.calculate_ideal_uniform(\
-                self.config.rules(), metrics, num_instances)
+                self.scaling.rules, metrics, num_instances)
         logging.debug("Metrics for endpoint %s: ideal_servers=%s (%s)" % \
                 (self.name, (ideal_min, ideal_max), metrics))
 
@@ -167,12 +189,12 @@ class Endpoint(object):
                 # only if the metrics could have made a difference.
                 logging.warn("The metrics defined for endpoint %s have resulted in a "
                              "conflicting result. (endpoint metrics: %s)"
-                             % (self.name, self.config.metrics()))
+                             % (self.name, str(self.scaling.rules)))
             return (ideal_min, ideal_max)
 
         # Grab the allowable bounds of the number of servers that should exist.
-        config_min = self.config.min_instances()
-        config_max = self.config.max_instances()
+        config_min = self.scaling.min_instances
+        config_max = self.scaling.max_instances
 
         # Determine the intersecting bounds between the ideal and the configured.
         target_min = max(ideal_min, config_min)
@@ -193,7 +215,7 @@ class Endpoint(object):
         return (target_min, target_max)
 
     def _instance_is_active(self, instance, active_ips):
-        for ip in self.cloud_conn.addresses(instance):
+        for ip in self.cloud_conn.addresses(self.config, instance):
             if ip in active_ips:
                 return True
         return False
@@ -208,7 +230,7 @@ class Endpoint(object):
         num_instances = len(instances)
         if not(metric_instances):
             metric_instances = len(self.scale_manager.confirmed_ips(self.name))
-        ramp_limit = self.config.ramp_limit()
+        ramp_limit = self.scaling.ramp_limit
 
         if self.state == State.running:
             (target_min, target_max) = \
@@ -270,24 +292,40 @@ class Endpoint(object):
     def update_state(self, state):
         self.state = state or State.default
 
-    def update_config(self, config_str):
-        # Check if our configuration is about to change.
-        old_url = self.config.url()
-        old_static_addresses = self.config.static_ips()
-        old_port = self.config.port()
-        old_cloud_config = self.config.cloud_config()
-        old_public = self.config.public()
-        old_weight = self.config.weight()
-        old_redirect = self.config.redirect()
+    @staticmethod
+    def spec_config(config):
+        endpoint_config = EndpointConfig(obj=config)
+        scaling_config = ScalingConfig(obj=config)
 
-        new_config = EndpointConfig(config_str)
-        new_url = new_config.url()
-        new_static_addresses = new_config.static_ips()
-        new_port = new_config.port()
-        new_cloud_config = new_config.cloud_config()
-        new_public = new_config.public()
-        new_weight = new_config.weight()
-        new_redirect = new_config.redirect()
+    @staticmethod
+    def validate_config(values, clouds):
+        config = EndpointConfig(values=values)
+        scaling = ScalingConfig(values=values)
+        config._validate()
+        scaling._validate()
+
+        # Ensure that this cloud is available.
+        if config.cloud:
+            assert config.cloud in clouds
+            cloud = clouds[config.cloud]
+            cloud._endpoint_config(values=values)._validate()
+
+    def update_config(self, config):
+        # Check if our configuration is about to change.
+        old_url = self.config.url
+        old_static_addresses = self.config._static_ips()
+        old_port = self.config.port
+        old_weight = self.config.weight
+        old_redirect = self.config.redirect
+
+        new_config = EndpointConfig(obj=config)
+        new_scaling = ScalingConfig(obj=config)
+
+        new_url = new_config.url
+        new_static_addresses = new_config._static_ips()
+        new_port = new_config.port
+        new_weight = new_config.weight
+        new_redirect = new_config.redirect
 
         # Drop all removed static addresses.
         for ip in old_static_addresses:
@@ -300,20 +338,19 @@ class Endpoint(object):
             self.scale_manager.remove_endpoint(self.name)
 
         # Reload the configuration.
-        self.config.reload(config_str)
+        self.config = new_config
+        self.scaling = new_scaling
 
-        # Reconnect to the cloud controller (if necessary).
-        if old_cloud_config != new_cloud_config:
-            self.cloud_conn = cloud_connection.get_connection(self.config.cloud_type(),
-                                                              self.config.cloud_config())
+        # Reconnect to the cloud controller (always).
+        self.cloud_conn = self.scale_manager._find_cloud_connection(new_config.cloud)
 
         # Do a referesh (to capture the new endpoint).
         if old_url != new_url:
             self.scale_manager.add_endpoint(self)
 
+        # Update the load balancer.
         elif old_static_addresses != new_static_addresses or \
              old_port != new_port or \
-             old_public != new_public or \
              old_weight != new_weight or \
              old_redirect != new_redirect:
             self._update_loadbalancer()
@@ -340,11 +377,12 @@ class Endpoint(object):
         # It might be good to wait a little bit for the servers to clear out
         # any requests they are currently serving.
         for instance in instances:
-            instance_id = self.cloud_conn.id(instance)
+            instance_id = self.cloud_conn.id(self.config, instance)
             logging.info("Decommissioning instance %s for server %s (reason: %s)" %
                     (instance_id, self.name, reason))
             self.scale_manager.decommission_instance(\
-                self.name, instance_id, self.cloud_conn.addresses(instance))
+                self.name, instance_id,
+                self.cloud_conn.addresses(self.config, instance))
             if not(instance_id in self.decommissioned_instances):
                 self.decommissioned_instances += [instance_id]
 
@@ -355,14 +393,13 @@ class Endpoint(object):
             self._update_loadbalancer()
 
     def _delete_instance(self, instance):
-        instance_id = self.cloud_conn.id(instance)
+        instance_id = self.cloud_conn.id(self.config, instance)
 
         # Delete the instance from the cloud.
         logging.info("Deleting instance %s for server %s" % (instance_id, self.name))
-        self.cloud_conn.delete_instance(instance_id)
+        self.cloud_conn.delete_instance(self.config, instance_id)
         self.scale_manager.drop_decommissioned_instance(
-            self.name, instance_id, self.cloud_conn.name(instance))
-
+            self.name, instance_id, self.cloud_conn.name(self.config, instance))
         try:
             self.decommissioned_instances.remove(instance_id)
         except:
@@ -377,33 +414,33 @@ class Endpoint(object):
                      (self.name, reason))
         start_params = self.scale_manager.start_params(self)
         try:
-            self.cloud_conn.start_instance(params=start_params)
+            self.cloud_conn.start_instance(self.config, params=start_params)
         except:
             logging.error("Error launching instance for server %s: %s" % \
                 (self.name, traceback.format_exc()))
             self.scale_manager.cleanup_start_params(self, start_params)
 
     def static_addresses(self):
-        return self.config.static_ips()
+        return self.config._static_ips()
 
     def instances(self, filter=True):
-        instances = self.cloud_conn.list_instances()
-
+        instances = self.cloud_conn.list_instances(self.config)
         if filter:
             # Filter out the decommissioned instances from the returned list.
             all_instances = instances
             instances = []
             for instance in all_instances:
-                if not(self.cloud_conn.id(instance) in self.decommissioned_instances):
+                if not(self.cloud_conn.id(self.config, instance) \
+                    in self.decommissioned_instances):
                     instances.append(instance)
-
         return instances
 
     def addresses(self):
         try:
             all_addresses = set()
             for instance in self.instances():
-                all_addresses.update(self.cloud_conn.addresses(instance))
+                all_addresses.update( \
+                    self.cloud_conn.addresses(self.config, instance))
             return list(all_addresses)
         except:
             logging.error("Error querying endpoint %s addresses: %s" % \
@@ -411,7 +448,8 @@ class Endpoint(object):
             return []
 
     def instance_by_id(self, instances, instance_id):
-        instance_list = filter(lambda x: self.cloud_conn.id(x) == instance_id, instances)
+        instance_list = filter( \
+            lambda x: self.cloud_conn.id(self.config, x) == instance_id, instances)
         if len(instance_list) == 1:
             return instance_list[0]
         raise KeyError('instance with id %s not found' % (instance_id))
@@ -421,7 +459,7 @@ class Endpoint(object):
 
     def health_check(self, active_ips):
         instances = self.instances(filter=False)
-        instance_ids = map(lambda x: self.cloud_conn.id(x), instances)
+        instance_ids = map(lambda x: self.cloud_conn.id(self.config, x), instances)
 
         # Mark sure that the manager does not contain any scale data, which
         # may result in some false metric data and clogging up Zookeeper.
@@ -441,8 +479,8 @@ class Endpoint(object):
         associated_confirmed_ips = set()
         inactive_instance_ids = []
         for instance in instances:
-            instance_id = self.cloud_conn.id(instance)
-            expected_ips = set(self.cloud_conn.addresses(instance))
+            instance_id = self.cloud_conn.id(self.config, instance)
+            expected_ips = set(self.cloud_conn.addresses(self.config, instance))
             # As long as there is one expected_ip in the confirmed_ip,
             # everything is good. Otherwise This instance has not checked in.
             # We need to mark it, and it if has enough marks it will be

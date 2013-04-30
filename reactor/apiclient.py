@@ -35,8 +35,7 @@ class ReactorApiClient(httplib2.Http):
         Manage the endpoint using the given configuration.
         """
         self._authenticated_request('/v1.0/endpoints/%s' % (endpoint_name),
-                                    'POST',
-                                    body={'config':config})
+                                    'POST', body=config)
 
     def unmanage_endpoint(self, endpoint_name):
         """
@@ -50,37 +49,37 @@ class ReactorApiClient(httplib2.Http):
         """
         resp, body = self._authenticated_request('/v1.0/endpoints/%s' %
                                                  endpoint_name, 'GET')
-        return body.get('config', "")
+        return body
 
     def list_managers_configured(self):
         """
         Returns a list of all configured managers.
         """
         resp, body = self._authenticated_request('/v1.0/managers', 'GET')
-        return body.get('managers_configured', [])
+        return body.get('configured', [])
 
     def list_managers_active(self):
         """
         Returns a list of all active managers.
         """
         resp, body = self._authenticated_request('/v1.0/managers', 'GET')
-        return body.get('managers_active', [])
+        return body.get('active', [])
 
     def update_manager(self, manager, config):
         """
         Update the manager with the given configuration.
         """
         self._authenticated_request('/v1.0/managers/%s' %
-                                    (manager or 'default'), 'POST',
-                                    body={'config':config})
+                                    manager, 'POST',
+                                    body=config)
 
     def get_manager_config(self, manager):
         """
         Return the manager's configuration.
         """
         resp, body = self._authenticated_request('/v1.0/managers/%s' %
-                                                 (manager or 'default'), 'GET')
-        return body.get('config', "")
+                                                 manager, 'GET')
+        return body
 
     def get_manager_log(self, manager):
         """

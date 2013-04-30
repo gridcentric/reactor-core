@@ -44,7 +44,7 @@ class ReactorClient(object):
         self.zk_conn.delete(paths.endpoint(endpoint_name))
 
     def update_endpoint(self, endpoint_name, config):
-        self.zk_conn.write(paths.endpoint(endpoint_name), config)
+        self.zk_conn.write(paths.endpoint(endpoint_name), json.dumps(config))
 
     def set_endpoint_metrics(self, endpoint_name, metrics, endpoint_ip=None):
         if endpoint_ip:
@@ -84,19 +84,19 @@ class ReactorClient(object):
         return self.zk_conn.read(paths.endpoint_manager(endpoint_name))
 
     def get_endpoint_config(self, endpoint_name):
-        return self.zk_conn.read(paths.endpoint(endpoint_name))
-
-    def update_config(self, config):
-        self.zk_conn.write(paths.config(), config)
+        try:
+            return json.loads(self.zk_conn.read(paths.endpoint(endpoint_name)))
+        except:
+            return {}
 
     def update_manager_config(self, manager, config):
-        self.zk_conn.write(paths.manager_config(manager), config)
-
-    def get_config(self):
-        return self.zk_conn.read(paths.config())
+        self.zk_conn.write(paths.manager_config(manager), json.dumps(config))
 
     def get_manager_config(self, manager):
-        return self.zk_conn.read(paths.manager_config(manager))
+        try:
+            return json.loads(self.zk_conn.read(paths.manager_config(manager)))
+        except:
+            return {}
 
     def remove_manager_config(self, manager):
         return self.zk_conn.delete(paths.manager_config(manager))
@@ -112,8 +112,9 @@ class ReactorClient(object):
         if confirmed_ips != None:
             ip_addresses += confirmed_ips
 
-        configured_ips = EndpointConfig(\
-            self.get_endpoint_config(endpoint_name)).static_ips()
+        # Read any static IPs that may have been configured.
+        endpoint_config = EndpointConfig(values=self.get_endpoint_config(endpoint_name))
+        configured_ips = endpoint_config._static_ips()
         if configured_ips != None:
             ip_addresses += configured_ips
 

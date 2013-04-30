@@ -132,9 +132,7 @@ class ReactorApi:
         self.config.add_view(self.unregister_ip_address, route_name='unregister')
 
         self.config.add_route('manager-action', '/v1.0/managers/{manager}')
-        self.config.add_route('manager-action-default', '/v1.0/config')
         self.config.add_view(self.handle_manager_action, route_name='manager-action')
-        self.config.add_view(self.handle_manager_action, route_name='manager-action-default')
 
         self.config.add_route('manager-list', '/v1.0/managers')
         self.config.add_view(self.list_managers, route_name='manager-list')
@@ -209,7 +207,7 @@ class ReactorApi:
     def _authorize_endpoint_access(self, context, request):
         # Pull an endpoint name if it is specified.
         endpoint_name = request.matchdict.get('endpoint_name', None)
-    
+
         # Pull an endpoint name via the endpoint IP.
         if endpoint_name == None:
             endpoint_ip = request.matchdict.get('endpoint_ip', None)
@@ -221,9 +219,9 @@ class ReactorApi:
             if not(config):
                 return False
 
-            endpoint_config = EndpointConfig(config)
+            endpoint_config = EndpointConfig(values=config)
             auth_hash, auth_salt, auth_algo = \
-                endpoint_config.get_endpoint_auth()
+                endpoint_config._get_endpoint_auth()
 
             if auth_hash != None and auth_hash != "":
                 auth_key = self._req_get_auth_key(request)
@@ -278,6 +276,7 @@ class ReactorApi:
 
     def _create_admin_auth_token(self, auth_key):
         if auth_key:
+            # NOTE: We use a fixed salt and force sha1 for the admin token.
             salt = 'gridcentricreactor'
             return hashlib.sha1("%s%s" % (salt, auth_key)).hexdigest()
         else:
@@ -294,7 +293,7 @@ class ReactorApi:
 
         salted = "%s%s" % (auth_salt, auth_key)
 
-        if algo == "none":
+        if not algo:
             return salted
         else:
             try:
@@ -359,6 +358,13 @@ class ReactorApi:
 
         return response
 
+    def handle_update_manager(self, manager, manager_config):
+        self.client.update_manager_config(manager, manager_config)
+
+    def _extract_error(self, e):
+        # Just return the last line of the formatted trace.
+        return traceback.format_exc().strip().split("\n")[-1]
+
     @connected
     @authorized_admin_only
     def handle_manager_action(self, context, request):
@@ -368,34 +374,29 @@ class ReactorApi:
         POST/PUT - Updates the manager with a new config in the request body
         DELETE - Removes the management config.
         """
-        manager = request.matchdict.get('manager', 'default')
+        manager = request.matchdict['manager']
         response = Response()
 
         if request.method == "GET":
             logging.info("Retrieving manager %s configuration" % manager)
-
-            if not(manager) or manager == "default":
-                config = self.client.get_config()
-            else:
-                config = self.client.get_manager_config(manager)
-
+            config = self.client.get_manager_config(manager)
             if config != None:
-                manager_info = {}
-                manager_config = ManagerConfig(config)
-                manager_info['config'] = str(manager_config)
-                manager_info['uuid'] = self.client.get_manager_key(manager)
-                response = Response(body=json.dumps(manager_info))
+                config['uuid'] = self.client.get_manager_key(manager)
+                response = Response(body=json.dumps(config))
             else:
                 response = Response(status=404, body="%s not found" % manager)
 
         elif request.method == "POST" or request.method == "PUT":
             manager_config = json.loads(request.body)
             logging.info("Updating manager %s" % manager)
-
-            if not(manager) or manager == "default":
-                self.client.update_config(manager_config.get('config', ""))
-            else:
-                self.client.update_manager_config(manager, manager_config.get('config', ""))
+            try:
+                # This is handling separately, as the server subclass
+                # may do some intelligent validation of the config.
+                # However, in the general case the API server alone
+                # cannot validate the configuration.
+                self.handle_update_manager(manager, manager_config)
+            except Exception, e:
+                response = Response(status=400, body=self._extract_error(e))
 
         elif request.method == "DELETE":
             config = self.client.get_manager_config(manager)
@@ -446,15 +447,17 @@ class ReactorApi:
         """
 
         if request.method == 'GET':
-            managers_configured = self.client.list_managers_configured()
-            managers_active = self.client.get_managers_active(full=True)
+            configured = self.client.list_managers_configured()
+            active = self.client.get_managers_active(full=True)
             response = Response(body=json.dumps(\
-                        { 'managers_configured' : managers_configured,
-                          'managers_active' : managers_active }))
+                        { 'configured': configured, 'active': active }))
         else:
             response = Response(status=403)
 
         return response
+
+    def handle_update_endpoint(self, endpoint_name, endpoint_config):
+        self.client.update_endpoint(endpoint_name, endpoint_config)
 
     @connected
     @authorized_admin_only
@@ -471,10 +474,8 @@ class ReactorApi:
         if request.method == "GET":
             logging.info("Retrieving endpoint %s configuration" % endpoint_name)
             config = self.client.get_endpoint_config(endpoint_name)
-
             if config != None:
-                endpoint_config = EndpointConfig(self.client.get_endpoint_config(endpoint_name))
-                response = Response(body=json.dumps({'config' : str(endpoint_config)}))
+                response = Response(body=json.dumps(config))
             else:
                 response = Response(status=404, body="%s not found" % endpoint_name)
 
@@ -485,7 +486,11 @@ class ReactorApi:
         elif request.method == "POST" or request.method == "PUT":
             endpoint_config = json.loads(request.body)
             logging.info("Managing or updating endpoint %s" % endpoint_name)
-            self.client.update_endpoint(endpoint_name, endpoint_config.get('config', ''))
+            try:
+                # As per before in handle_update_manager().
+                self.handle_update_endpoint(endpoint_name, endpoint_config)
+            except Exception, e:
+                response = Response(status=400, body=self._extract_error(e))
 
         else:
             # Return an unauthorized response.
@@ -509,14 +514,14 @@ class ReactorApi:
             config = self.client.get_endpoint_config(endpoint_name)
 
             if config != None:
-                state   = self.client.get_endpoint_state(endpoint_name) or State.default
-                active  = self.client.get_endpoint_active(endpoint_name)
+                state = self.client.get_endpoint_state(endpoint_name) or State.default
+                active = self.client.get_endpoint_active(endpoint_name)
                 manager = self.client.get_endpoint_manager(endpoint_name)
 
                 value = {
-                    'state'   : state,
-                    'active'  : active or [],
-                    'manager' : manager or None,
+                    'state': state,
+                    'active': active or [],
+                    'manager': manager or None,
                 }
                 response = Response(body=json.dumps(value))
             else:

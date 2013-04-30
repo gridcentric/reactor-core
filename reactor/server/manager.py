@@ -3,7 +3,6 @@ import logging
 from reactor.manager import ManagerConfig
 from reactor.manager import ScaleManager
 from reactor.manager import locked
-from reactor.config import ConfigView
 import reactor.zookeeper.paths as paths
 
 from reactor.server.endpoint import APIEndpoint
@@ -38,11 +37,14 @@ class ReactorScaleManager(ScaleManager):
                 hosts.append(host)
         iptables.setup(hosts, extra_ports=[8080])
 
-    def manager_register(self, config_str=''):
+    def manager_register(self, config=None):
         # Ensure that the default loadbalancers are available.
-        new_config = ManagerConfig(config_str)
-        new_config._set("manager", "loadbalancer", "dnsmasq,nginx,tcp")
-        super(ReactorScaleManager, self).manager_register(str(new_config))
+        manager_config = ManagerConfig(values=config)
+        if len(manager_config.loadbalancers) == 0:
+            manager_config.loadbalancers = ["dnsmasq", "nginx", "tcp"]
+        if len(manager_config.clouds) == 0:
+            manager_config.clouds = ["osapi", "osvms"]
+        super(ReactorScaleManager, self).manager_register(manager_config._values())
 
     def serve(self):
         # Perform normal setup.

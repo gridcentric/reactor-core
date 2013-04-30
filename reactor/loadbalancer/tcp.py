@@ -6,7 +6,7 @@ import threading
 import random
 import select
 
-from reactor.config import SubConfig
+from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
 from reactor.loadbalancer.netstat import connection_count
 
@@ -66,14 +66,14 @@ class Accept:
         return fork_and_exec(cmd, child_fds=self.sock.fileno())
 
 class ConnectionConsumer(threading.Thread):
-    def __init__(self, connection, producer, exclusive=True):
+    def __init__(self, connection, producer):
         threading.Thread.__init__(self)
-        self.execute    = True
+        self.daemon = True
+        self.execute = True
         self.connection = connection
-        self.producer   = producer
-        self.exclusive  = exclusive
-        self.ports      = {}
-        self.cond       = threading.Condition()
+        self.producer = producer
+        self.ports = {}
+        self.cond = threading.Condition()
 
     def set(self, ports):
         self.cond.acquire()
@@ -94,13 +94,13 @@ class ConnectionConsumer(threading.Thread):
                 return True
 
             # Create a map of the IPs.
-            backends = self.ports[connection.dst[1]]
+            (exclusive, backends) = self.ports[connection.dst[1]]
             ipmap = {}
             ipmap.update(backends)
             ips = ipmap.keys()
 
             # Find a backend IP (exclusive or not).
-            if self.exclusive:
+            if exclusive:
                 ip = self.connection._find_unused_ip(ips)
             else:
                 ip = ips[random.randint(0, len(ips)-1)]
@@ -145,12 +145,13 @@ class ConnectionConsumer(threading.Thread):
 class ConnectionProducer(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
+        self.daemon = True
         self.execute = True
         self.pending = []
         self.sockets = {}
         self.filemap = {}
         self.portmap = {}
-        self.cond    = threading.Condition()
+        self.cond = threading.Condition()
         self.set()
 
     def stop(self):
@@ -252,31 +253,30 @@ class ConnectionProducer(threading.Thread):
                 self.cond.release()
                 continue
 
-class TcpLoadBalancerConfig(SubConfig):
+class TcpEndpointConfig(Config):
 
-    def exclusive(self):
-        # Whether or not the server is exclusive.
-        return self._get("exclusive", "true").lower() == "true"
+    exclusive = Config.boolean("exclusive", default=True,
+        description="Whether backends are exclusive.")
 
-    def kill(self):
-        # Whether or not the server will be killed after use.
-        return self._get("kill", "false").lower() == "true"
+    kill = Config.boolean("kill", default=False,
+        description="Whether backends should be killed after use.")
 
 class Connection(LoadBalancerConnection):
+
+    _ENDPOINT_CONFIG_CLASS = TcpEndpointConfig
 
     producer = None
     consumer = None
 
-    def __init__(self, name, scale_manager, config):
-        LoadBalancerConnection.__init__(self, name, scale_manager)
+    def __init__(self, name, config, scale_manager):
+        LoadBalancerConnection.__init__(self, name, config, scale_manager)
         self.portmap = {}
         self.tracked = {}
         self.active = {}
-        self.config = TcpLoadBalancerConfig(config)
 
         self.producer = ConnectionProducer()
         self.producer.start()
-        self.consumer = ConnectionConsumer(self, self.producer, self.config.exclusive())
+        self.consumer = ConnectionConsumer(self, self.producer)
         self.consumer.start()
 
     def __del__(self):
@@ -291,13 +291,10 @@ class Connection(LoadBalancerConnection):
         self.tracked = {}
         self.active = {}
 
-    def redirect(self, url, names, other, manager_ips):
+    def redirect(self, url, names, other, config=None):
         pass
 
-    def change(self, url, names, public_ips, manager_ips, private_ips):
-        # We are doing passthrough to the backend, so we mix public and private.
-        ips = public_ips + private_ips
-
+    def change(self, url, names, ips, config=None):
         # Parse the url, we expect a form tcp://port and nothing else.
         m = re.match("tcp://(\d*)$", url)
         if not(m):
@@ -315,15 +312,21 @@ class Connection(LoadBalancerConnection):
                 del self.portmap[listen]
             return
 
-        # Update the portmap.
-        self.portmap[listen] = []
+        # Update the portmap (including exclusive info).
+        config = self._endpoint_config(config).exclusive
+        self.portmap[listen] = [config.exclusive, []]
         for backend in ips:
             if not(backend.port):
                 port = listen
             else:
                 port = backend.port
-            self.portmap[listen].append((backend.ip, port))
-            self.tracked[url].append((backend.ip, port))
+
+            # NOTE: We save some extra metadata about these backends in the
+            # portmap and in the tracker connections list. These are used to
+            # later on cleanup backend machines and correctly assign
+            # connections (i.e. either exclusively or not exclusively).
+            self.portmap[listen][1].append((backend.ip, port))
+            self.tracked[url].append((backend.ip, port, config.exclusive, config.kill))
 
     def save(self):
         self.producer.set(self.portmap.keys())
@@ -335,31 +338,38 @@ class Connection(LoadBalancerConnection):
 
         # Grab the active connections.
         active_connections = connection_count()
-        stale_active = []
+        kill_active = []
+        forget_active = []
         locked_ips = self._list_ips() or []
 
         for connection_list in self.tracked.values():
 
-            for (ip, port) in connection_list:
+            for (ip, port, exclusive, kill) in connection_list:
+
                 active = active_connections.get((ip, port), 0)
                 records[ip] = { "active" : (1, active) }
 
                 if active:
                     # Record this server as active.
                     self.active[ip] = True
+
                 elif not(active) and (self.active.has_key(ip) or ip in locked_ips):
                     # Record this server as stale.
                     if self.active.has_key(ip):
                         del self.active[ip]
-                    stale_active.append(ip)
+
+                    if kill:
+                        kill_active.append(ip)
+                    elif exclusive:
+                        forget_active.append(ip)
 
         # Remove old active connections, and potentially
         # kill off servers that were once active and are
         # now not active.
-        if self.config.kill():
-            self._scale_manager.unregister_ip(stale_active)
-        elif self.config.exclusive():
-            for ip in stale_active:
+        if kill_active:
+            self._scale_manager.unregister_ip(kill_active)
+        if forget_active:
+            for ip in forget_active:
                 self._forget_ip(ip)
             self.consumer.flush()
 

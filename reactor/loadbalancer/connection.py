@@ -1,45 +1,43 @@
 """
 The generic load balancer interface.
 """
-from reactor import utils
-from reactor.config import SubConfig
-
 import logging
 import traceback
 
+from reactor import utils
+from reactor.config import Connection
+from reactor.config import Config
 import reactor.zookeeper.paths as paths
 
 def get_connection(name, config, scale_manager):
-    if name == "none" or name == "":
-        return LoadBalancerConnection(name, scale_manager, config)
-
-    lb_config = LoadBalancerConfig(config)
-    lb_class = lb_config.loadbalancer_class()
-    if lb_class == '':
-        lb_class = "reactor.loadbalancer.%s.Connection" % (name)
+    if not name:
+        return LoadBalancerConnection(name, config, scale_manager)
 
     try:
+        lb_class = "reactor.loadbalancer.%s.Connection" % name
         lb_conn_class = utils.import_class(lb_class)
-        return lb_conn_class(name, scale_manager, config)
+        return lb_conn_class(name, config, scale_manager)
     except:
         logging.error("Unable to load loadbalancer: %s" % traceback.format_exc())
-        return LoadBalancerConnection(name, scale_manager, config)
+        return LoadBalancerConnection(name, config, scale_manager)
 
-class LoadBalancerConfig(SubConfig):
+class BackendIP(object):
+    def __init__(self, ip, port=0, weight=1):
+        self.ip = ip
+        self.port = port
+        self.weight = weight
 
-    def loadbalancer_class(self):
-        return self._get("class", '')
+class LoadBalancerConnection(Connection):
 
-class LoadBalancerConnection(object):
-    def __init__(self, name, scale_manager):
-        self._name          = name
+    def __init__(self, name, config=None, scale_manager=None):
+        Connection.__init__(self, object_class="loadbalancer", name=name, config=config)
         self._scale_manager = scale_manager
 
     def clear(self):
         pass
-    def redirect(self, url, names, other, manager_ips):
+    def redirect(self, url, names, other, config=None):
         pass
-    def change(self, url, names, public_ips, manager_ips, private_ips):
+    def change(self, url, names, ips, config=None):
         pass
     def save(self):
         pass
@@ -83,48 +81,3 @@ class LoadBalancerConnection(object):
     def _forget_ip(self, ip):
         return self._scale_manager.zk_conn.delete(
                 paths.loadbalancer_ip(self._name, ip))
-
-class BackendIP(object):
-    def __init__(self, ip, port=0, weight=1):
-        self.ip     = ip
-        self.port   = port
-        self.weight = weight
-
-class LoadBalancers(list):
-
-    def clear(self):
-        for lb in self:
-            lb.clear()
-
-    def redirect(self, url, names, other_url, manager_ips):
-        for lb in self:
-            lb.redirect(url, names, other_url, manager_ips)
-
-    def change(self, url, names, public_ips, manager_ips, private_ips):
-        for lb in self:
-            lb.change(url, names, public_ips, manager_ips, private_ips)
-
-    def save(self):
-        for lb in self:
-            lb.save()
-
-    def metrics(self):
-        # This is the only complex metric (that requires multiplexing).  We
-        # combine the load balancer metrics by hostname, adding weights where
-        # they are not unique.
-        results = {}
-        for lb in self:
-            result = lb.metrics()
-            for (host, metrics) in result.items():
-                if not(host in results):
-                    results[host] = metrics
-                    continue
-
-                for key in metrics:
-                    (oldweight, oldvalue) = results[host][key]
-                    (newweight, newvalue) = metrics[key]
-                    weight = (oldweight + newweight)
-                    value  = ((oldvalue * oldweight) + (newvalue * newweight)) / weight
-                    results[host][key] = (weight, value)
-
-        return results

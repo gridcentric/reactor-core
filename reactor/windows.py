@@ -10,7 +10,8 @@ import uuid
 import ldap
 import ldap.modlist as modlist
 
-from reactor.config import SubConfig
+from reactor.config import Config
+from reactor.config import Connection
 
 COMPUTER_ATTRS = [
     "operatingsystem",
@@ -61,29 +62,33 @@ def generate_password(length=18, alpha=PASSWORD_ALPHABET):
     alpha_len = len(alpha)
     return "".join([ alpha[ord(byte) % alpha_len] for byte in os.urandom(length) ])
 
+def _wrap_and_retry(fn):
+    def _wrapped_fn(self, *args, **kwargs):
+        try:
+            return fn(self, *args, **kwargs)
+        except ldap.LDAPError:
+            self.con = None
+            return fn(self, *args, **kwargs)
+    _wrapped_fn.__name__ = fn.__name__
+    _wrapped_fn.__doc__ = fn.__doc__
+    return _wrapped_fn
+
 class LdapConnection:
-    def __init__(self, domain, username, password, orgunit = ''):
+    def __init__(self, domain, username, password, orgunit='', host=None):
         self.domain   = domain
         self.username = username
         self.password = password
         self.orgunit  = orgunit
+        if not host:
+            self.host = domain
+        else:
+            self.host = host
         self.con      = None
-
-    def _wrap_and_retry(fn):
-        def _wrapped_fn(self, *args, **kwargs):
-            try:
-                return fn(self, *args, **kwargs)
-            except ldap.LDAPError:
-                self.con = None
-                return fn(self, *args, **kwargs)
-        _wrapped_fn.__name__ = fn.__name__
-        _wrapped_fn.__doc__ = fn.__doc__
-        return _wrapped_fn
 
     def _open(self):
         if not(self.con):
             ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
-            self.con = ldap.initialize("ldaps://%s:636" % self.domain)
+            self.con = ldap.initialize("ldaps://%s:636" % self.host)
             self.con.set_option(ldap.OPT_REFERRALS, 0)
             self.con.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
             self.con.set_option(ldap.OPT_X_TLS, ldap.OPT_X_TLS_DEMAND)
@@ -227,22 +232,26 @@ class LdapConnection:
         base64_password = base64.b64encode(utf_password)
 
         # Generate the queries for creating the account.
+        # NOTE: We aggressively cast here to ensure that
+        # all the values are bare strings, not unicode.
+        # The python ldap library tends to throw up all
+        # over the place when it gets some unicode values.
         new_record = {}
         new_record.update(COMPUTER_RECORD.items())
-        new_record['cn']             = name.upper()
-        new_record['description']    = ''
-        new_record['dNSHostName']    = '%s.%s' % (name, self.domain)
-        new_record['sAMAccountName'] = '%s$' % name
+        new_record['cn']             = str(name.upper())
+        new_record['description']    = str('')
+        new_record['dNSHostName']    = str('%s.%s' % (name, self.domain))
+        new_record['sAMAccountName'] = str('%s$' % name)
         new_record['servicePrincipalName'] = [
-            'HOST/%s' % name.upper(),
-            'HOST/%s.%s' % (name, self.domain),
-            'TERMSRV/%s' % name.upper(),
-            'TERMSRV/%s.%s' % (name, self.domain),
-            'RestrictedKrbHost/%s' % name.upper(),
-            'RestrictedKrbHost/%s.%s' % (name, self.domain)
+            str('HOST/%s' % name.upper()),
+            str('HOST/%s.%s' % (name, self.domain)),
+            str('TERMSRV/%s' % name.upper()),
+            str('TERMSRV/%s.%s' % (name, self.domain)),
+            str('RestrictedKrbHost/%s' % name.upper()),
+            str('RestrictedKrbHost/%s.%s' % (name, self.domain))
         ]
-        new_record['unicodePwd'] = utf_quoted_password
-        new_record['userAccountControl'] = '4096' # Enable account.
+        new_record['unicodePwd'] = str(utf_quoted_password)
+        new_record['userAccountControl'] = str('4096') # Enable account.
 
         descr = self._machine_description(name)
         connection = self._open()
@@ -252,53 +261,66 @@ class LdapConnection:
 
         return (name, base64_password)
 
-class WindowsConfig(SubConfig):
+class WindowsConfig(Config):
 
-    def domain(self):
-        return self._get("domain", '')
+    # Our cached connection.
+    _connection = None
 
-    def username(self):
-        return self._get("username", '')
+    domain = Config.string("domain", order=0,
+        description="The Windows domain.")
 
-    def password(self):
-        return self._get("password", '')
+    username = Config.string("username", order=1,
+        description="An Administrator within the domain.")
 
-    def orgunit(self):
-        return self._get("orgunit", '')
+    password = Config.string("password", order=2,
+        description="The Administrator password.")
 
-    def template(self):
-        return self._get("template", "gc#############")
+    orgunit = Config.string("orgunit", order=3,
+        description="The orgunit for new machines.")
 
-class WindowsConnection:
+    template = Config.string("template", default="windowsVM######", order=4,
+        description="The template machine name for new machines.")
 
-    def __init__(self):
-        self.connections = {}
+    host = Config.string("host", order=5,
+        description="The AD server to contact.")
 
-    def _get_connection(self, config):
-        if not(config.domain()) or \
-           not(config.username()) or \
-           not(config.password()):
-            return False
+    def _get_connection(self):
+        if not(self.domain):
+            return None
+        if self._connection is None:
+            self._connection = LdapConnection(self.domain,
+                                              self.username,
+                                              self.password,
+                                              self.orgunit,
+                                              self.host)
+        return self._connection
 
-        # Retrieve the cached connection.
-        key = (config.domain(), config.username(), config.password())
-        if not(self.connections.has_key(key)):
-            self.connections[key] = \
-                LdapConnection(config.domain(),
-                               config.username(),
-                               config.password(),
-                               config.orgunit())
-        return self.connections[key]
+    def _validate(self):
+        Config._validate(self)
+        assert len(self.template) == 15
+        conn = self._get_connection()
+        if conn:
+            # If we have a connection (i.e. the user has
+            # specified a windows domain in their config)
+            # then we ensure that we can connect.
+            conn._open()
+            del conn
 
-    def start_params(self, config_view):
-        config = WindowsConfig(config_view)
+class WindowsConnection(Connection):
 
-        connection = self._get_connection(config)
-        if not(connection):
+    _ENDPOINT_CONFIG_CLASS = WindowsConfig
+
+    def __init__(self, **kwargs):
+        Connection.__init__(self, object_class=None, **kwargs)
+
+    def start_params(self, config):
+        config = self._endpoint_config(config)
+        connection = config._get_connection()
+        if not connection:
             return {}
 
         # Create a new machine accout.
-        info = connection.create_machine(config.template())
+        info = connection.create_machine(config.template)
         if info:
             logging.info("Created new machine account %s" % info[0])
             # Return the relevant information about the machine.
@@ -306,13 +328,12 @@ class WindowsConnection:
         else:
             return {}
 
-    def cleanup(self, config_view, name):
-        config = WindowsConfig(config_view)
-
-        connection = self._get_connection(config)
+    def cleanup(self, config, name):
+        config = self._endpoint_config(config)
+        connection = config._get_connection()
         if connection:
-            # Look for machine
             try:
+                # Look for machine that matches the name.
                 machines = connection.list_machines(name)
                 connection.remove_machine(machines[name])
             except:
@@ -320,8 +341,8 @@ class WindowsConnection:
             else:
                 logging.info("Removed machine account %s" % name)
 
-    def cleanup_start_params(self, config_view, start_params):
-        # Extract name from start_params
+    def cleanup_start_params(self, config, start_params):
+        # Extract name from start_params.
         name = start_params.get("name")
         if name:
-            self.cleanup(config_view, name)
+            self.cleanup(config, name)

@@ -3,23 +3,21 @@ import signal
 
 from mako.template import Template
 
-from reactor.config import SubConfig
+from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
 from reactor.loadbalancer.netstat import connection_count
 
-class DnsmasqLoadBalancerConfig(SubConfig):
+class DnsmasqManagerConfig(Config):
 
-    def config_path(self):
-        return self._get("config_path", "/etc/dnsmasq.d")
-
-    def hosts_path(self):
-        return self._get("hosts_path", "/etc/hosts.reactor")
+    config_path = Config.string("config_path", default="/etc/dnsmasq.d")
+    hosts_path = Config.string("hosts_path", default="/etc/hosts.reactor")
 
 class Connection(LoadBalancerConnection):
-    
-    def __init__(self, name, scale_manager, config):
-        LoadBalancerConnection.__init__(self, name, scale_manager)
-        self.config = DnsmasqLoadBalancerConfig(config)
+
+    _MANAGER_CONFIG_CLASS = DnsmasqManagerConfig
+
+    def __init__(self, name, config, scale_manager):
+        LoadBalancerConnection.__init__(self, name, config, scale_manager)
         template_file = os.path.join(os.path.dirname(__file__),'dnsmasq.template')
         self.template = Template(filename=template_file)
         self.ipmappings = {}
@@ -36,22 +34,17 @@ class Connection(LoadBalancerConnection):
     def clear(self):
         self.ipmappings = {}
 
-    def redirect(self, url, names, other_url, manager_ips):
+    def redirect(self, url, names, other_url, config=None):
         # We simply serve up the public servers as our DNS
         # records. It's very difficult to implement CNAME
         # records or even parse what is being specified in 
         # the other_url.
-        self.change(url, names, [], manager_ips, [])
+        self.change(url, names, [], [])
 
-    def change(self, url, names, public_ips, manager_ips, private_ips):
-        # If there are no public IPs to serve up for this endpoint,
-        # then we provide instead the available manager IPs. 
-        if len(public_ips) == 0:
-            public_ips = manager_ips
-
+    def change(self, url, names, ips, config=None):
         # Save the mappings.
         for name in names:
-            self.ipmappings[name] = public_ips
+            self.ipmappings[name] = ips
 
     def save(self):
         # Compute the address mapping.
@@ -66,7 +59,7 @@ class Connection(LoadBalancerConnection):
                 ipmap[backend.ip].append(name)
 
         # Write out our hosts file.
-        hosts = open(self.config.hosts_path(), 'wb')
+        hosts = open(self._manager_config().hosts_path, 'wb')
         for (address, names) in ipmap.items():
             for name in set(names):
                 hosts.write("%s %s\n" % (address, name))
@@ -77,10 +70,10 @@ class Connection(LoadBalancerConnection):
 
         # Write out our configuration template.
         conf = self.template.render(domain=domain,
-                                    hosts=self.config.hosts_path())
+                                    hosts=self._manager_config().hosts_path)
 
         # Write out the config file.
-        config_file = file(os.path.join(self.config.config_path(), "reactor.conf"), 'wb')
+        config_file = file(os.path.join(self._manager_config().config_path, "reactor.conf"), 'wb')
         config_file.write(conf)
         config_file.flush()
         config_file.close()

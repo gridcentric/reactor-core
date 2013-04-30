@@ -1,4 +1,4 @@
-<%page args='title,path,field,link,name="",key=False,second_time=[]'/>
+<%page args='id,path,field,link,name="",key=False,second_time=[]'/>
 
 <%
 # This exploits a little trick in the way this code
@@ -43,7 +43,6 @@ else:
 
 <script type="text/javascript">
     function list_process(result) {
-        $("#itemList").append('<li class="nav-header">${title}</li>');
         var keys = [];
         $.each(result['${field}'], function(index, value) {
             % if key:
@@ -55,9 +54,9 @@ else:
         keys.sort();
         $.each(keys, function(index, value) {
             if( value == '${name}' ) {
-                $("#itemList").append('<li class="active"><a href="#">' + value + '</a></li>');
+                $("${id}").append('<li class="active"><a href="#">' + value + '</a></li>');
             } else {
-                $("#itemList").append('<li><a href="${link}' + value + '">' + value + '</a></li>');
+                $("${id}").append('<li><a href="${link}' + value + '">' + value + '</a></li>');
             }
         });
         list_done();

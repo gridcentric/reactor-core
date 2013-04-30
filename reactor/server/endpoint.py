@@ -1,3 +1,5 @@
+import json
+
 from reactor.endpoint import EndpointConfig
 from reactor.endpoint import Endpoint
 from reactor.endpoint import State
@@ -5,39 +7,42 @@ import reactor.zookeeper.paths as paths
 
 class APIEndpoint(Endpoint):
     def __init__(self, scale_manager):
-        self.scale_manager = scale_manager
-        Endpoint.__init__(self, "api", self.api_config(), scale_manager)
+        Endpoint.__init__(self, "api", scale_manager)
         # Make sure that this service is running.
         self.update_state(None)
 
-    def api_config(self, config=None):
-        # Read the configuration.
-        api_path = paths.endpoint("api")
-        if config == None:
-            config = self.scale_manager.zk_conn.read(api_path) or ''
+    def api_config(self, config):
+        # Whether we require rewriting.
+        changed = False
 
         # Update basic information.
-        api_config = EndpointConfig(str(config))
+        api_config = EndpointConfig(obj=config)
         if self.scale_manager.domain:
-            url = "http://api.%s" % self.scale_manager.domain
+            new_url = "http://api.%s" % self.scale_manager.domain
         else:
-            url = "http://"
-        api_config._set("endpoint", "url", url)
-        api_config._set("scaling",  "url", url)
-        api_config._set("endpoint", "port", "8080")
-        api_config._set("endpoint", "public", "false")
-        api_config._set("endpoint", "enabled", "true")
+            new_url = "http://"
+        if api_config.url != new_url:
+            api_config.url = new_url
+            changed = True
+        if api_config.port != 8080:
+            api_config.port = 8080
+            changed = True
 
         # Update the static IPs in the configuration.
+        api_config.static_instances.sort()
         addresses = self.scale_manager.zk_servers
         addresses.sort()
-        address_str = ",".join(addresses)
-        api_config._set("endpoint", "static_instances", address_str)
+        if api_config.static_instances != addresses:
+            api_config.static_instances = addresses
+            changed = True
 
-        if not(api_config._is_clean()):
+        # Read the configuration.
+        if changed:
             # Save the config if it was changed.
-            self.scale_manager.zk_conn.write(paths.endpoint("api"), str(api_config))
+            new_config_str = json.dumps(api_config._values())
+            self.scale_manager.zk_conn.write(paths.endpoint("api"), new_config_str)
 
+        # Return our modified config.
         return api_config
 
     def update_state(self, state):
@@ -45,6 +50,5 @@ class APIEndpoint(Endpoint):
             # Always make sure that the latest action reflects our state.
             self.scale_manager.zk_conn.write(paths.endpoint_state("api"), State.running)
 
-    def update_config(self, config_str):
-        new_config = EndpointConfig(config_str)
-        Endpoint.update_config(self, str(self.api_config(new_config)))
+    def update_config(self, config):
+        Endpoint.update_config(self, self.api_config(config))

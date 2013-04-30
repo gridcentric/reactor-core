@@ -26,11 +26,18 @@ import reactor.server.config as config
 
 class ServerApi(ReactorApi):
     def __init__(self, zk_servers):
+        self.manager = None
         self.manager_running = False
         ReactorApi.__init__(self, zk_servers)
 
         self.config.add_route('api-servers', '/api_servers')
         self.config.add_view(self.set_api_servers, route_name='api-servers')
+
+        self.config.add_route('endpoint-info', '/endpoint')
+        self.config.add_view(self.endpoint_info, route_name='endpoint-info')
+
+        self.config.add_route('manager-info', '/manager')
+        self.config.add_view(self.manager_info, route_name='manager-info')
 
         # Set up auth-ticket authentication
         self.config.set_authentication_policy(
@@ -67,6 +74,22 @@ class ServerApi(ReactorApi):
 
         # Check the endpoint.
         self.check(zk_servers)
+
+    def handle_update_manager(self, manager, manager_config):
+        self.manager._manager_config_validate(manager_config)
+        ReactorApi.handle_update_manager(self, manager, manager_config)
+
+    @connected
+    def manager_info(self, context, request):
+        return Response(body=json.dumps(self.manager._manager_config_spec()))
+
+    def handle_update_endpoint(self, endpoint_name, endpoint_config):
+        self.manager._endpoint_config_validate(endpoint_config)
+        ReactorApi.handle_update_endpoint(self, endpoint_name, endpoint_config)
+
+    @connected
+    def endpoint_info(self, context, request):
+        return Response(body=json.dumps(self.manager._endpoint_config_spec()))
 
     @connected
     def admin_login(self, context, request):

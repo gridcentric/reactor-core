@@ -5,10 +5,12 @@ import sys
 import traceback
 import threading
 import json
+import gc
 
 from StringIO import StringIO
 from ConfigParser import SafeConfigParser
 
+from reactor.config import fromini
 from reactor.apiclient import ReactorApiClient
 from reactor import log
 
@@ -17,6 +19,19 @@ from reactor import log
 # http://stackoverflow.com/questions/13193278/understand-python-threading-bug
 import threading
 threading._DummyThread._Thread__stop = lambda x: 42
+
+# For debugging stop race conditions.
+def find_objects(t):
+    return filter(lambda o: isinstance(o, t), gc.get_objects())
+def print_threads():
+    for i, stack in sys._current_frames().items():
+        sys.stderr.write("thread %s\n" % str(i))
+        traceback.print_stack(stack)
+
+def sig_usr2_handler(signum, frame):
+    print_threads()
+
+signal.signal(signal.SIGUSR2, sig_usr2_handler)
 
 def main_usage():
     print "usage: %s < -h|--help | [options] command >" % sys.argv[0]
@@ -35,8 +50,6 @@ def main_usage():
     print "   -d, --debug             Enables debugging log and full stack trace errors."
     print ""
     print "   -l, --log=              Log to a file instead of stdout."
-    print ""
-    print "   -u, --update            Perform an incremental configuration update."
     print ""
     print "Commands:"
     print "    version                Get the server API version."
@@ -64,7 +77,7 @@ def main_usage():
     print "    managers-configured    List all the configured managers."
     print "    managers-active        List all the active managers."
     print ""
-    print "    update-manager [ip]    Update the current configuration for the manager."
+    print "    configure-manager [ip] Set the configuration for the given manager."
     print "    show-manager [ip]      Show the current configuration for the manager."
     print "    show-log <uuid>        Show the log for the given manager."
     print "    forget-manager <ip>    Remove and forget the given manager."
@@ -82,11 +95,10 @@ def main():
     password = None
     debug = False
     logfile = None
-    update = False
 
     opts, args = getopt.getopt(sys.argv[1:],
-                                "ha:p:z:dl:u",
-                               ["help","api_server=","password=","zookeeper=","debug","log=","update"])
+                                "ha:p:z:dl:",
+                               ["help","api_server=","password=","zookeeper=","debug","log="])
 
     for o, a in opts:
         if o in ('-h', '--help'):
@@ -102,8 +114,6 @@ def main():
             debug = True
         elif o in ('-l','--log'):
             logfile = a
-        elif o in ('-u','--update'):
-            update = True
     
     if len(zk_servers) == 0:
         zk_servers = ["localhost"]
@@ -145,19 +155,10 @@ def main():
     
             api_client = get_api_client()
             config = SafeConfigParser()
-            if update:
-                # Read in the existing configuration and update it with
-                # with the new configuration. This allows people to do a
-                # partial update.
-                endpoint_conf = api_client.get_endpoint_config(endpoint_name)
-                config.readfp(StringIO(endpoint_conf))
             config.readfp(StringIO(new_conf))
-    
-            # Write out the full contents of the updated configuration.
-            config_value = StringIO()
-            config.write(config_value)
-            api_client.manage_endpoint(endpoint_name, config_value.getvalue())
-    
+            config = fromini(config)
+            api_client.manage_endpoint(endpoint_name, config)
+ 
         elif command == "unmanage":
             endpoint_name = get_arg(1)
             api_client = get_api_client()
@@ -167,7 +168,7 @@ def main():
             endpoint_name = get_arg(1)
             api_client = get_api_client()
             config = api_client.get_endpoint_config(endpoint_name)
-            print config.strip()
+            print json.dumps(config)
 
         elif command == "managers-configured":
             api_client = get_api_client()
@@ -192,17 +193,10 @@ def main():
     
             api_client = get_api_client()
             config = SafeConfigParser()
-            if update:
-                # As per above, allow for incremental updates.
-                manager_conf = api_client.get_manager_config(manager)
-                config.readfp(StringIO(manager_conf))
             config.readfp(StringIO(new_conf))
-    
-            # Write out the full contents of the updated configuration.
-            config_value = StringIO()
-            config.write(config_value)
-            api_client.update_manager(manager, config_value.getvalue())
-    
+            config = fromini(config_value.getvalue())
+            api_client.update_manager(manager, config)
+
         elif command == "show-manager":
             if len(args) > 1:
                 manager = get_arg(1)
@@ -211,7 +205,7 @@ def main():
     
             api_client = get_api_client()
             config = api_client.get_manager_config(manager)
-            print config.strip()
+            print json.dumps(config)
 
         elif command == "show-log":
             manager = get_arg(1)

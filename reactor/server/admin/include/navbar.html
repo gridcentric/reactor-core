@@ -3,13 +3,20 @@
 
 <div class="span3" id="navbar">
   <div class="well sidebar-nav">
-    <ul class="nav nav-list" id="itemList">
+    <ul class="nav nav-list" id="endpointList">
+        <li class="nav-header">Endpoints</li>
+    </ul>
+    <ul class="nav nav-list" id="managersActiveList">
+        <li class="nav-header">Managers Active</li>
+    </ul>
+    <ul class="nav nav-list" id="managersConfiguredList">
+        <li class="nav-header">Managers Configured</li>
     </ul>
   </div>
 
-<%include file="/list.html" args="title='endpoints',name=endpoint_name,path='/v1.0/endpoints',field='endpoints',link='/admin/endpoints/'"/>
-<%include file="/list.html" args="title='managers active',name=manager_name,path='/v1.0/managers',field='managers_active',key=True,link='/admin/managers/'"/>
-<%include file="/list.html" args="title='managers configured',name=manager_name,path='/v1.0/managers',field='managers_configured',link='/admin/managers/'"/>
+<%include file="/list.html" args="id='#endpointList',name=endpoint_name,path='/v1.0/endpoints',field='endpoints',link='/admin/endpoints/'"/>
+<%include file="/list.html" args="id='#managersActiveList',name=manager_name,path='/v1.0/managers',field='active',key=True,link='/admin/managers/'"/>
+<%include file="/list.html" args="id='#managersConfiguredList',name=manager_name,path='/v1.0/managers',field='configured',link='/admin/managers/'"/>
 
 <%include file="/new.html" args="type='endpoint'"/>
 <%include file="/new.html" args="type='manager'"/>

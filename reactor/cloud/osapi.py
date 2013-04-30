@@ -5,182 +5,163 @@ from httplib import HTTPException
 from novaclient import shell
 from novaclient.v1_1.client import Client as NovaClient
 
-from reactor.config import SubConfig
-import reactor.cloud.connection as cloud_connection
+from reactor.config import Config
+from reactor.cloud.connection import CloudConnection
 
-class BaseOsConnection(cloud_connection.CloudConnection):
+class BaseOsEndpointConfig(Config):
 
-    def __init__(self, config):
-        super(BaseOsConnection, self).__init__(config)
-        self.deleted_instance_ids = []
-        self.config = self.create_config(config)
+    # Cached client.
+    _client = None
 
-    def id(self, instance):
+    # Common authentication elements.
+    auth_url = Config.string("auth_url", default="http://localhost:5000/v2.0/", order=0,
+        description="The OpenStack authentication URL (OS_AUTH_URL).")
+
+    username = Config.string("username", default="admin", order=1,
+        description="The user for authentication (OS_USERNAME).")
+
+    password = Config.string("password", default="admin", order=1,
+        description="The api key or password (OS_PASSWORD).")
+
+    tenant_name = Config.string("tenant_name", default="admin", order=1,
+        description="The project or tenant (OS_TENANT_NAME).")
+
+    region_name = Config.string("region_name", order=1,
+        description="The region (OS_REGION_NAME).")
+
+    # Elements common to launching and booting.
+    security_groups = Config.list("security_groups", order=3,
+        description="Security groups for new instances.")
+
+    availability_zone = Config.string("availability_zone", order=3,
+        description="Availability zone for new instances.")
+
+    def _novaclient(self):
+        if self._client is None:
+            extensions = shell.OpenStackComputeShell()._discover_extensions("1.1")
+            self._client = NovaClient(self.username,
+                                      self.password,
+                                      self.tenant_name,
+                                      self.auth_url,
+                                      region_name=self.region_name,
+                                      extensions=extensions)
+        return self._client
+
+    def _validate(self):
+        Config._validate(self)
+        assert self._novaclient()
+
+class BaseOsConnection(CloudConnection):
+
+    _ENDPOINT_CONFIG_CLASS = BaseOsEndpointConfig
+
+    def id(self, config, instance):
         return str(instance['id'])
 
-    def name(self, instance):
+    def name(self, config, instance):
         return instance.get('name', None)
 
-    def addresses(self, instance):
+    def addresses(self, config, instance):
         addresses = []
         for network_addresses in instance.get('addresses', {}).values():
             for network_addrs in network_addresses:
                 addresses.append(str(network_addrs['addr']))
         return addresses
 
-    def create_config(self, config):
-        return BaseOsConfig(config)
-
-    def _list_instances(self):
+    def _list_instances(self, config):
         """ 
         Returns a  list of instances from the endpoint. This is implemented by the
         subclasses
         """
         return []
 
-    def _novaclient(self):
-        try:
-            extensions = shell.OpenStackComputeShell()._discover_extensions("1.1")
-            novaclient = NovaClient(self.config.user(),
-                                    self.config.apikey(),
-                                    self.config.project(),
-                                    self.config.authurl(),
-                                    region_name=self.config.region(),
-                                    service_type=self.config.service_type(),
-                                    extensions=extensions)
-            return novaclient
-        except Exception, e:
-            traceback.print_exc()
-            logging.error("Error creating nova client: %s" % str(e))
-
-    def list_instances(self):
+    def list_instances(self, config):
         """
         Lists the instances related to a endpoint. The identifier is used to 
         identify the related instances in the respective clouds.
         """
-        # Pull out the _info dictionary from the Server object
-        instances = [instance._info for instance in self._list_instances()]
-        non_deleted_instances = []
-        instance_ids_still_deleting = []
-        for instance in instances:
-            if instance['id'] not in self.deleted_instance_ids:
-                non_deleted_instances.append(instance)
-            else:
-                instance_ids_still_deleting.append(instance['id'])
+        # Pull out the _info dictionary from the Server object.
+        instances = [instance._info for instance in self._list_instances(config)]
+        return sorted(instances, key=lambda x: x.get('created', ""))
 
-        self.deleted_instance_ids = instance_ids_still_deleting
-        return sorted(non_deleted_instances, key=lambda x: x.get('created', ""))
-
-    def _start_instance(self, params={}):
+    def _start_instance(self, config, params={}):
         """
         Starts a new instance. This is implemented by the subclasses.
         """
         pass
 
-    def start_instance(self, params={}):
+    def start_instance(self, config, params={}):
         """
-        Starts a new instance in the cloud using the endpoint
+        Starts a new instance in the cloud using the endpoint.
         """
         try:
-            self._start_instance(params=params)
+            self._start_instance(config, params=params)
         except HTTPException, e:
             traceback.print_exc()
             logging.error("Error starting instance: %s" % str(e))
 
-    def _delete_instance(self, instance_id):
-        self._novaclient().servers._delete("/servers/%s" % (instance_id))
-
-    def delete_instance(self, instance_id):
-        """
-        Remove the instance from the cloud
-        """
+    def _delete_instance(self, config, instance_id):
         try:
-            self._mark_instance_deleted(instance_id)
-            self._delete_instance(instance_id)
+            config = self._endpoint_config(config)
+            config._novaclient().servers._delete("/servers/%s" % (instance_id))
         except HTTPException, e:
             traceback.print_exc()
-            logging.error("Error deleting instance: %s" % str(e))
-            self._unmark_instance_deleted(instance)
+            logging.error("Error starting instance: %s" % str(e))
 
-    def _mark_instance_deleted(self, instance_id):
-        self.deleted_instance_ids.append(instance_id)
+    def delete_instance(self, config, instance_id):
+        """
+        Remove the instance from the cloud.
+        """
+        self._delete_instance(config, instance_id)
 
-    def _unmark_instance_deleted(self, instance):
-        try:
-            self.deleted_instance_ids.remove(instance_id)
-        except:
-            # It is alright if this throws an exception because in the end
-            # we just want that id to not be in the deleted_instance_ids list.
-            pass
+class OsApiEndpointConfig(BaseOsEndpointConfig):
 
-class BaseOsConfig(cloud_connection.CloudConnectionConfig):
+    instance_name = Config.string("instance_name", order=2,
+        description="The name given to new instances.")
 
-    def user(self):
-        return self._get("user", "admin")
+    flavor_id = Config.string("flavor_id", order=2,
+        description="The flavor to use.")
 
-    def apikey(self):
-        return self._get("apikey", "admin")
+    image_id = Config.string("image_id", order=2,
+        description="The image ID to boot.")
 
-    def project(self):
-        return self._get("project", "admin")
+    key_name = Config.string("key_name", order=2,
+        description="The key_name (for injection).")
 
-    def authurl(self):
-        return self._get("authurl", "http://localhost:8774/v1.1/")
-
-    def region(self):
-        region = self._get("region", '')
-        if region == '':
-            region = None
-        return region
-
-    def service_type(self):
-        return self._get('service_type', 'compute')
-
-class OsApiConfig(BaseOsConfig):
-
-    def instance_name(self):
-        return self._get("instance_name", "name")
-
-    def flavor(self):
-        return self._get("flavor_id", "1")
-
-    def image(self):
-        return self._get("image_id", "0")
-
-    def security_groups(self):
-        return self._get("security_groups", "").split(",")
-
-    def key_name(self):
-        return self._get("key_name", "") or None
+    def _validate(self):
+        BaseOsEndpointConfig._validate(self)
+        client = self._novaclient()
+        assert self.image_id in [image._info['id'] for image in client.images.list()]
+        assert self.flavor_id in [flavor._info['id'] for flavor in client.flavors.list()]
+        assert self.key_name in [key._info['keypair']['name'] for key in client.keypairs.list()]
 
 class Connection(BaseOsConnection):
 
-    def __init__(self, config):
-        super(Connection, self).__init__(config)
+    _ENDPOINT_CONFIG_CLASS = OsApiEndpointConfig
 
-    def create_config(self, config):
-        return OsApiConfig(config)
-
-    def _list_instances(self):
+    def _list_instances(self, config):
         """ 
         Returns a  list of instances from the endpoint.
         """
+        config = self._endpoint_config(config)
         search_opts = {
-            'name':   self.config.instance_name(),
-            'flavor': self.config.flavor(),
-            'image':  self.config.image()
+            'name': config.instance_name,
+            'flavor': config.flavor_id,
+            'image': config.image_id
         }
-
-        instances = self._novaclient().servers.list(search_opts=search_opts)
+        instances = config._novaclient().servers.list(search_opts=search_opts)
         return instances
 
-    def _start_instance(self, params={}):
+    def _start_instance(self, config, params={}):
         # TODO: We can pass in the reactor parameter here via 
         # CloudStart or some other standard support mechanism.
+        config = self._endpoint_config(config)
         userdata = "reactor=%s" % params.get('reactor', '')
-        self._novaclient().servers.create(self.config.instance_name(),
-                                  self.config.image(),
-                                  self.config.flavor(),
-                                  security_groups=self.config.security_groups(),
-                                  key_name=self.config.key_name(),
+        config._novaclient().servers.create(
+                                  config.instance_name,
+                                  config.image_id,
+                                  config.flavor_id,
+                                  security_groups=config.security_groups,
+                                  key_name=config.key_name,
+                                  availability_zone=config.availability_zone,
                                   userdata=userdata)

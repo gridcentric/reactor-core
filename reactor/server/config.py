@@ -73,14 +73,6 @@ def compute_id(servers):
     except ValueError:
         return 0
 
-def update(new_servers):
-    global servers
-    servers.sort()
-    new_servers.sort()
-
-    old_id = compute_id(servers)
-    new_id = compute_id(new_servers)
-
 def check_config(new_servers):
     old_servers = read_config()
     old_servers.sort()

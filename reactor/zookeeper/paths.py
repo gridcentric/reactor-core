@@ -15,11 +15,6 @@ DOMAIN = "%s/domain" % (ROOT)
 def domain():
     return DOMAIN
 
-# The global configuration.
-CONFIG = "%s/config" % (ROOT)
-def config():
-    return CONFIG
-
 #
 # Manager information.
 #
@@ -40,7 +35,7 @@ def manager_configs():
 def manager_config(ip):
     return "%s/%s" % (manager_configs(), ip)
 
-# All available manageri.
+# All available managers.
 def managers():
     return "%s/keys" % (MANAGERS)
 
