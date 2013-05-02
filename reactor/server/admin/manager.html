@@ -13,12 +13,14 @@
     </div>
 </div>
 
+<!-- Slot for dynamically generated configuration. -->
 <div class="control-group">
-    <label class="control-label" for="config">Config</label>
-    <div class="controls">
-        <textarea rows="10" id="config" class="input-xxlarge"></textarea>
-        <button id="configSave" class="btn" type="submit">Save</button>
+  <label class="control-label" for="dynamic-conf">Configuration</label>
+  <div class="controls" id="dynamic-conf-container">
+    <div class="alert alert-info">
+      Fetching configuration keys...
     </div>
+  </div>
 </div>
 
 <div class="control-group">
@@ -47,7 +49,15 @@
 
 </div>
 
+<script src="/admin/assets/conf.js"></script>
 <script type="text/javascript">
+
+    // Dynamically construct config UI based on spec we get back from the server.
+    var context = beginMakeConfig("dynamic-conf-container",
+                                  {"loadbalancer": "Load Balancer"},
+                                  "/manager",
+                                  "/v1.0/managers/${object}");
+
     function loadUuid() {
         $.ajax({
             url: "/v1.0/managers/${object}",
@@ -56,37 +66,6 @@
             success: function(result) {
                  $("#uuid").val(result['uuid']);
             },
-        });
-    }
-
-    function loadConfig() {
-        $("#config").attr("disabled", "disabled");
-        $("#config").attr("value", "Loading...");
-
-        $.ajax({
-            url: "/v1.0/managers/${object}",
-            type: 'GET',
-            dataType: 'json',
-            success: function(result) {
-                $("#config").attr("value", result["config"]);
-                $("#config").removeAttr("disabled");
-            },
-        });
-
-        $("#configSave").click(function (e) {
-            e.preventDefault();
-            $("#config").attr("disabled", "disabled");
-            var value = $("#config").val();
-            $.ajax({
-                url: "/v1.0/managers/${object}",
-                type: 'POST',
-                dataType: 'json',
-                data: JSON.stringify({ "config" : value }),
-                contentType: 'application/json',
-                success: function(result) {
-                    $("#config").removeAttr("disabled");
-                },
-            });
         });
     }
 
@@ -112,7 +91,6 @@
 
     // Set everything up.
     loadUuid();
-    loadConfig();
     loadDelete();
 </script>
 
