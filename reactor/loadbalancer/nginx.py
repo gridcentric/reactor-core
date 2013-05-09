@@ -133,23 +133,21 @@ class NginxLogWatcher(threading.Thread):
 
 class NginxManagerConfig(Config):
 
-    config_path = Config.string("config_path", default="/etc/nginx/conf.d",
+    config_path = Config.string(default="/etc/nginx/conf.d",
         description="The configuration directory for nginx.")
 
-    site_path = Config.string("site_path", default="/etc/nginx/sites-enabled",
+    site_path = Config.string(default="/etc/nginx/sites-enabled",
         description="The site path for nginx.")
 
 class NginxEndpointConfig(Config):
 
-    sticky_sessions = Config.boolean("sticky_sessions", default=False,
+    sticky_sessions = Config.boolean(default=False,
         description="Whether or use nginx's sticky session feature.")
 
-    keepalive = Config.integer("keepalive", default=0,
+    keepalive = Config.integer(default=0,
+        validate=lambda self: self.keepalive >= 0 or \
+            Config.error("Keepalive must be non-negative."),
         description="Number of backend connections to keep alive.")
-
-    def _validate(self):
-        Config._validate(self)
-        assert self.keepalive >= 0
 
 class Connection(LoadBalancerConnection):
 

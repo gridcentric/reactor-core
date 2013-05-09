@@ -2,12 +2,24 @@ import json
 
 from ConfigParser import SafeConfigParser
 from StringIO import StringIO
+from collections import namedtuple
+
+ConfigSpec = namedtuple("ConfigSpec", \
+    ["type",
+     "default",
+     "normalize",
+     "validate",
+     "order",
+     "description"])
 
 class Config(object):
 
     def __init__(self, section='', obj=None, values=None):
-        self._avail = []
         self._section = section
+        self._getters = {}
+        self._setters = {}
+        self._deleters = {}
+        self._validation = {}
 
         # The underlying object is the magic of the config.
         # It contains essentially a specification of all the available
@@ -29,6 +41,7 @@ class Config(object):
         # underscore (and are not in the special list below) and turns
         # them into attributes in _avail.  These attributes are used
         # in _validate() below.
+        defaults = {}
         for k in dir(self):
             if k.startswith('_'):
                 continue
@@ -37,12 +50,84 @@ class Config(object):
             if k in dir(Config):
                 continue
 
-            # Mark it in our list to be validated.
-            self._avail.append(k)
-            setattr(self, k, getattr(self, k))
+            # Pull out the specification.
+            # We assume that all the properties have been created using our
+            # static methods below. These static methods save a special tuple,
+            # which we now pull out and use to create special properties.
+            def closure(k, spec):
+                def getx(self):
+                    value = self._get(k, spec.default)
+                    if spec.normalize:
+                        value = spec.normalize(value)
+                    return value
+                def setx(self, value):
+                    if spec.normalize:
+                        value = spec.normalize(value)
+                    self._set(k, spec.type, value, spec.default, spec.order, spec.description)
+                def delx(self):
+                    setx(self, spec.default)
+                return (getx, setx, delx)
+            spec = getattr(self, k)
+            (getx, setx, delx) = closure(k, spec)
+
+            # Remember the validation rules and save the property.
+            # NOTE: We don't do any validation on set, because the
+            # validation could have some side-effects (and may not 
+            # necessarily be ultra quick -- it could reach out and
+            # try network connections, etc.)
+            self._getters[k] = getx
+            self._setters[k] = setx
+            self._deleters[k] = delx
+            self._validation[k] = spec.validate
+            defaults[k] = spec.default
+
+        for k,v in defaults.items():
+            if len(self._get_obj(k)) == 0:
+                # Populate the default value.
+                setattr(self, k, v)
 
         if values:
+            # Populate the given values.
             self._update(values)
+
+    def __getattribute__(self, name):
+        if name.startswith('_'):
+            return object.__getattribute__(self, name)
+        else:
+            try:
+                return self._getters[name](self)
+            except KeyError:
+                # This special case exists only for the
+                # initial setup. We may not have actually
+                # finished setting up all the getters, so
+                # we just fall back to getting the class
+                # definition (for the specifications).
+                return object.__getattribute__(self, name)
+
+    def __setattr__(self, name, value):
+        if name.startswith('_'):
+            object.__setattr__(self, name, value)
+        elif name in self._setters:
+            self._setters[name](self, value)
+        else:
+            raise AttributeError(name)
+
+    def __delattr__(self, name):
+        if name.startswith('_'):
+            object.__delattr__(self, name)
+        elif name in self._deleters:
+            self._deleters[name](self)
+        else:
+            raise AttributeError(name)
+
+    def _get_obj(self, key, section=None):
+        if section == None:
+            section = self._section
+        if not self._obj.has_key(section):
+            self._obj[section] = {}
+        if not self._obj[section].has_key(key):
+            self._obj[section][key] = {}
+        return self._obj[section][key]
 
     def _update(self, obj):
         if type(obj) == str:
@@ -58,14 +143,15 @@ class Config(object):
 
         for name,section in obj.items():
             for k,v in section.items():
-                info = self._obj.get(name, {}).get(k, None)
-                if info:
-                    info["value"] = v
+                # Set the value always.
+                self._get_obj(k, section=name)["value"] = v
 
     def _spec(self):
+        """ The underlying specification and values. """
         return self._obj
 
     def _values(self):
+        """ The set of all configuration values. """
         rval = {}
         for name,section in self._obj.items():
             rval[name] = {}
@@ -75,65 +161,71 @@ class Config(object):
         return rval
 
     def _validate(self):
-        for k in self._avail:
-            setattr(self, k, getattr(self, k))
+        errors = {}
+        for k,fn in self._validation.items():
+            if fn:
+                try:
+                    fn(self)
+                except Exception, e:
+                    self._add_error(k, str(e))
+
+    def _add_error(self, k, errmsg):
+        """ Annotate the specification with a validation error. """
+        # Save the given error message.
+        self._get_obj(k)["error"] = errmsg
+
+    def _validate_errors(self):
+        """ The set of all validation errors (organized as values). """
+        result = {}
+        for name,section in self._obj.items():
+            for k,v in section.items():
+                errmsg = v.get("error")
+                if errmsg:
+                    if not result.has_key(name):
+                        result[name] = {}
+                    result[name][k] = errmsg
+        if result:
+            return result
+        else:
+            return None
 
     def _get(self, key, default):
-        return self._obj.get(self._section, {}).get(key, {}).get("value", default)
+        return self._get_obj(key).get("value", default)
 
     def _set(self, key, typ, value, default, order, description):
-        if not(self._section in self._obj):
-            self._obj[self._section] = {}
-        if self._obj[self._section].has_key(key):
-           assert type(self._obj[self._section][key]) == dict
-        self._obj[self._section][key] = {
-            "type": typ,
-            "default": default,
-            "description": description,
-            "order": order
-        }
-        if value != default:
-            self._obj[self._section][key]["value"] = value
+        self._get_obj(key).update([
+            ("type", typ),
+            ("default", default),
+            ("description", description),
+            ("order", order),
+            ("value", value)
+        ])
 
     @staticmethod
-    def integer(key, default=0, order=1, description="No description."):
-        def getx(self):
-            return int(self._get(key, default))
-        def setx(self, value):
-            self._set(key, "integer", value, default, order, description)
-        def delx(self):
-            setx(self, default)
-        return property(getx, setx, delx, description)
+    def error(reason):
+        raise Exception(reason)
 
     @staticmethod
-    def string(key, default='', order=1, description="No description."):
-        def getx(self):
-            return self._get(key, default)
-        def setx(self, value):
-            self._set(key, "string", value, default, order, description)
-        def delx(self):
-            setx(self, default)
-        return property(getx, setx, delx, description)
+    def integer(default=0, order=1, validate=None, description="No description."):
+        return ConfigSpec("integer", default, int, validate, order, description)
 
     @staticmethod
-    def boolean(key, default=False, order=1, description="No description."):
-        def getx(self):
-            value = self._get(key, default)
+    def string(default='', order=1, validate=None, description="No description."):
+        return ConfigSpec("string", default, str, validate, order, description)
+
+    @staticmethod
+    def boolean(default=False, order=1, validate=None, description="No description."):
+        def normalize(value):
             if type(value) == str or type(value) == unicode:
                 return value.lower() == "true"
             elif type(value) == bool:
                 return value
             return False
-        def setx(self, value):
-            self._set(key, "boolean", value, default, order, description)
-        def delx(self):
-            setx(self, default)
-        return property(getx, setx, delx, description)
+        return ConfigSpec("boolean", default, normalize, validate, order, description)
 
     @staticmethod
-    def list(key, default=[], order=1, description="No description."):
-        def getx(self):
-            value = self._get(key, "")
+    def list(default=[], order=1, validate=None, description="No description."):
+        def normalize(value):
             if type(value) == str or type(value) == unicode:
                 value = value.strip()
                 if value:
@@ -141,11 +233,7 @@ class Config(object):
             elif type(value) == list:
                 return value
             return []
-        def setx(self, value):
-            self._set(key, "list", value, default, order, description)
-        def delx(self):
-            setx(self, default)
-        return property(getx, setx, delx, description)
+        return ConfigSpec("list", default, normalize, validate, order, description)
 
 def fromini(ini):
     """ Create a JSON object from a ini-style config. """

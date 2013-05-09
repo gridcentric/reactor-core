@@ -255,10 +255,10 @@ class ConnectionProducer(threading.Thread):
 
 class TcpEndpointConfig(Config):
 
-    exclusive = Config.boolean("exclusive", default=True,
+    exclusive = Config.boolean(default=True,
         description="Whether backends are exclusive.")
 
-    kill = Config.boolean("kill", default=False,
+    kill = Config.boolean(default=False,
         description="Whether backends should be killed after use.")
 
 class Connection(LoadBalancerConnection):

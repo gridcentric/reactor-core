@@ -296,22 +296,29 @@ class WindowsConfig(Config):
     # Our cached connection.
     _connection = None
 
-    domain = Config.string("domain", order=0,
+    domain = Config.string(order=0,
+        validate=lambda self: self._check_connection(),
         description="The Windows domain.")
 
-    username = Config.string("username", order=1,
+    username = Config.string(order=1,
+        validate=lambda self: self._check_connection(),
         description="An Administrator within the domain.")
 
-    password = Config.string("password", order=2,
+    password = Config.string(order=2,
+        validate=lambda self: self._check_connection(),
         description="The Administrator password.")
 
-    orgunit = Config.string("orgunit", order=3,
+    orgunit = Config.string(order=3,
+        validate=lambda self: self._check_connection(),
         description="The orgunit for new machines.")
 
-    template = Config.string("template", default="windowsVM######", order=4,
+    template = Config.string(default="windowsVM######", order=4,
+        validate=lambda self: len(self.template) == 15 or \
+            Config.error("Template must be 15 characters long."),
         description="The template machine name for new machines.")
 
-    host = Config.string("host", order=5,
+    host = Config.string(order=5,
+        validate=lambda self: self._check_connection(),
         description="The AD server to contact.")
 
     def _get_connection(self):
@@ -325,9 +332,7 @@ class WindowsConfig(Config):
                                               self.host)
         return self._connection
 
-    def _validate(self):
-        Config._validate(self)
-        assert len(self.template) == 15
+    def _check_connection(self):
         conn = self._get_connection()
         if conn:
             # If we have a connection (i.e. the user has

@@ -14,26 +14,30 @@ class BaseOsEndpointConfig(Config):
     _client = None
 
     # Common authentication elements.
-    auth_url = Config.string("auth_url", default="http://localhost:5000/v2.0/", order=0,
+    # NOTE: Validation for basic connection stuff is only done here.
+    # The user will have to update other fields if authentication errors
+    # occur (and hopefully that will be obvious).
+    auth_url = Config.string(default="http://localhost:5000/v2.0/", order=0,
+        validate=lambda self: self._novaclient().flavors.list(),
         description="The OpenStack authentication URL (OS_AUTH_URL).")
 
-    username = Config.string("username", default="admin", order=1,
+    username = Config.string(default="admin", order=1,
         description="The user for authentication (OS_USERNAME).")
 
-    password = Config.string("password", default="admin", order=1,
+    password = Config.string(default="admin", order=1,
         description="The api key or password (OS_PASSWORD).")
 
-    tenant_name = Config.string("tenant_name", default="admin", order=1,
+    tenant_name = Config.string(default="admin", order=1,
         description="The project or tenant (OS_TENANT_NAME).")
 
-    region_name = Config.string("region_name", order=1,
+    region_name = Config.string(order=1,
         description="The region (OS_REGION_NAME).")
 
     # Elements common to launching and booting.
-    security_groups = Config.list("security_groups", order=3,
+    security_groups = Config.list(order=3,
         description="Security groups for new instances.")
 
-    availability_zone = Config.string("availability_zone", order=3,
+    availability_zone = Config.string(order=3,
         description="Availability zone for new instances.")
 
     def _novaclient(self):
@@ -46,10 +50,6 @@ class BaseOsEndpointConfig(Config):
                                       region_name=self.region_name,
                                       extensions=extensions)
         return self._client
-
-    def _validate(self):
-        Config._validate(self)
-        assert self._novaclient()
 
 class BaseOsConnection(CloudConnection):
 
@@ -116,24 +116,23 @@ class BaseOsConnection(CloudConnection):
 
 class OsApiEndpointConfig(BaseOsEndpointConfig):
 
-    instance_name = Config.string("instance_name", order=2,
+    instance_name = Config.string(order=2,
         description="The name given to new instances.")
 
-    flavor_id = Config.string("flavor_id", order=2,
+    flavor_id = Config.string(order=2,
+        validate=lambda self: self.flavor_id in \
+            [flavor._info['id'] for flavor in self._novaclient().flavors.list()],
         description="The flavor to use.")
 
-    image_id = Config.string("image_id", order=2,
+    image_id = Config.string(order=2,
+        validate=lambda self: self.image_id in \
+            [image._info['id'] for image in self._novaclient().images.list()],
         description="The image ID to boot.")
 
-    key_name = Config.string("key_name", order=2,
+    key_name = Config.string(order=2,
+        validate=lambda self: self.key_name in \
+            [key._info['keypair']['name'] for key in self._novaclient().keypairs.list()],
         description="The key_name (for injection).")
-
-    def _validate(self):
-        BaseOsEndpointConfig._validate(self)
-        client = self._novaclient()
-        assert self.image_id in [image._info['id'] for image in client.images.list()]
-        assert self.flavor_id in [flavor._info['id'] for flavor in client.flavors.list()]
-        assert self.key_name in [key._info['keypair']['name'] for key in client.keypairs.list()]
 
 class Connection(BaseOsConnection):
 

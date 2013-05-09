@@ -5,14 +5,11 @@ from reactor.cloud.osapi import BaseOsConnection
 
 class OsVmsEndpointConfig(BaseOsEndpointConfig):
 
-    instance_id = Config.string("instance_id", order=2,
+    instance_id = Config.string(order=2,
+        validate=lambda self: \
+            self._novaclient().servers.get(self.instance_id)._info['status'] == 'BLESSED' or \
+            Config.error("Server is not in BLESSED state."),
         description="The live-image to use.")
-
-    def _validate(self):
-        BaseOsEndpointConfig._validate(self)
-        client = self._novaclient()
-        instance = client.servers.get(self.instance_id)
-        assert instance._info['status'] == 'BLESSED'
 
 class Connection(BaseOsConnection):
     """ Connects to a nova cloud that has the Gridcentric VMS extension enabled. """

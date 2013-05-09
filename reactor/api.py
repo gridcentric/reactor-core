@@ -361,10 +361,6 @@ class ReactorApi:
     def handle_update_manager(self, manager, manager_config):
         self.client.update_manager_config(manager, manager_config)
 
-    def _extract_error(self, e):
-        # Just return the last line of the formatted trace.
-        return traceback.format_exc().strip().split("\n")[-1]
-
     @connected
     @authorized_admin_only
     def handle_manager_action(self, context, request):
@@ -389,14 +385,14 @@ class ReactorApi:
         elif request.method == "POST" or request.method == "PUT":
             manager_config = json.loads(request.body)
             logging.info("Updating manager %s" % manager)
-            try:
-                # This is handling separately, as the server subclass
-                # may do some intelligent validation of the config.
-                # However, in the general case the API server alone
-                # cannot validate the configuration.
-                self.handle_update_manager(manager, manager_config)
-            except Exception, e:
-                response = Response(status=400, body=self._extract_error(e))
+
+            # This is handling separately, as the server subclass
+            # may do some intelligent validation of the config.
+            # However, in the general case the API server alone
+            # cannot validate the configuration.
+            error = self.handle_update_manager(manager, manager_config)
+            if error:
+                response = Response(status=400, body=error)
 
         elif request.method == "DELETE":
             config = self.client.get_manager_config(manager)
@@ -486,12 +482,11 @@ class ReactorApi:
         elif request.method == "POST" or request.method == "PUT":
             endpoint_config = json.loads(request.body)
             logging.info("Managing or updating endpoint %s" % endpoint_name)
-            try:
-                # As per before in handle_update_manager().
-                self.handle_update_endpoint(endpoint_name, endpoint_config)
-            except Exception, e:
-                response = Response(status=400, body=self._extract_error(e))
 
+            # As per before in handle_update_manager().
+            error = self.handle_update_endpoint(endpoint_name, endpoint_config)
+            if error:
+                response = Response(status=400, body=error)
         else:
             # Return an unauthorized response.
             return Response(status=401, body="unauthorized")

@@ -33,33 +33,35 @@ class ManagerConfig(Config):
     def __init__(self, **kwargs):
         Config.__init__(self, "manager", **kwargs)
 
-    ips = Config.list("ips", order=1,
+    ips = Config.list(order=1,
         description="Floating or public IPs.")
 
-    loadbalancers = Config.list("loadbalancers", order=1,
+    loadbalancers = Config.list(order=1,
+       validate=lambda self: \
+            [lb_connection.get_connection(lb, config=self, scale_manager=None) \
+                for lb in self.loadbalancers],
         description="List of supported loadbalancers (e.g. nginx).")
 
-    clouds = Config.list("clouds", order=1,
+    clouds = Config.list(order=1,
+        validate=lambda self: \
+            [cloud_connection.get_connection(cloud, config=self) \
+                for cloud in self.clouds],
         description="List of supported clouds (e.g. osapi).")
 
-    health_check = Config.integer("health_check", default=5, order=1,
+    health_check = Config.integer(default=5, order=1,
+        validate=lambda self: self.health_check > 0 or \
+            Config.error("Health_check must be positive."),
         description="Period for decomissioning and timing out instances.")
 
-    marks = Config.integer("marks", default=10, order=2,
+    marks = Config.integer(default=10, order=2,
+        validate=lambda self: self.marks > 0 or \
+            Config.error("Marks must be positive."),
         description="Timeout for unregistered and decomissioned VMs.")
 
-    keys = Config.integer("keys", default=64, order=2,
+    keys = Config.integer(default=64, order=2,
+        validate=lambda self: self.keys >= 0 or \
+            Config.error("Keys must be non-negative."),
         description="Key count for managing services on the ring.")
-
-    def _validate(self):
-        Config._validate(self)
-        for lb in self.loadbalancers:
-            lb_connection.get_connection(lb, config=self, scale_manager=None)
-        for cloud in self.clouds:
-            cloud_connection.get_connection(cloud, config=self)
-        assert self.health_check > 0
-        assert self.marks >= 0
-        assert self.keys >= 0
 
 def locked(fn):
     """
@@ -205,45 +207,49 @@ class ScaleManager(object):
 
     def _endpoint_config_spec(self):
         """ Return the specification for a configured endpoint. """
-        spec = {}
-        Endpoint.spec_config(spec)
+        config = Config()
+        Endpoint.spec_config(config)
         for lb in self.loadbalancers.values():
-            lb._endpoint_config(config=spec)
+            lb._endpoint_config(config=config)
         for cloud in self.clouds.values():
-            cloud._endpoint_config(config=spec)
+            cloud._endpoint_config(config=config)
         if self.windows:
-            self.windows._endpoint_config(config=spec)
-        return spec
+            self.windows._endpoint_config(config=config)
+        return config._spec()
 
-    def _endpoint_config_validate(self, config):
+    def _endpoint_config_validate(self, values):
         """ Validate a given endpoint configuration. """
+        config = Config(values=values)
         Endpoint.validate_config(config, self.clouds)
         for lb in self.loadbalancers.values():
-            lb._endpoint_config(values=config)._validate()
+            lb._endpoint_config(config=config)._validate()
         if self.windows:
-            self.windows._endpoint_config(values=config)._validate()
+            self.windows._endpoint_config(config=config)._validate()
+        return config._validate_errors()
 
     def _manager_config_spec(self):
         """ Return the specification for a configured manager. """
-        spec = {}
-        ManagerConfig(obj=spec)
+        config = Config()
+        ManagerConfig(obj=config)
         for lb in self.loadbalancers.values():
-            lb._manager_config(config=spec)
+            lb._manager_config(config=config)
         for cloud in self.clouds.values():
-            cloud._manager_config(config=spec)
+            cloud._manager_config(config=config)
         if self.windows:
-            self.windows._manager_config(config=spec)
-        return spec
+            self.windows._manager_config(config=config)
+        return config._spec()
 
-    def _manager_config_validate(self, config):
+    def _manager_config_validate(self, values):
         """ Validate a given manager configuration. """
-        ManagerConfig(values=config)._validate()
+        config = Config(values=values)
+        ManagerConfig(obj=config)._validate()
         for lb in self.loadbalancers.values():
-            lb._manager_config(values=config)._validate()
+            lb._manager_config(config=config)._validate()
         for cloud in self.clouds.values():
-            cloud._manager_config(values=config)._validate()
+            cloud._manager_config(config=config)._validate()
         if self.windows:
-            self.windows._manager_config(values=config)._validate()
+            self.windows._manager_config(config=config)._validate()
+        return config._validate_errors()
 
     def _configure(self, config=None):
         """

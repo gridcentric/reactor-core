@@ -9,8 +9,8 @@ from reactor.loadbalancer.netstat import connection_count
 
 class DnsmasqManagerConfig(Config):
 
-    config_path = Config.string("config_path", default="/etc/dnsmasq.d")
-    hosts_path = Config.string("hosts_path", default="/etc/hosts.reactor")
+    config_path = Config.string(default="/etc/dnsmasq.d")
+    hosts_path = Config.string(default="/etc/hosts.reactor")
 
 class Connection(LoadBalancerConnection):
 

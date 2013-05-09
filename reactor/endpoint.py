@@ -34,34 +34,38 @@ class EndpointConfig(Config):
     def __init__(self, **kwargs):
         Config.__init__(self, section="endpoint", **kwargs)
 
-    url = Config.string("url", order=0,
+    url = Config.string(order=0,
         description="The URL for this endpoint.")
 
-    port = Config.integer("port", order=1,
+    port = Config.integer(order=1,
+        validate=lambda self: self.port >= 0 or \
+            Config.error("Port must be non-negative."),
         description="The backend port for this service.")
 
-    redirect = Config.string("redirect", order=1,
+    redirect = Config.string(order=1,
         description="A redirect URL for when no instances are available.")
 
-    weight = Config.integer("weight", default=1, order=1,
+    weight = Config.integer(default=1, order=1,
+        validate=lambda self: self.weight >= 0 or \
+            Config.error("Weight must be non-negative."),
         description="Relative weight (if sharing URLs).")
 
-    cloud = Config.string("cloud", order=2,
+    cloud = Config.string(order=2,
         description="The cloud type (e.g. osvms, osapi).")
 
-    auth_hash = Config.string("auth_hash", default=None, order=3,
+    auth_hash = Config.string(default=None, order=3,
         description="The authentication token for this endpoint.")
 
-    auth_salt = Config.string("auth_salt", default="", order=3,
+    auth_salt = Config.string(default="", order=3,
         description="The salt used for computing authentication tokens.")
 
-    auth_algo = Config.string("auth_algo", default="sha1", order=3,
+    auth_algo = Config.string(default="sha1", order=3,
         description="The algorithm used for computing authentication tokens.")
 
     def _get_endpoint_auth(self):
         return (self.auth_hash, self.auth_salt, self.auth_algo)
 
-    static_instances = Config.list("static_instances", order=1,
+    static_instances = Config.list(order=1,
         description="Static hosts for the endpoint.")
 
     def _static_ips(self):
@@ -81,37 +85,37 @@ class EndpointConfig(Config):
                              "for the static instance %s." % static_instance)
         return ip_addresses
 
-    def _validate(self):
-        Config._validate(self)
-        assert self.port >= 0
-        assert self.weight >= 0
-
 class ScalingConfig(Config):
 
     def __init__(self, **kwargs):
         Config.__init__(self, "scaling", **kwargs)
 
-    min_instances = Config.integer("min_instances", default=1, order=0,
+    min_instances = Config.integer(default=0, order=0,
+        validate=lambda self: (self.min_instances >= 0 or \
+            Config.error("Min_instances must be non-negative.")) and \
+            (self.max_instances >= self.min_instances or \
+            Config.error("Min_instances (%d) must be less than Max_instances (%d)" % \
+                (self.min_instances, self.max_instances))),
         description="Lower limit on dynamic instances.")
 
-    max_instances = Config.integer("max_instances", default=1, order=0,
+    max_instances = Config.integer(default=1, order=1,
+        validate=lambda self: (self.max_instances >= 0 or \
+            Config.error("Max_instances must be non-negative.")) and \
+            (self.max_instances >= self.min_instances or \
+            Config.error("Min_instances (%d) must be less than Max_instances (%d)" % \
+                (self.min_instances, self.max_instances))),
         description="Upper limit on dynamic instances.")
 
-    rules = Config.list("rules", order=1,
+    rules = Config.list(order=1,
         description="List of scaling rules (e.g. 0.5<active<0.8).")
 
-    ramp_limit = Config.integer("ramp_limit", default=5, order=2,
+    ramp_limit = Config.integer(default=5, order=2,
+        validate=lambda self: self.ramp_limit > 0 or \
+            Config.error("Ramp_limit must be positive."),
         description="The maximum operations (start and stop instances) per round.")
 
-    url = Config.string("url", order=3,
+    url = Config.string(order=3,
         description="The source url for metrics.")
-
-    def _validate(self):
-        Config._validate(self)
-        assert self.min_instances >= 0
-        assert self.max_instances >= 0
-        assert self.min_instances <= self.max_instances
-        assert self.ramp_limit > 0
 
 class Endpoint(object):
 
@@ -294,21 +298,29 @@ class Endpoint(object):
 
     @staticmethod
     def spec_config(config):
-        endpoint_config = EndpointConfig(obj=config)
-        scaling_config = ScalingConfig(obj=config)
+        # Just interpret the configurations appropriately.
+        # NOTE: This will have the side-effect of building
+        # the specification for the endpoint and scaling rules
+        # into this configuration object (hence spec_config).
+        EndpointConfig(obj=config)
+        ScalingConfig(obj=config)
 
     @staticmethod
-    def validate_config(values, clouds):
-        config = EndpointConfig(values=values)
-        scaling = ScalingConfig(values=values)
+    def validate_config(config, clouds):
+        config = EndpointConfig(obj=config)
+        scaling = ScalingConfig(obj=config)
         config._validate()
         scaling._validate()
 
         # Ensure that this cloud is available.
         if config.cloud:
-            assert config.cloud in clouds
-            cloud = clouds[config.cloud]
-            cloud._endpoint_config(values=values)._validate()
+            if not config.cloud in clouds:
+                # Add a message indicating the available clouds.
+                config._add_error("cloud", "Available clouds: %s" % ",".join(clouds))
+            else:
+                # Ensure the cloud configuration is correct.
+                cloud = clouds[config.cloud]
+                cloud._endpoint_config(config=config)._validate()
 
     def update_config(self, config):
         # Check if our configuration is about to change.

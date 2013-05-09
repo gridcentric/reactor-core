@@ -76,16 +76,22 @@ class ServerApi(ReactorApi):
         self.check(zk_servers)
 
     def handle_update_manager(self, manager, manager_config):
-        self.manager._manager_config_validate(manager_config)
-        ReactorApi.handle_update_manager(self, manager, manager_config)
+        errs = self.manager._manager_config_validate(manager_config)
+        if errs:
+            return json.dumps(errs)
+        else:
+            return ReactorApi.handle_update_manager(self, manager, manager_config)
 
     @connected
     def manager_info(self, context, request):
         return Response(body=json.dumps(self.manager._manager_config_spec()))
 
     def handle_update_endpoint(self, endpoint_name, endpoint_config):
-        self.manager._endpoint_config_validate(endpoint_config)
-        ReactorApi.handle_update_endpoint(self, endpoint_name, endpoint_config)
+        errs = self.manager._endpoint_config_validate(endpoint_config)
+        if errs:
+            return json.dumps(errs)
+        else:
+            return ReactorApi.handle_update_endpoint(self, endpoint_name, endpoint_config)
 
     @connected
     def endpoint_info(self, context, request):
