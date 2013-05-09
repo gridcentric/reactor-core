@@ -42,11 +42,9 @@
 
 <!-- Slot for dynamically generated configuration. -->
 <div class="control-group">
-  <label class="control-label" for="dynamic-conf">Configuration</label>
-  <div class="controls" id="dynamic-conf-container">
-    <div class="alert alert-info">
-      Fetching configuration keys...
-    </div>
+  <label class="control-label">Configuration</label>
+  <div class="controls">
+    <%include file="/conf.html" args="conf_id='endpoint-conf-container'"/>
   </div>
 </div>
 
@@ -91,7 +89,7 @@
 <script type="text/javascript">
 
     // Dynamically construct config UI based on spec we get back from the server.
-    var context = beginMakeConfig("dynamic-conf-container",
+    var context = beginMakeConfig("endpoint-conf-container",
                                   {"loadbalancer": "Load Balancer"},
                                   "/endpoint",
                                   "/v1.0/endpoints/${object}");

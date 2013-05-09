@@ -1,0 +1,84 @@
+<%page args='conf_id=""'/>
+
+<!-- Templates for various bits of the conf form. These get cloned and
+specialized with direction from the server-side spec. Nothing under
+this div should be directly mainpulated by js or displayed to the
+user. -->
+<div id="conf-templates-container" style="display:none">
+
+  <div id="conf-fold-template" class="accordion">
+  </div>
+
+  <div id="conf-fold-group-template" class="accordion-group">
+    <div class="accordion-heading">
+      <a id="fold-toggle" class="accordion-toggle" data-toggle="collapse">Name</a>
+    </div>
+    <div id="fold-body" class="accordion-body collapse">
+      <div id="fold-inner" class="accordion-inner">
+      </div>
+    </div>
+  </div>
+
+  <div id="conf-slot-template" class="control-group">
+    <label id="conf-label" class="control-label">
+    </label>
+    <div id="conf-box" class="controls">
+    </div>
+  </div>
+
+  <textarea id="conf-input-list" rows="5"></textarea>
+
+  <label id="conf-input-boolean" class="checkbox">
+    <input id="conf-input-boolean-checkbox" type="checkbox"></input>
+  </label>
+
+  <input id="conf-input-number" class="input-large" type="number" min="0"></input>
+
+  <input id="conf-input-text" class="input-large" type="text"></input>
+
+  <span id="conf-error-label-template" class="help-block">Error message</span>
+
+  <span id="conf-header-error-count-template" class="fold-error-count"
+        style="display:block;float:right">
+    <font color="#b94a48">(# problem(s))</font>
+  </span>
+</div>
+
+<!-- Slot for dynamically generated configuration. -->
+<div id="${conf_id}">
+  <div class="alert alert-info">
+    Fetching configuration key...
+  </div>
+</div>
+
+<!-- Form buttons. -->
+<div id="conf-buttons" class="btn-toolbar">
+  <div class="btn-group">
+    <a id="conf-save-button" class="btn btn-primary" role="button">Save</a>
+  </div>
+
+  <div class="btn-group">
+    <a id="conf-reset-button" class="btn btn-primary" role="button">Reset</a>
+  </div>
+</div>
+
+<!-- Feedback label. -->
+<div id="prompt-label" class="alert" style="visibility:hidden">
+  <strong>Topic:</strong>
+</div>
+
+<!-- Feedback modal. -->
+<div id="prompt-modal" class="modal hide fade" role="dialog"
+     aria-labelledby="prompt-modal-label" aria-hidden="true">
+  <div class="modal-header">
+    <button class="close" type="button" data-dismiss="modal" aria-hidden="true">&times;</button>
+    <h3 id="prompt-modal-label">Prompt header</h3>
+  </div>
+  <div class="modal-body">
+    <p id="prompt-modal-body">Prompt message</p>
+  </div>
+  <div class="modal-footer">
+    <button class="btn" data-dismiss="modal" aria-hidden="true">Close</button>
+  </div>
+</div>
+

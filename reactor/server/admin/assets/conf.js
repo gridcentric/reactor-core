@@ -5,10 +5,6 @@ function beginMakeConfig(container_id, name_map, spec_path, save_path, template)
     context["spec_path"] = spec_path;
     context["save_path"] = save_path;
 
-    // Setup the prompt modal first so we can immediately begin using it to
-    // report errors during setup back to the user.
-    constructPrompt(context, $("#" + container_id));
-
     // Begin ajax request to fetch template from backend and populate the config
     // form. If the backend fails to respond with a template, we'll try to fall
     // back to the template provided to us by the 'template' argument. If these
@@ -28,21 +24,26 @@ function fetchConfig(context, template) {
                 .html("<strong>Error:</strong> Couldn't fetch configuration format.");
 
             if (typeof(template) !== "undefined") {
+                $("#prompt-modal").find("#prompt-modal-label")
+                    .html("Falling back to built-in format");
+                $("#prompt-modal").find("#prompt-modal-body")
+                    .html("Couldn't fetch the configuration format from reactor. " +
+                          "Falling back to built-in format.");
+
                 // Create a deep copy of the template object given to us, just in case the
                 // caller modifies it later. We store references and page stage in the
                 // template and can't handle the template unexpectedly chaning from
                 // underneath us.
-                promptSetHeader(context, "Falling back to built-in format");
-                promptSetBody(context, "Couldn't fetch the configuration format from reactor. " +
-                             "Falling back to built-in format.");
                 context["template"] = $.extend(true, {}, template);
                 makeConfig(context);
             } else {
-                promptSetHeader(context, "Configuration populate failed");
-                promptSetBody(context, "Couldn't fetch the configuration format from reactor.");
+                $("#prompt-modal").find("#prompt-modal-label")
+                    .html("Configuration populate failed");
+                $("#prompt-modal").find("#prompt-modal-body")
+                    .html("Couldn't fetch the configuration format from reactor.");
             }
 
-            promptDisplay(context);
+            $("#prompt-modal").modal("show");
 
         },
         success: function(result) {
@@ -184,31 +185,17 @@ function makeConfig(context) {
         });
     });
 
-    var button_grp = $("<div/>").attr("class", "btn-toolbar").appendTo(container_elt);
+    context["save_task"] = function() {
+        disableButtons(context);
+        postConfig(context, context["save_path"]);
+    }
+    context["reset_task"] = function() {
+        disableButtons(context);
+        $("#prompt-label").clearQueue().fadeTo(400, 0);
+        makeConfig(context);
+    }
 
-    // Construct config save button.
-    $("<div/>").attr("class", "btn-group").append(
-        $("<a>Save</a>")
-            .attr({
-                "id": "config-save",
-                "class": "btn btn-primary",
-                "role": "button"
-            })
-            .click(function() {
-                postConfig(context, context["save_path"]);
-            })).appendTo(button_grp);
-
-    // Construct config reset button.
-    $("<div/>").attr("class", "btn-group").append(
-        $("<a>Reset</a>")
-            .attr({
-                "id": "config-reset",
-                "class": "btn btn-primary",
-                "role": "button"
-            })
-            .click(function() {
-                makeConfig(context);
-            })).appendTo(button_grp);
+    enableButtons(context);
 
     return context;
 }
@@ -227,22 +214,30 @@ function readConfig(context) {
 
     function intern_section(result, section_name, section) {
         $.each(section, function(config_name, config) {
-            if (config["modified"]) {
-                var val;
-                switch (config["type"]) {
-                case "boolean":
-                    val = config["ref"].prop("checked");
-                    break;
-                case "list":
-                    val = config["ref"].val().split("\n").filter(function(elt, idx, arr) {
+            var val;
+            var include = true;
+
+            if (!(config["present"] || config["modified"])) {
+                return true;
+            }
+
+            switch (config["type"]) {
+            case "boolean":
+                val = config["ref"].prop("checked");
+                break;
+            case "list":
+                val = config["ref"].val().split("\n").filter(
+                    function(elt, idx, arr) {
                         return $.trim(elt).length > 0;
                     });
-                    break;
-                default:
-                    val = config["ref"].val();
-                }
-                touch(result, section_name, {})[config_name] = val;
+                include = (val.length !== 0);
+                break;
+            default:
+                val = config["ref"].val();
+                include = (val.length !== 0);
             }
+            if (include)
+                touch(result, section_name, {})[config_name] = val;
         });
     }
 
@@ -261,145 +256,228 @@ function readConfig(context) {
         });
     });
 
-    console.debug(JSON.stringify(repr));
+    console.debug("POSTING: " + JSON.stringify(repr));
     return repr;
 }
 
+function stripAnnotations(context) {
+    function removeAnnotation(section) {
+        $.each(section, function(key, field) {
+            field["ref"].closest(".control-group").attr("class", "control-group")
+                .find("span").slideUp(150, function() { this.remove() });
+        });
+    }
+
+    $.each(context["template"], function(section_name, section) {
+        removeAnnotation(section);
+    });
+
+    $.each(context["sub_templates"], function(sub_template_name, sub_template) {
+        $.each(sub_template, function(section_name, section) {
+            removeAnnotation(section);
+        });
+    });
+
+    $("#" + context["container_id"]).find(".fold-error-count").remove();
+}
+
+function annotateFields(context, messages) {
+    // Transform messages object a bit so we can stick some metadata in it.
+    messages_template = Object();
+    $.each(messages, function(section_name, section) {
+        messages_template[section_name] = { "count": 0, "section" : {} };
+        $.each(section, function(key, value) {
+            messages_template[section_name]["section"][key] = value;
+            messages_template[section_name]["count"]++;
+        });
+    });
+
+    var template = context["template"];
+    var sub_templates = context["sub_templates"];
+
+    // The meta_sections object is used to keep track of the number of
+    // annotations under a nested folds header.
+    var meta_sections = new Object();
+
+    function annotateFoldHeader(fold) {
+        var count = fold["count"];
+        var header = fold["header"];
+        header.find('.fold-error-count').remove();
+        if (count > 1) {
+            $("#conf-header-error-count-template").clone().appendTo(header)
+                .find("font").html("(" + count + " problems)");
+        } else if (count === 1) {
+            $("#conf-header-error-count-template").clone().appendTo(header)
+                .find("font").html("(" + count + " problem)");
+        }
+    }
+
+    function addAnnotation(elements, annotations) {
+        $.each(annotations["section"], function(field, message) {
+            var elt = elements[field]["ref"]
+            var container = elt.closest(".control-group")
+            container.attr("class", "control-group error")
+            var controls = container.find(".controls")
+            $("#conf-error-label-template").clone().attr("id", "")
+                .html(message).appendTo(controls);
+            elt.focus(function() {
+                if (container.attr("class") === "control-group error")
+                    container.attr("class", "control-group warning");
+            });
+            elt.change(function() {
+                if (container.attr("class") === "control-group warning") {
+                    container.attr("class", "control-group info");
+                }
+            });
+            context["errors"]++;
+        });
+    }
+
+    stripAnnotations(context);
+
+    // Reinitialize the error count.
+    context["errors"] = 0;
+
+    // Add in new annotations and update the fold headers for sections with messages.
+    $.each(messages_template, function(section_name, section) {
+        if (contains(section_name, ":")) {
+            var components = section_name.split(":")
+            var sub_template = sub_templates[components[0]]
+            var section_name = components[1];
+
+            section["header"] = context["nested_folds"][components[0]][section_name]
+                .closest(".accordion-group").find(".accordion-toggle");
+
+            if (typeof(meta_sections[components[0]]) === "undefined") {
+                meta_sections[components[0]] = {
+                    "header": context["toplevel_folds"][components[0]]
+                        .closest(".accordion-group")
+                        .children()
+                        .children(".accordion-toggle"),
+                    "count": 0
+                };
+            }
+            meta_sections[components[0]]["count"] += section["count"];
+            section["meta"] = meta_sections[components[0]];
+
+            addAnnotation(sub_template[section_name], section);
+
+            annotateFoldHeader(section);
+            annotateFoldHeader(meta_sections[components[0]]);
+        } else {
+            section["header"] = context["toplevel_folds"][section_name]
+                .closest(".accordion-group")
+                .find(".accordion-toggle");
+
+            addAnnotation(template[section_name], section);
+            annotateFoldHeader(section);
+        }
+    });
+
+    // Display the overall error count.
+    updateErrorCount(context).clearQueue().fadeIn(200);
+}
+
+function updateErrorCount(context) {
+    var errors = context["errors"];
+    if (errors > 1) {
+        return updatePromptLabel(context,
+                                 "Error", "The new configuration has "
+                                 + context["errors"] + " problems.", "error");
+    } else if (errors === 1) {
+        return updatePromptLabel(context,
+                                 "Error", "The new configuration has "
+                                 + context["errors"] + " problem.", "error");
+    } else {
+        return updatePromptLabel(context,
+                                 "Retry", "All problems appear to have been " +
+                                 "addressed. Please save again.", "info");
+    }
+}
+
 function postConfig(context, post_url) {
-    var posting = constructPromptLabel(context, "begin-saving-label",
-                                       "Saving", "Pushing configuration to reactor.",
-                                       "info").show(200).delay(1500);
     $.ajax({
         url: post_url,
         type: "POST",
         data: JSON.stringify(readConfig(context)),
         contentType: "application/json",
         success: function() {
-            constructPromptLabel(context, "done-saving-label",
-                                 "Success", "New configuration saved.",
-                                 "success").show(200).delay(2300).hide(400);
+            updatePromptLabel(context,
+                              "Success", "New configuration saved.",
+                              "success")
+                .clearQueue()
+                .fadeIn(200)
+                .delay(2000)
+                .fadeTo(400, 0);
+            stripAnnotations(context);
         },
         error: function(req, error, htmlError) {
-            promptSetHeader(context, "Config update failed");
-            promptSetBody(context, "The request to update the config " +
-                          "terminated due to a(n) " + error + ":" + htmlError + ".");
-            promptDisplay(context);
+            var annotations = JSON.parse(req.responseText);
+            console.debug("ERRORS: " + req.responseText);
+            context["errors"] = Object.keys(annotations).length;
+            annotateFields(context, annotations);
         },
         complete: function() {
-            posting.hide(400);
+            enableButtons(context);
         }
     });
 }
 
-function constructPromptLabel(context, id, topic, message, type) {
-    root = $("#" + context["container_id"]);
+function enableButtons(context) {
+    $("#conf-buttons").find("a").attr("class", "btn btn-primary");
+    $("#conf-buttons").find("#conf-save-button").on("click", context["save_task"]);
+    $("#conf-buttons").find("#conf-reset-button").on("click", context["reset_task"]);
+}
 
-    // Remove old prompts for this class.
-    root.find("#" + id).remove();
+function disableButtons(context) {
+    $("#conf-buttons").find("a").attr("class", "btn btn-primary disabled");
+    $("#conf-buttons").find("#conf-save-button").off("click");
+    $("#conf-buttons").find("#conf-reset-button").off("click");
+}
 
-    var label = $("<div/>").attr({
-        "class": "alert alert-" + type,
-        "id": id,
-        "style": "display:none"
-    }).appendTo(root);
+function updatePromptLabel(context, topic, message, type) {
+    var label = $("#prompt-label")
+    label.attr("class", "alert alert-" + type);
 
-    label.html("<strong>" + topic + ":</strong> " + message);
-
-    $("<button/>").attr({
-        "type": "button",
-        "class": "close",
-        "data-dismiss": "alert"
-    }).html("&times;").appendTo(label);
-
+    label.children().remove()
+    label.html($("<strong>" + topic + ": </strong>"))
+    label.append(document.createTextNode(message));
+    label.attr("style", "visibility:shown");
     return label;
-}
-
-function constructPrompt(context, root) {
-    if (context["prompt_modal"])
-        return;
-
-    var modal_div = $("<div/>").attr({
-        "id": "prompt-modal",
-        "class": "modal hide fade",
-        "tabindex": -1,
-        "role": "dialog",
-        "aria-labelledby": "prompt-modal-label",
-        "aria-hidden": true
-    }).appendTo(root.parent());
-
-    var modal_header = $("<div/>").attr("class", "modal-header").appendTo(modal_div)
-        .append($("<button>×</button>")
-                .attr({
-                    "type": "button",
-                    "class": "close",
-                    "data-dismiss": "modal",
-                    "aria-hidden": true
-                }))
-        .append($("<h3>Prompt header</h3>")
-                .attr("id", "prompt-modal-label"));
-
-    var modal_body = $("<div/>").attr({
-        "class": "modal-body",
-        "id": "prompt-modal-body"
-    }).appendTo(modal_div)
-        .append("<p>Prompt message</p>");
-
-    var modal_footer = $("<div/>").attr("class", "modal-footer").appendTo(modal_div)
-        .append($("<button>Close</button>").attr({
-            "class": "btn",
-            "data-dismiss": "modal",
-            "aria-hidden": true
-        }));
-
-    context["prompt_modal"] = modal_div;
-}
-
-function promptDisplay(context) {
-    context["prompt_modal"].modal('show');
-}
-
-function promptSetHeader(context, content) {
-    context["prompt_modal"].find("#prompt-modal-label").html(content);
-}
-
-function promptSetBody(context, content) {
-    context["prompt_modal"].find("#prompt-modal-body > p").html(content);
 }
 
 function constructScaffolding(context, root, sections, exclusive, open) {
     var folds = new Object();
-
-    var top = $("<div/>").attr({
-        "class": "accordion",
-        "id": "fold-toplevel-" + root.attr("id")
-    }).appendTo(root);
+    var top = $("#conf-fold-template").clone()
+        .attr("id", "fold-toplevel-" + root.attr("id")).appendTo(root);
 
     $.each(sections, function(idx, section) {
-        var group = $("<div/>").attr("class", "accordion-group").appendTo(top);
-        var acd_heading = $("<div/>").attr("class", "accordion-heading").appendTo(group);
-        var acd_toggle = $("<a/>").attr({
-            "class": "accordion-toggle",
-            "data-toggle": "collapse",
-            "href": "#fold-" + section
-        }).html(capitalize(context["name_map"][section] || section)).appendTo(acd_heading);
+        var group = $("#conf-fold-group-template").clone()
+            .attr("id", "fold-group-" + root.attr("id")).appendTo(top);
 
-        if (exclusive)
-            acd_toggle.attr("data-parent", "#fold-toplevel-" + root.attr("id"));
+        var link = group.find("#fold-toggle")
 
-        var acd_body = $("<div/>").attr("id", "fold-" + section).appendTo(group);
-        if (open) {
-            acd_body.attr("class", "accordion-body collapse in");
-            open = false;
+        link.attr("href", "#fold-" + section)
+            .html(capitalize(context["name_map"][section] || section));
+
+        var body = group.find("#fold-body").attr("id", "fold-" + section);
+        if (exclusive) {
+            body.collapse({
+                toggle: false,
+                parent: "#fold-toplevel-" + root.attr("id")
+            });
         } else {
-            acd_body.attr("class", "accordion-body collapse");
+            body.collapse({
+                toggle: false
+            });
         }
 
-        var acd_inner = $("<div/>").attr({
-            "class": "accordion-inner",
-            "id": "fold-nested-" + section
-        }).appendTo(acd_body);
+        if (open) {
+            body.collapse("show");
+            open = false;
+        }
 
-        folds[section] = acd_inner;
+        folds[section] = group.find("#fold-inner").attr("id", "fold-nested-" + section);
     });
 
     return folds;
@@ -456,11 +534,10 @@ function generateSingleConfig(root, config_name, config)
     }
 
     function buildConfigSlot(root, name) {
-        var cgroup = $("<div/>").attr("class", "control-group").appendTo(root)
-            .append($("<label/>").attr("class", "control-label")
-                    .html(name.replace("_", " ")));
+        var cgroup = $("#conf-slot-template").clone().appendTo(root);
+        cgroup.find("#conf-label").html(name.replace("_", " "));
 
-        return $("<div/>").attr("class", "controls").appendTo(cgroup);
+        return cgroup.find("#conf-box")
     }
 
     config["skip-init"] = new Object();
@@ -469,50 +546,28 @@ function generateSingleConfig(root, config_name, config)
     // Setup the generic scaffolding for a config variable.
     var slot = buildConfigSlot(root, config_name);
 
+    config["present"] = ("value" in config);
+
     // Perform any type-specific setup for the variable.
     switch (config["type"]) {
     case "list":
-        input_elt = $("<textarea/>").attr("rows", 5).appendTo(slot);
-        if ("value" in config)
+        input_elt = $("#conf-input-list").clone().appendTo(slot);
+        if (config["present"])
             input_elt.html(config["value"]);
         config["skip-init"]["value"] = true;
         break;
-    case "choice":
-    case "multichoice":
-        input_elt = $("<select/>").appendTo(slot);
-        $.each(config["options"], function(idx, choice) {
-            input_elt.append($("<option/>").html(choice));
-        });
-        if (config["type"] === "multichoice")
-            input_elt.attr("multiple", "multiple");
-        config["skip-init"]["value"] = true;
-        break;
     case "string":
-        input_elt = $("<input/>")
-            .attr({
-                "class": "input-large",
-                "type": "text"
-            })
-            .appendTo(slot);
+        input_elt = $("#conf-input-text").clone().appendTo(slot);
         if (contains(config_name.toLowerCase(), "password"))
             input_elt.attr("type", "password");
         break;
     case "integer":
-        input_elt = $("<input/>")
-            .attr({
-                "class": "input-large",
-                "type": "number",
-                "min": 0
-            })
-            .appendTo(slot);
+        input_elt = $("#conf-input-number").clone().appendTo(slot);
         break;
     case "boolean":
-        input_elt = $("<input/>")
-            .attr("type", "checkbox")
-            .prop("checked", config["value"])
-            .appendTo(
-                $("<label/>").attr("class", "checkbox").appendTo(slot));
-
+        input_elt = $("#conf-input-boolean").clone()
+            .prop("checked", config["value"]).appendTo(slot);
+        input_elt = input_elt.find("input#conf-input-boolean-checkbox");
         attachTooltip(input_elt, config, "hover", 750);
         break;
     default:
@@ -527,7 +582,7 @@ function generateSingleConfig(root, config_name, config)
             if ("default" in config)
                 input_elt.attr("placeholder", config["default"]);
 
-            if ("value" in config)
+            if (config["present"])
                 input_elt.attr("value", config["value"]);
 
             config["skip-init"]["value"] = true;
