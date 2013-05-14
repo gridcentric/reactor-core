@@ -19,6 +19,12 @@ server {
     server_name ${netloc};
 % endif
 
+% if ssl:
+    ssl on;
+    ssl_certificate ${ssl_certificate};
+    ssl_certificate_key ${ssl_key};
+% endif
+
     location ${path} {
 
 % if redirect:

@@ -8,6 +8,8 @@ import re
 import time
 import threading
 import logging
+import subprocess
+import tempfile
 
 from mako.template import Template
 
@@ -149,6 +151,15 @@ class NginxEndpointConfig(Config):
             Config.error("Keepalive must be non-negative."),
         description="Number of backend connections to keep alive.")
 
+    ssl = Config.boolean(default=False,
+        description="Have nginx handle SSL.")
+
+    ssl_certificate = Config.string(default=None,
+        description="An SSL certification in PEM format.")
+
+    ssl_key = Config.string(default=None,
+        description="An SSL key (not password protected).")
+
 class Connection(LoadBalancerConnection):
 
     _MANAGER_CONFIG_CLASS = NginxManagerConfig
@@ -164,6 +175,51 @@ class Connection(LoadBalancerConnection):
 
     def __del__(self):
         self.log_reader.stop()
+
+    def _generate_ssl(self, uniq_id, config):
+        key = config.ssl_key
+        cert = config.ssl_certificate
+
+        prefix = os.path.join(tempfile.gettempdir(), uniq_id)
+        try:
+            os.makedirs(prefix)
+        except OSError:
+            pass
+        raw_file = os.path.join(prefix, "raw")
+        key_file = os.path.join(prefix, "key")
+        csr_file = os.path.join(prefix, "csr")
+        crt_file = os.path.join(prefix, "crt")
+
+        if key:
+            # Save the saved key.
+            f = open(key_file, 'w')
+            f.write(key)
+            f.close()
+        elif not os.path.exists(key_file):
+            # Genereate a new random key.
+            subprocess.check_call(\
+                "openssl genrsa -des3 -out %s -passout pass:1 1024" % \
+                (raw_file), shell=True)
+            subprocess.check_call(\
+                "openssl rsa -in %s -passin pass:1 -out %s" % \
+                (raw_file, key_file), shell=True)
+
+        if cert:
+            # Save the saved certificate.
+            f = open(crt_file, 'w')
+            f.write(cert)
+            f.close()
+        elif not os.path.exists(crt_file):
+            # Generate a new certificate.
+            subprocess.check_call(\
+                "openssl req -new -key %s -batch -out %s" % \
+                (key_file, csr_file), shell=True)
+            subprocess.check_call(\
+                "openssl x509 -req -in %s -signkey %s -out %s" % \
+                (csr_file, key_file, crt_file), shell=True)
+
+        # Return the certificate and key.
+        return (crt_file, key_file)
 
     def _determine_nginx_pid(self):
         if os.path.exists("/var/run/nginx.pid"):
@@ -189,8 +245,7 @@ class Connection(LoadBalancerConnection):
         self.change(url, names, [], [], redirect=other)
 
     def change(self, url, names, ips, redirect=False, config=None):
-        # We use a simple hash of the URL as the file name for the
-        # configuration file.
+        # We use a simple hash of the URL as the file name for the configuration file.
         uniq_id = hashlib.md5(url).hexdigest()
         conf_filename = "%s.conf" % uniq_id
 
@@ -225,6 +280,7 @@ class Connection(LoadBalancerConnection):
             try:
                 listen = int(w_port[1])
             except ValueError:
+                logging.warn("Invalid listen port: %s" % str(w_port[1]))
                 return
 
         # Ensure that there is a path.
@@ -238,6 +294,22 @@ class Connection(LoadBalancerConnection):
         ipspecs = []
         self.tracked[uniq_id] = []
         extra = ''
+
+        # Figure out if we're doing SSL.
+        config = self._endpoint_config(config)
+        if config.ssl:
+            # Try to either extract existing keys and certificates, or
+            # we dynamically generate a local cert here (for testing).
+            (ssl_certificate, ssl_key) = self._generate_ssl(uniq_id, config)
+
+            # Since we are front-loading SSL, just use raw HTTP to connect
+            # to the backends. If the user doesn't want this, they should disable
+            # the SSL key in the nginx config.
+            if scheme == "https":
+                scheme = "http"
+        else:
+            # Don't use any SSL backend.
+            (ssl_certificate, ssl_key) = (None, None)
 
         if not(redirect):
             for backend in ips:
@@ -263,6 +335,9 @@ class Connection(LoadBalancerConnection):
                                     listen=str(listen),
                                     ipspecs=ipspecs,
                                     redirect=redirect,
+                                    ssl=config.ssl,
+                                    ssl_certificate=ssl_certificate,
+                                    ssl_key=ssl_key,
                                     extra=extra)
 
         # Write out the config file.

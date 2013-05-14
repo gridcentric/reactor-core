@@ -1,9 +1,11 @@
 import json
 
-from reactor.endpoint import EndpointConfig
 from reactor.endpoint import Endpoint
 from reactor.endpoint import State
 import reactor.zookeeper.paths as paths
+
+from reactor.endpoint import EndpointConfig
+from reactor.loadbalancer.nginx import NginxEndpointConfig
 
 class APIEndpoint(Endpoint):
     def __init__(self, scale_manager):
@@ -18,9 +20,9 @@ class APIEndpoint(Endpoint):
         # Update basic information.
         api_config = EndpointConfig(obj=config)
         if self.scale_manager.domain:
-            new_url = "http://api.%s" % self.scale_manager.domain
+            new_url = "https://api.%s" % self.scale_manager.domain
         else:
-            new_url = "http://"
+            new_url = "https://"
         if api_config.url != new_url:
             api_config.url = new_url
             changed = True
@@ -34,6 +36,12 @@ class APIEndpoint(Endpoint):
         addresses.sort()
         if api_config.static_instances != addresses:
             api_config.static_instances = addresses
+            changed = True
+
+        # Update SSL information.
+        api_config = NginxEndpointConfig(section='loadbalancer:nginx', obj=config)
+        if not api_config.ssl:
+            api_config.ssl = True
             changed = True
 
         # Read the configuration.
