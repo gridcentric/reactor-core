@@ -211,21 +211,6 @@ class LdapConnection:
             size += 1
         size -= 1
 
-        # Compute an integer in the range we want.
-        fmt = "%%0%sd" % size
-        maximum = pow(10, size)
-        n = 1
-        while n < maximum:
-            # Find the next unused machine name that fits template
-            name = template.replace("#" * size, fmt % n)
-            if not(name.lower() in machines):
-                break
-            n = n + 1
-
-            # Fail out if we've run out of machine names.
-            if n == maximum:
-                return False
-
         # Generate a password.
         password = generate_password()
         quoted_password = '"' + password + '"'
@@ -233,33 +218,76 @@ class LdapConnection:
         utf_quoted_password = quoted_password.encode('utf-16-le')
         base64_password = base64.b64encode(utf_password)
 
-        # Generate the queries for creating the account.
-        # NOTE: We aggressively cast here to ensure that
-        # all the values are bare strings, not unicode.
-        # The python ldap library tends to throw up all
-        # over the place when it gets some unicode values.
-        new_record = {}
-        new_record.update(COMPUTER_RECORD.items())
-        new_record['cn']             = str(name.upper())
-        new_record['description']    = str('')
-        new_record['dNSHostName']    = str('%s.%s' % (name, self.domain))
-        new_record['sAMAccountName'] = str('%s$' % name)
-        new_record['servicePrincipalName'] = [
-            str('HOST/%s' % name.upper()),
-            str('HOST/%s.%s' % (name, self.domain)),
-            str('TERMSRV/%s' % name.upper()),
-            str('TERMSRV/%s.%s' % (name, self.domain)),
-            str('RestrictedKrbHost/%s' % name.upper()),
-            str('RestrictedKrbHost/%s.%s' % (name, self.domain))
-        ]
-        new_record['unicodePwd'] = str(utf_quoted_password)
-        new_record['userAccountControl'] = str('4096') # Enable account.
+        # To create our new machine, we use a loop retry if we get an
+        # exception indicating that the chosen name already exists.
+        # This structure is for the following reasons:
+        #
+        # - In ActiveDirectory, Organizational Units (OU) are for
+        # organizing and applying different policies to different
+        # groups.  Names of users and machines must be unique under
+        # the entire domain, regardless of their OU placement.  Since
+        # our machine list query is only under this OU (optimistic),
+        # our machine name create may still fail if there is another
+        # machine with the same name somewhere else in the domain.
+        #
+        # - In the machine list query, we do not query the entire list
+        # of all machines in the domain because (1) the list can be
+        # huge in a large domain and take a significant amount of time
+        # to query, and (2) the credentials used may only have access
+        # to this OU and not be able to query all names in the domain.
+        #
+        # - The AD server is the database authority providing atomic
+        # transactions, so this loop protects against possible races
+        # to create the same name.
+        n = 1
+        while True:
+            # Compute an integer in the range we want.
+            fmt = "%%0%sd" % size
+            maximum = pow(10, size)
+            while n < maximum:
+                # Find the next unused machine name that fits template
+                name = template.replace("#" * size, fmt % n)
+                if not(name.lower() in machines):
+                    break
+                n = n + 1
 
-        descr = self._machine_description(name)
-        connection = self._open()
+                # Fail out if we've run out of machine names.
+                if n == maximum:
+                    return False
 
-        # Create the new account.
-        connection.add_s(descr, modlist.addModlist(new_record))
+            try:
+                # Generate the queries for creating the account.
+                # NOTE: We aggressively cast here to ensure that
+                # all the values are bare strings, not unicode.
+                # The python ldap library tends to throw up all
+                # over the place when it gets some unicode values.
+                new_record = {}
+                new_record.update(COMPUTER_RECORD.items())
+                new_record['cn']             = str(name.upper())
+                new_record['description']    = str('')
+                new_record['dNSHostName']    = str('%s.%s' % (name, self.domain))
+                new_record['sAMAccountName'] = str('%s$' % name)
+                new_record['servicePrincipalName'] = [
+                    str('HOST/%s' % name.upper()),
+                    str('HOST/%s.%s' % (name, self.domain)),
+                    str('TERMSRV/%s' % name.upper()),
+                    str('TERMSRV/%s.%s' % (name, self.domain)),
+                    str('RestrictedKrbHost/%s' % name.upper()),
+                    str('RestrictedKrbHost/%s.%s' % (name, self.domain))
+                    ]
+                new_record['unicodePwd'] = str(utf_quoted_password)
+                new_record['userAccountControl'] = str('4096') # Enable account.
+
+                descr = self._machine_description(name)
+                connection = self._open()
+
+                # Create the new account.
+                connection.add_s(descr, modlist.addModlist(new_record))
+            except ldap.ALREADY_EXISTS, x:
+                machines[name.lower()] = name.lower()
+                continue # repeat the process, optimistically.
+            # success. don't loop.
+            break
 
         return (name, base64_password)
 
