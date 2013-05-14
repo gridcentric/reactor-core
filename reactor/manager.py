@@ -106,6 +106,7 @@ class ScaleManager(object):
         self.key_to_owned = {}    # Endpoint to ownership.
 
         self.loadbalancers = {}   # Load balancer connections.
+        self.locks = {}           # Load balancer locks.
         self.clouds = {}          # Cloud connections.
 
         # Setup logging.
@@ -202,7 +203,7 @@ class ScaleManager(object):
                 self.remove_endpoint(endpoint_name, unmanage=True)
 
     def update_config(self, config):
-        self.manager_register(config)
+        self.manager_register(config=config)
         self.reload_loadbalancer()
 
     def _endpoint_config_spec(self):
@@ -352,9 +353,17 @@ class ScaleManager(object):
         # fairly sensible __del__ methods when necessary).
         self.loadbalancers = {}
         for name in config.loadbalancers:
+            # Ensure that we have locks for this loadbalancer.
+            if not name in self.locks:
+                self.locks[name] = lb_connection.Locks(name, scale_manager=self)
+
+            # Create the load balancer itself.
             self.loadbalancers[name] = \
                 lb_connection.get_connection( \
-                    name, config=config, scale_manager=self)
+                    name,
+                    config=config,
+                    domain=self.domain,
+                    locks=self.locks[name])
 
     @locked
     def _setup_cloud_connections(self, config):
@@ -371,24 +380,29 @@ class ScaleManager(object):
         # Try to find a matching cloud connection, or return an unconfigured stub.
         return self.clouds.get(name, cloud_connection.CloudConnection(name))
 
-    def manager_register(self, config=None):
+    def manager_register(self, config=None, domain=None):
         # Figure out our global IPs.
         logging.info("Manager %s has key %s." % (str(self.names), self.uuid))
 
+        # Make sure we reload the domain when required.
+        # NOTE: This will not call reload_domain.
+        if domain is None:
+            self.zk_conn.clear_watch_fn(self.reload_domain)
+            self.domain = self.zk_conn.watch_contents(paths.domain(),
+                                                      self.reload_domain,
+                                                      default_value=self.domain)
+        else:
+            self.domain = domain
+
+        # Reconfigure the manager (may be None i.e. default).
         manager_config = self._configure(config)
         self._register_manager_ips(manager_config.ips)
         self._determine_manager_keys(manager_config.keys)
         self._select_endpoints()
 
-        # Reload the domain.
-        self.reload_domain(self.zk_conn.watch_contents(\
-                                paths.domain(),
-                                self.reload_domain,
-                                default_value=self.domain))
-
     @locked
     def reload_domain(self, domain):
-        self.domain = domain or ""
+        self.manager_register(domain=domain)
         self.reload_loadbalancer()
 
     @locked
@@ -575,8 +589,8 @@ class ScaleManager(object):
         self.zk_conn.delete(paths.endpoint_ip_metrics(endpoint_name, ip))
         self.zk_conn.delete(paths.confirmed_ip(endpoint_name, ip))
         self.zk_conn.delete(paths.ip_address(ip))
-        for lb in self.loadbalancers.values():
-            lb._forget_ip(ip)
+        for lock in self.locks.values():
+            lock.forget_ip(ip)
 
     @locked
     def confirm_ip(self, endpoint_name, ip):
