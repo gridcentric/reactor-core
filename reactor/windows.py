@@ -126,10 +126,10 @@ class LdapConnection:
             return "%s,%s" % (ou, dom)
 
     @_wrap_and_retry
-    def list_machines(self, name=None):
+    def list_machines(self, name=None, attrs=COMPUTER_ATTRS):
         filter   = '(objectclass=computer)'
         desc     = self._machine_description(name)
-        machines = self._open().search_s(desc, ldap.SCOPE_SUBTREE, filter, COMPUTER_ATTRS)
+        machines = self._open().search_s(desc, ldap.SCOPE_SUBTREE, filter, attrs)
         rval     = {}
 
         # Synthesize the machines into a simple form.
@@ -198,7 +198,9 @@ class LdapConnection:
 
     @_wrap_and_retry
     def create_machine(self, template):
-        machines = self.list_machines()
+        # we only care about machine names, so limit the attributes
+        # set returned, for performance.
+        machines = self.list_machines(attrs=['cn'])
         index = template.find("#")
         if index < 0:
             return False
