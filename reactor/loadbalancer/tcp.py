@@ -66,11 +66,11 @@ class Accept:
         return fork_and_exec(cmd, child_fds=self.sock.fileno())
 
 class ConnectionConsumer(threading.Thread):
-    def __init__(self, connection, producer):
+    def __init__(self, locks, producer):
         threading.Thread.__init__(self)
         self.daemon = True
         self.execute = True
-        self.connection = connection
+        self.locks = locks
         self.producer = producer
         self.ports = {}
         self.cond = threading.Condition()
@@ -101,7 +101,7 @@ class ConnectionConsumer(threading.Thread):
 
             # Find a backend IP (exclusive or not).
             if exclusive:
-                ip = self.connection._find_unused_ip(ips)
+                ip = self.locks.find_unused_ip(ips)
             else:
                 ip = ips[random.randint(0, len(ips)-1)]
 
@@ -268,15 +268,15 @@ class Connection(LoadBalancerConnection):
     producer = None
     consumer = None
 
-    def __init__(self, name, config, scale_manager):
-        LoadBalancerConnection.__init__(self, name, config, scale_manager)
+    def __init__(self, **kwargs):
+        LoadBalancerConnection.__init__(self, **kwargs)
         self.portmap = {}
         self.tracked = {}
         self.active = {}
 
         self.producer = ConnectionProducer()
         self.producer.start()
-        self.consumer = ConnectionConsumer(self, self.producer)
+        self.consumer = ConnectionConsumer(self.locks, self.producer)
         self.consumer.start()
 
     def __del__(self):
@@ -340,7 +340,7 @@ class Connection(LoadBalancerConnection):
         active_connections = connection_count()
         kill_active = []
         forget_active = []
-        locked_ips = self._list_ips() or []
+        locked_ips = self.locks.list_ips() or []
 
         for connection_list in self.tracked.values():
 
@@ -370,7 +370,7 @@ class Connection(LoadBalancerConnection):
             self._scale_manager.unregister_ip(kill_active)
         if forget_active:
             for ip in forget_active:
-                self._forget_ip(ip)
+                self.locks.forget_ip(ip)
             self.consumer.flush()
 
         return records

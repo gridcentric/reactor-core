@@ -154,8 +154,8 @@ class Connection(LoadBalancerConnection):
     _MANAGER_CONFIG_CLASS = NginxManagerConfig
     _ENDPOINT_CONFIG_CLASS = NginxEndpointConfig
 
-    def __init__(self, name, config, scale_manager):
-        LoadBalancerConnection.__init__(self, name, config, scale_manager)
+    def __init__(self, **kwargs):
+        LoadBalancerConnection.__init__(self, **kwargs)
         self.tracked = {}
         template_file = os.path.join(os.path.dirname(__file__), 'nginx.template')
         self.template = Template(filename=template_file)

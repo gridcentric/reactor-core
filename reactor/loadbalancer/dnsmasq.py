@@ -9,15 +9,18 @@ from reactor.loadbalancer.netstat import connection_count
 
 class DnsmasqManagerConfig(Config):
 
-    config_path = Config.string(default="/etc/dnsmasq.d")
-    hosts_path = Config.string(default="/etc/hosts.reactor")
+    config_path = Config.string(default="/etc/dnsmasq.d", \
+        description="The configuration directory to insert base configuration.")
+
+    hosts_path = Config.string(default="/etc/hosts.reactor", \
+        description="The directory in which to generate site configurations.")
 
 class Connection(LoadBalancerConnection):
 
     _MANAGER_CONFIG_CLASS = DnsmasqManagerConfig
 
-    def __init__(self, name, config, scale_manager):
-        LoadBalancerConnection.__init__(self, name, config, scale_manager)
+    def __init__(self, **kwargs):
+        LoadBalancerConnection.__init__(self, **kwargs)
         template_file = os.path.join(os.path.dirname(__file__),'dnsmasq.template')
         self.template = Template(filename=template_file)
         self.ipmappings = {}
@@ -65,11 +68,8 @@ class Connection(LoadBalancerConnection):
                 hosts.write("%s %s\n" % (address, name))
         hosts.close()
 
-        # Make sure we have a domain.
-        domain = self._scale_manager.domain
-
         # Write out our configuration template.
-        conf = self.template.render(domain=domain,
+        conf = self.template.render(domain=self.domain,
                                     hosts=self._manager_config().hosts_path)
 
         # Write out the config file.
