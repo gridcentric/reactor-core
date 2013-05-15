@@ -32,6 +32,7 @@ dist_install:
 	@mkdir -p $(DESTDIR)
 	@cd $(DESTDIR) && tar -zxvf $(CURDIR)/dist/reactor-$(PACKAGE_VERSION).bdist.tar.gz
 	@mv $(DESTDIR)/usr/local/* $(DESTDIR)/usr; rmdir $(DESTDIR)/usr/local
+	@rsync -ruv etc/ $(DESTDIR)/etc
 
 clean:
 	@rm -rf dist build reactor.egg-info

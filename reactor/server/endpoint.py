@@ -19,10 +19,7 @@ class APIEndpoint(Endpoint):
 
         # Update basic information.
         api_config = EndpointConfig(obj=config)
-        if self.scale_manager.domain:
-            new_url = "https://api.%s" % self.scale_manager.domain
-        else:
-            new_url = "https://"
+        new_url = "http://"
         if api_config.url != new_url:
             api_config.url = new_url
             changed = True

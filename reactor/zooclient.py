@@ -31,9 +31,6 @@ class ReactorClient(object):
     def get_manager_key(self, manager):
         return self.zk_conn.read(paths.manager_ip(manager))
 
-    def get_manager_log(self, manager):
-        return self.zk_conn.read(paths.manager_log(manager))
-
     def list_managers_configured(self):
         return self.zk_conn.list_children(paths.manager_configs())
 
@@ -141,9 +138,3 @@ class ReactorClient(object):
             self.zk_conn.write(paths.auth_hash(), auth_hash)
         else:
             self.zk_conn.delete(paths.auth_hash())
-
-    def domain(self):
-        return self.zk_conn.read(paths.domain())
-
-    def set_domain(self, domain):
-        self.zk_conn.write(paths.domain(), domain)

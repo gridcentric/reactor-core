@@ -5,8 +5,6 @@ import json
 import os
 import uuid
 
-from pyramid.authentication import AuthTktAuthenticationPolicy
-from pyramid.authorization import ACLAuthorizationPolicy
 from pyramid.httpexceptions import HTTPFound
 from pyramid.response import Response
 from pyramid.security import remember, forget, authenticated_userid
@@ -39,18 +37,11 @@ class ServerApi(ReactorApi):
         self.config.add_route('manager-info', '/manager')
         self.config.add_view(self.manager_info, route_name='manager-info')
 
-        # Set up auth-ticket authentication
-        self.config.set_authentication_policy(
-            AuthTktAuthenticationPolicy(
-                'gridcentricreactor'))
-        self.config.set_authorization_policy(
-            ACLAuthorizationPolicy())
-
-        # Add a login page
+        # Add a login page.
         self.config.add_route('admin-login', '/admin/login')
         self.config.add_view(self.admin_login, route_name='admin-login')
 
-        # Add a logout page
+        # Add a logout page.
         self.config.add_route('admin-logout', '/admin/logout')
         self.config.add_view(self.admin_logout, route_name='admin-logout')
 
@@ -59,10 +50,10 @@ class ServerApi(ReactorApi):
         # /admin/assets could be matched by either the admin-asset or
         # admin-object routes (and we want them to go to admin-asset,
         # so that they can be fetched even in unathenticated contexts).
-        self.config.add_route('admin-home',   '/admin/')
+        self.config.add_route('admin-home', '/admin/')
         self.config.add_route('admin-passwd', '/admin/passwd')
-        self.config.add_route('admin-asset',  '/admin/assets/{object_name:.*}')
-        self.config.add_route('admin-page',   '/admin/{page_name}')
+        self.config.add_route('admin-asset', '/admin/assets/{object_name:.*}')
+        self.config.add_route('admin-page', '/admin/{page_name}')
         self.config.add_route('admin-object', '/admin/{page_name}/{object_name:.*}')
         self.config.add_view(self.admin, route_name='admin-home')
         self.config.add_view(self.admin_passwd, route_name='admin-passwd')
@@ -108,7 +99,8 @@ class ServerApi(ReactorApi):
             referrer = '/admin/'
         came_from = request.params.get('came_from', referrer)
         message = ''
-        # See if the login form was submitted
+
+        # See if the login form was submitted.
         if 'auth_key' in request.params:
             auth_key = request.params['auth_key']
             if self.check_admin_auth_key(auth_key):
@@ -117,7 +109,7 @@ class ServerApi(ReactorApi):
                                  headers = headers)
             message = 'Incorrect password.'
 
-        # Credentials not submitted or incorrect, render login page
+        # Credentials not submitted or incorrect, render login page.
         filename = os.path.join(os.path.dirname(__file__), 'admin', 'login.html')
         lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
         lookup = TemplateLookup(directories=[lookup_path])
@@ -127,6 +119,7 @@ class ServerApi(ReactorApi):
                    'came_from' : came_from,
                    'user' : '',
                    'loggedin' : False }
+
         body = template.render(**kwargs)
         return Response(body=body)
 
@@ -135,8 +128,7 @@ class ServerApi(ReactorApi):
         Logs the admin user out.
         """
         headers = forget(request)
-        return HTTPFound(location = route_url('admin-home', request),
-                         headers = headers)
+        return HTTPFound(location=route_url('admin-home', request), headers=headers)
 
     @connected
     @authorized_admin_only
@@ -149,8 +141,10 @@ class ServerApi(ReactorApi):
             logging.info("Updating API Servers.")
             self.reconnect(api_servers)
             return Response()
+
         elif request.method == 'GET':
             return Response(body=json.dumps({ "api_servers" : self.zk_servers }))
+
         else:
             return Response(status=403)
 
@@ -188,6 +182,7 @@ class ServerApi(ReactorApi):
                 page_data = exceptions.html_error_template().render()
 
             return Response(body=page_data)
+
         else:
             return Response(status=403)
 
@@ -209,11 +204,13 @@ class ServerApi(ReactorApi):
 
             # Check for supported types.
             ext = page_name.split('.')[-1]
-            mimemap = { "js"   : "application/json",
-                        "png"  : "image/png",
-                        "gif"  : "image/gif",
-                        "html" : "text/html",
-                        "css"  : "text/css" }
+            mimemap = {
+                "js": "application/json",
+                "png": "image/png",
+                "gif": "image/gif",
+                "html": "text/html",
+                "css": "text/css"
+            }
 
             return Response(body=page_data,
                             headers={"Content-type" : mimemap[ext]})
@@ -224,23 +221,27 @@ class ServerApi(ReactorApi):
     @authorized_admin_only(forbidden_view='self.admin_login')
     def admin_passwd(self, context, request):
         """
-        Sets the admin password
+        Sets the admin password.
         """
-        # See if the password form was submitted
+
+        # See if the password form was submitted.
         if 'auth_key' in request.params:
-            # Set the new password
+            # Set the new password.
             auth_key = request.params['auth_key']
             self.client.set_auth_hash(self._create_admin_auth_token(auth_key))
-            # Route user back to the home screen.
-            return HTTPFound(location = route_url('admin-home', request))
 
-        # New password not submitted, render password page
+            # Route user back to the home screen.
+            return HTTPFound(location=route_url('admin-home', request))
+
+        # New password not submitted, render password page.
         filename = os.path.join(os.path.dirname(__file__), 'admin', 'passwd.html')
         lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
         lookup = TemplateLookup(directories=[lookup_path])
         template = Template(filename=filename, lookup=lookup)
-        kwargs = { 'user' : 'admin',
-                   'loggedin' : authenticated_userid(request) != None }
+        kwargs = {
+            'user': 'admin',
+            'loggedin': authenticated_userid(request) != None
+        }
         body = template.render(**kwargs)
         return Response(body=body)
 
@@ -255,7 +256,7 @@ class ServerApi(ReactorApi):
                 self.manager.run()
             except:
                 error = traceback.format_exc()
-                logging.error("An unrecoverable error occurred: %s" % (error))
+                logging.error("An unrecoverable error occurred: %s" % error)
 
         if not(self.manager_running):
             self.manager = ReactorScaleManager(zk_servers)

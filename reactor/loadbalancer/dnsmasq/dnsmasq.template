@@ -3,7 +3,3 @@ no-resolv
 no-hosts
 addn-hosts=${hosts}
 expand-hosts
-% if domain:
-domain-needed
-domain=${domain}
-% endif

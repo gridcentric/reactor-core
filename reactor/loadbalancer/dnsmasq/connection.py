@@ -69,8 +69,7 @@ class Connection(LoadBalancerConnection):
         hosts.close()
 
         # Write out our configuration template.
-        conf = self.template.render(domain=self.domain,
-                                    hosts=self._manager_config().hosts_path)
+        conf = self.template.render(hosts=self._manager_config().hosts_path)
 
         # Write out the config file.
         config_file = file(os.path.join(self._manager_config().config_path, "reactor.conf"), 'wb')

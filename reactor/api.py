@@ -6,6 +6,8 @@ import traceback
 from pyramid.config import Configurator
 from pyramid.response import Response
 from pyramid.security import authenticated_userid
+from pyramid.authentication import AuthTktAuthenticationPolicy
+from pyramid.authorization import ACLAuthorizationPolicy
 
 from reactor.endpoint import EndpointConfig
 from reactor.endpoint import State
@@ -107,72 +109,80 @@ def connected(request_handler):
 
 class ReactorApi:
 
+    AUTH_SALT = 'gridcentricreactor'
+
     def __init__(self, zk_servers):
         self.zk_servers = zk_servers
         self.client = None
         self.config = Configurator()
 
+        # Set up auth-ticket authentication.
+        self.config.set_authentication_policy(
+            AuthTktAuthenticationPolicy(
+                self.AUTH_SALT))
+        self.config.set_authorization_policy(
+            ACLAuthorizationPolicy())
+
+        # Setup basic version route.
         self.config.add_route('version', '/')
         self.config.add_view(self.version, route_name='version')
 
-        self.config.add_route('auth-key', '/v1.0/auth_key')
-        self.config.add_view(self.set_auth_key, route_name='auth-key')
+        self._add('auth-key', ['1.0', '1.1'],
+                  'auth_key', self.set_auth_key)
 
-        self.config.add_route('domain-action', '/v1.0/domain')
-        self.config.add_view(self.handle_domain_action, route_name='domain-action')
+        self._add('domain-action', ['1.0'],
+                  'domain', self.handle_domain_action)
 
-        self.config.add_route('register-implicit', '/v1.0/register')
-        self.config.add_view(self.register_ip_implicit, route_name='register-implicit')
-        self.config.add_route('register', '/v1.0/register/{endpoint_ip}')
-        self.config.add_view(self.register_ip_address, route_name='register')
+        self._add('register-implicit', ['1.0', '1.1'],
+                  'register', self.register_ip_implicit)
 
-        self.config.add_route('unregister-implicit', '/v1.0/unregister')
-        self.config.add_route('unregister', '/v1.0/unregister/{endpoint_ip}')
-        self.config.add_view(self.unregister_ip_address, route_name='unregister-implicit')
-        self.config.add_view(self.unregister_ip_address, route_name='unregister')
+        self._add('register', ['1.0', '1.1'],
+                  'register/{endpoint_ip}', self.register_ip_address)
 
-        self.config.add_route('manager-action', '/v1.0/managers/{manager}')
-        self.config.add_view(self.handle_manager_action, route_name='manager-action')
+        self._add('unregister-implicit',  ['1.0', '1.1'],
+                  'unregister', self.unregister_ip_address)
 
-        self.config.add_route('manager-list', '/v1.0/managers')
-        self.config.add_view(self.list_managers, route_name='manager-list')
+        self._add('unregister',  ['1.0', '1.1'],
+                  'unregister/{endpoint_ip}', self.unregister_ip_address)
 
-        self.config.add_route('log-action', '/v1.0/logs/{manager}')
-        self.config.add_view(self.handle_log_action, route_name='log-action')
+        self._add('manager-action',  ['1.0', '1.1'],
+                  'managers/{manager}', self.handle_manager_action)
 
-        self.config.add_route('endpoint-action', '/v1.0/endpoints/{endpoint_name}')
-        self.config.add_view(self.handle_endpoint_action, route_name='endpoint-action')
+        self._add('manager-list',  ['1.0', '1.1'],
+                  'managers', self.list_managers)
 
-        self.config.add_route('endpoint-list', '/v1.0/endpoints')
-        self.config.add_view(self.list_endpoints, route_name='endpoint-list')
+        self._add('endpoint-action',  ['1.0', '1.1'],
+                  'endpoints/{endpoint_name}', self.handle_endpoint_action)
 
-        self.config.add_route('endpoint-ip-list',
-            '/v1.0/endpoints/{endpoint_name}/ips')
-        self.config.add_route('endpoint-ip-list-implicit',
-            '/v1.0/endpoint/ips')
-        self.config.add_view(self.list_endpoint_ips, route_name='endpoint-ip-list')
-        self.config.add_view(self.list_endpoint_ips, route_name='endpoint-ip-list-implicit')
+        self._add('endpoint-list',  ['1.0', '1.1'],
+                  'endpoints', self.list_endpoints)
 
-        self.config.add_route('metric-action',
-            '/v1.0/endpoints/{endpoint_name}/metrics')
-        self.config.add_route('metric-action-implicit',
-            '/v1.0/endpoint/metrics')
-        self.config.add_view(self.handle_metric_action, route_name='metric-action')
-        self.config.add_view(self.handle_metric_action, route_name='metric-action-implicit')
+        self._add('endpoint-ip-list', ['1.0', '1.1'],
+                  'endpoints/{endpoint_name}/ips', self.list_endpoint_ips)
+        self._add('endpoint-ip-list-implicit', ['1.0', '1.1'],
+                  'endpoint/ips', self.list_endpoint_ips)
 
-        self.config.add_route('metric-ip-action',
-            '/v1.0/endpoints/{endpoint_name}/metrics/{endpoint_ip}')
-        self.config.add_route('metric-ip-action-implicit',
-            '/v1.0/endpoint/metrics/{endpoint_ip}')
-        self.config.add_view(self.handle_metric_action, route_name='metric-ip-action')
-        self.config.add_view(self.handle_metric_action, route_name='metric-ip-action-implicit')
+        self._add('metric-action', ['1.0', '1.1'],
+                  'endpoints/{endpoint_name}/metrics', self.handle_metric_action)
+        self._add('metric-action-implicit', ['1.0', '1.1'],
+                  'endpoint/metrics', self.handle_metric_action)
 
-        self.config.add_route('endpoint-state-action',
-            '/v1.0/endpoints/{endpoint_name}/state')
-        self.config.add_route('endpoint-state-action-implicit',
-            '/v1.0/endpoint/state')
-        self.config.add_view(self.handle_state_action, route_name='endpoint-state-action')
-        self.config.add_view(self.handle_state_action, route_name='endpoint-state-action-implicit')
+        self._add('metric-ip-action', ['1.0', '1.1'],
+                  'endpoints/{endpoint_name}/metrics/{endpoint_ip}', self.handle_metric_action)
+        self._add('metric-ip-action-implicit', ['1.0', '1.1'],
+                  'endpoint/metrics/{endpoint_ip}', self.handle_metric_action)
+
+        self._add('endpoint-state-action', ['1.0', '1.1'],
+                  'endpoints/{endpoint_name}/state', self.handle_state_action)
+        self._add('endpoint-state-action-implicit', ['1.0', '1.1'],
+                  'endpoint/state', self.handle_state_action)
+
+    def _add(self, name, versions, path, fn):
+        for version in versions:
+            route_name = "%s:%s" % (version, name)
+            url_path = "/v%s/%s" % (version, path)
+            self.config.add_route(route_name, url_path)
+            self.config.add_view(fn, route_name=route_name)
 
     def reconnect(self, zk_servers):
         self.disconnect()
@@ -238,9 +248,8 @@ class ReactorApi:
 
     def _extract_remote_ip(self, context, request):
         # TODO(dscannell): The remote ip address is taken from the
-        # request.environ['REMOTE_ADDR'].  This value may need to be added by
-        # some WSGI middleware depending on what webserver is fronting this
-        # app.
+        # request.environ['REMOTE_ADDR']. This value may need to be added by
+        # some WSGI middleware depending on what webserver fronts this app.
         ip_address = request.environ.get('REMOTE_ADDR', "")
         forwarded_for = request.headers.get('X-Forwarded-For', "")
 
@@ -277,8 +286,8 @@ class ReactorApi:
     def _create_admin_auth_token(self, auth_key):
         if auth_key:
             # NOTE: We use a fixed salt and force sha1 for the admin token.
-            salt = 'gridcentricreactor'
-            return hashlib.sha1("%s%s" % (salt, auth_key)).hexdigest()
+            # This fixed salt matches the authentication policy used above.
+            return hashlib.sha1("%s%s" % (self.AUTH_SALT, auth_key)).hexdigest()
         else:
             return None
 
@@ -290,9 +299,7 @@ class ReactorApi:
     def _create_endpoint_auth_token(self, auth_key, auth_salt, algo):
         if auth_salt == None:
             auth_salt = ""
-
         salted = "%s%s" % (auth_salt, auth_key)
-
         if not algo:
             return salted
         else:
@@ -309,13 +316,10 @@ class ReactorApi:
         """
         Get the version implemented by this API.
         """
-
         if request.method == "GET":
-            response = Response(body=json.dumps({'version':'1.0'}))
+            return Response(body=json.dumps({'version': '1.1'}))
         else:
-            response = Response(status=403)
-
-        return response
+            return Response(status=403)
 
     @connected
     @authorized_admin_only
@@ -323,40 +327,26 @@ class ReactorApi:
         """
         Updates the auth key in the system.
         """
-        response = Response()
-
         if request.method == "POST" or request.method == "PUT":
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
             self.client.set_auth_hash(self._create_admin_auth_token(auth_key))
-
+            return Response()
         else:
-            response = Response(status=403)
-
-        return response
+            return Response(status=403)
 
     @connected
     @authorized_admin_only
     def handle_domain_action(self, context, request):
         """
         Updates the domain in the system.
+        NOTE: No longer supported. This stub is provided for the
+              v1.0 API and will return the empty domain.
         """
-        response = Response()
-
         if request.method == "GET":
-            logging.info("Retrieving Domain.")
-            domain = self.client.domain()
-            response = Response(body=json.dumps({'domain':domain}))
-
-        elif request.method == "POST" or request.method == "PUT":
-            domain = json.loads(request.body)['domain']
-            logging.info("Updating Domain.")
-            self.client.set_domain(domain)
-
+            return Response(body=json.dumps({'domain':None}))
         else:
-            response = Response(status=403)
-
-        return response
+            return Response(status=403)
 
     def handle_update_manager(self, manager, manager_config):
         self.client.update_manager_config(manager, manager_config)
@@ -371,16 +361,15 @@ class ReactorApi:
         DELETE - Removes the management config.
         """
         manager = request.matchdict['manager']
-        response = Response()
 
         if request.method == "GET":
             logging.info("Retrieving manager %s configuration" % manager)
             config = self.client.get_manager_config(manager)
             if config != None:
                 config['uuid'] = self.client.get_manager_key(manager)
-                response = Response(body=json.dumps(config))
+                return Response(body=json.dumps(config))
             else:
-                response = Response(status=404, body="%s not found" % manager)
+                return Response(status=404, body="%s not found" % manager)
 
         elif request.method == "POST" or request.method == "PUT":
             manager_config = json.loads(request.body)
@@ -392,48 +381,20 @@ class ReactorApi:
             # cannot validate the configuration.
             error = self.handle_update_manager(manager, manager_config)
             if error:
-                response = Response(status=400, body=error)
+                return Response(status=400, body=error)
+            else:
+                return Response()
 
         elif request.method == "DELETE":
             config = self.client.get_manager_config(manager)
             if config != None:
                 self.client.remove_manager_config(manager)
-                response = Response()
+                return Response()
             else:
-                response = Response(status=404, body="%s not found" % manager)
+                return Response(status=404, body="%s not found" % manager)
 
         else:
-            response = Response(status=403)
-
-        return response
-
-    @connected
-    @authorized_admin_only
-    def handle_log_action(self, context, request):
-        """
-        This handles a log action:
-        GET - Reads the logs at the given uuid.
-        """
-        manager = request.matchdict.get('manager', None)
-        response = Response()
-
-        if request.method == "GET":
-            logging.info("Retrieving manager %s logs" % manager)
-
-            if not(manager):
-                response = Response(status=400, body="no manager provided")
-            else:
-                log = self.client.get_manager_log(manager)
-                if log:
-                    manager_log = { 'log' : log }
-                    response = Response(body=json.dumps(manager_log))
-                else:
-                    response = Response(status=404, body="%s not found" % manager)
-
-        else:
-            response = Response(status=403)
-
-        return response
+            return Response(status=403)
 
     @connected
     @authorized_admin_only
@@ -441,16 +402,13 @@ class ReactorApi:
         """
         Returns a list of managers currently running.
         """
-
         if request.method == 'GET':
             configured = self.client.list_managers_configured()
             active = self.client.get_managers_active(full=True)
-            response = Response(body=json.dumps(\
-                        { 'configured': configured, 'active': active }))
+            return Response(body=json.dumps(\
+                {'configured': configured, 'active': active}))
         else:
-            response = Response(status=403)
-
-        return response
+            return Response(status=403)
 
     def handle_update_endpoint(self, endpoint_name, endpoint_config):
         self.client.update_endpoint(endpoint_name, endpoint_config)
@@ -465,19 +423,19 @@ class ReactorApi:
         DELETE - Unmanages the endpoint.
         """
         endpoint_name = request.matchdict['endpoint_name']
-        response = Response()
 
         if request.method == "GET":
             logging.info("Retrieving endpoint %s configuration" % endpoint_name)
             config = self.client.get_endpoint_config(endpoint_name)
             if config != None:
-                response = Response(body=json.dumps(config))
+                return Response(body=json.dumps(config))
             else:
-                response = Response(status=404, body="%s not found" % endpoint_name)
+                return Response(status=404, body="%s not found" % endpoint_name)
 
         elif request.method == "DELETE":
             logging.info("Unmanaging endpoint %s" % (endpoint_name))
             self.client.unmanage_endpoint(endpoint_name)
+            return Response()
 
         elif request.method == "POST" or request.method == "PUT":
             endpoint_config = json.loads(request.body)
@@ -486,12 +444,13 @@ class ReactorApi:
             # As per before in handle_update_manager().
             error = self.handle_update_endpoint(endpoint_name, endpoint_config)
             if error:
-                response = Response(status=400, body=error)
+                return Response(status=400, body=error)
+            else:
+                return Response()
+
         else:
             # Return an unauthorized response.
             return Response(status=401, body="unauthorized")
-
-        return response
 
     @connected
     @authorized
@@ -502,7 +461,6 @@ class ReactorApi:
         """
         endpoint_name = request.matchdict['endpoint_name']
         endpoint_ip = request.matchdict.get('endpoint_ip', None)
-        response = Response()
 
         if request.method == "GET":
             logging.info("Retrieving state for endpoint %s" % endpoint_name)
@@ -518,9 +476,9 @@ class ReactorApi:
                     'active': active or [],
                     'manager': manager or None,
                 }
-                response = Response(body=json.dumps(value))
+                return Response(body=json.dumps(value))
             else:
-                response = Response(status=404, body="%s not found" % endpoint_name)
+                return Response(status=404, body="%s not found" % endpoint_name)
 
         elif request.method == "POST" or request.method == "PUT":
             logging.info("Posting state for endpoint %s" % endpoint_name)
@@ -531,14 +489,12 @@ class ReactorApi:
                 current_state = self.client.get_endpoint_state(endpoint_name)
                 new_state = State.from_action(current_state, state_action.get('action', ''))
                 self.client.set_endpoint_state(endpoint_name, new_state)
-                response = Response()
+                return Response()
             else:
-                response = Response(status=404, body="%s not found" % endpoint_name)
+                return Response(status=404, body="%s not found" % endpoint_name)
 
         else:
-            response = Response(status=403)
-
-        return response
+            return Response(status=403)
 
     @connected
     @authorized
@@ -550,22 +506,20 @@ class ReactorApi:
         """
         endpoint_name = request.matchdict['endpoint_name']
         endpoint_ip = request.matchdict.get('endpoint_ip', None)
-        response = Response()
 
         if request.method == "GET":
             logging.info("Retrieving metrics for endpoint %s" % endpoint_name)
             metrics = self.client.get_endpoint_metrics(endpoint_name)
-            response = Response(body=json.dumps(metrics or {}))
+            return Response(body=json.dumps(metrics or {}))
 
         elif request.method == "POST" or request.method == "PUT":
             metrics = json.loads(request.body)
             logging.info("Updating metrics for endpoint %s" % endpoint_name)
             self.client.set_endpoint_metrics(endpoint_name, metrics, endpoint_ip)
+            return Response()
 
         else:
-            response = Response(status=403)
-
-        return response
+            return Response(status=403)
 
     @connected
     @authorized
@@ -573,12 +527,10 @@ class ReactorApi:
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
-            response = Response(body=json.dumps({'ip_addresses': \
-                self.client.get_endpoint_ip_addresses(endpoint_name)}))
+            return Response(body=json.dumps(\
+                {'ip_addresses': self.client.get_endpoint_ip_addresses(endpoint_name)}))
         else:
-            response = Response(status=403)
-
-        return response
+            return Response(status=403)
 
     @connected
     @authorized_admin_only
@@ -588,11 +540,9 @@ class ReactorApi:
         """
         if request.method == "GET":
             endpoints = self.client.list_managed_endpoints()
-            response = Response(body=json.dumps({'endpoints':endpoints}))
+            return Response(body=json.dumps({'endpoints':endpoints}))
         else:
-            response = Response(status=403)
-
-        return response
+            return Response(status=403)
 
     @connected
     @authorized_admin_only
@@ -605,11 +555,9 @@ class ReactorApi:
             if ip_address:
                 logging.info("New IP address %s has been recieved." % (ip_address))
                 self.client.record_new_ip_address(ip_address)
-            response = Response()
+            return Response()
         else:
-            response = Response(status=403)
-
-        return response
+            return Response(status=403)
 
     @connected
     def register_ip_implicit(self, context, request):
@@ -620,11 +568,9 @@ class ReactorApi:
             ip_address = self._extract_remote_ip(context, request)
             logging.info("New IP address %s has been recieved." % (ip_address))
             self.client.record_new_ip_address(ip_address)
-            response = Response()
+            return Response()
         else:
-            response = Response(status=403)
-
-        return response
+            return Response(status=403)
 
     @connected
     @authorized
@@ -637,8 +583,6 @@ class ReactorApi:
             if ip_address:
                 logging.info("Unregister requested for IP address %s." % (ip_address))
                 self.client.drop_ip_address(ip_address)
-            response = Response()
+            return Response()
         else:
-            response = Response(status=403)
-
-        return response
+            return Response(status=403)

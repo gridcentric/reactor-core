@@ -115,9 +115,6 @@ class ScaleManager(object):
         # The Windows domain connection.
         self.windows = None
 
-        # The reactor domain.
-        self.domain = ""
-
     @locked
     def _connect_to_zookeeper(self):
         # Create a Zookeeper connection.
@@ -360,10 +357,7 @@ class ScaleManager(object):
             # Create the load balancer itself.
             self.loadbalancers[name] = \
                 lb_connection.get_connection( \
-                    name,
-                    config=config,
-                    domain=self.domain,
-                    locks=self.locks[name])
+                    name, config=config, locks=self.locks[name])
 
     @locked
     def _setup_cloud_connections(self, config):
@@ -380,30 +374,15 @@ class ScaleManager(object):
         # Try to find a matching cloud connection, or return an unconfigured stub.
         return self.clouds.get(name, cloud_connection.CloudConnection(name))
 
-    def manager_register(self, config=None, domain=None):
+    def manager_register(self, config=None):
         # Figure out our global IPs.
         logging.info("Manager %s has key %s." % (str(self.names), self.uuid))
 
-        # Make sure we reload the domain when required.
-        # NOTE: This will not call reload_domain.
-        if domain is None:
-            self.zk_conn.clear_watch_fn(self.reload_domain)
-            self.domain = self.zk_conn.watch_contents(paths.domain(),
-                                                      self.reload_domain,
-                                                      default_value=self.domain)
-        else:
-            self.domain = domain
-
-        # Reconfigure the manager (may be None i.e. default).
+        # Configure and load connections.
         manager_config = self._configure(config)
         self._register_manager_ips(manager_config.ips)
         self._determine_manager_keys(manager_config.keys)
         self._select_endpoints()
-
-    @locked
-    def reload_domain(self, domain):
-        self.manager_register(domain=domain)
-        self.reload_loadbalancer()
 
     @locked
     def manager_change(self, managers):

@@ -74,7 +74,7 @@ for api_server in $api_servers; do
             -H 'Content-type: application/json' \
             -d '{}' \
             $api_auth_spec \
-            http://%s:8080/v1.0/managers/$server"
+            http://%s:8080/v1.1/managers/$server"
     done
     sleep 1
 done

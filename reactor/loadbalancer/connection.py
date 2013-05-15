@@ -66,9 +66,8 @@ class Locks(object):
 
 class LoadBalancerConnection(Connection):
 
-    def __init__(self, name, domain="", config=None, locks=None):
+    def __init__(self, name, config=None, locks=None):
         self.locks = locks
-        self.domain = domain
         Connection.__init__(self, object_class="loadbalancer", name=name, config=config)
 
     def clear(self):

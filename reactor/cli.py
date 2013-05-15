@@ -77,13 +77,12 @@ def main_usage():
     print "    managers-configured    List all the configured managers."
     print "    managers-active        List all the active managers."
     print ""
-    print "    configure-manager [ip] Set the configuration for the given manager."
-    print "    show-manager [ip]      Show the current configuration for the manager."
-    print "    show-log <uuid>        Show the log for the given manager."
-    print "    forget-manager <ip>    Remove and forget the given manager."
+    print "    manager-update [ip]    Set the configuration for the given manager."
+    print "    manager-show [ip]      Show the current configuration for the manager."
+    print "    manager-log <uuid>     Show the log for the given manager."
+    print "    manager-forget <ip>    Remove and forget the given manager."
     print ""
     print "    passwd [password]      Updates the API's password."
-    print "    domain [domain]        Get or set the domain."
     print ""
     print "    runserver [names...]   Run the scale manager server."
     print "    runapi                 Runs the API server."
@@ -168,7 +167,7 @@ def main():
             endpoint_name = get_arg(1)
             api_client = get_api_client()
             config = api_client.get_endpoint_config(endpoint_name)
-            print json.dumps(config)
+            print json.dumps(config, indent=2)
 
         elif command == "managers-configured":
             api_client = get_api_client()
@@ -182,11 +181,8 @@ def main():
             for (ip, key) in managers.items():
                 print ip, key
     
-        elif command == "update-manager":
-            if len(args) > 1:
-                manager = get_arg(1)
-            else:
-                manager = None
+        elif command == "manager-update":
+            manager = get_arg(1)
             new_conf = ""
             for line in sys.stdin.readlines():
                 new_conf += line
@@ -197,23 +193,19 @@ def main():
             config = fromini(config_value.getvalue())
             api_client.update_manager(manager, config)
 
-        elif command == "show-manager":
-            if len(args) > 1:
-                manager = get_arg(1)
-            else:
-                manager = None
-    
+        elif command == "manager-show":
+            manager = get_arg(1)
             api_client = get_api_client()
             config = api_client.get_manager_config(manager)
-            print json.dumps(config)
+            print json.dumps(config, indent=2)
 
-        elif command == "show-log":
+        elif command == "manager-log":
             manager = get_arg(1)
             api_client = get_api_client()
             log = api_client.get_manager_log(manager)
             sys.stdout.write(log)
 
-        elif command == "forget-manager":
+        elif command == "manager-forget":
             manager = get_arg(1)
             api_client = get_api_client()
             api_client.remove_manager_config(manager)
@@ -238,7 +230,8 @@ def main():
         elif command == "state":
             api_client = get_api_client()
             endpoint_name = get_arg(1)
-            print json.dumps(api_client.get_endpoint_state(endpoint_name))
+            state = api_client.get_endpoint_state(endpoint_name)
+            print json.dumps(state, indent=2)
     
         elif command == "start" or command == "stop" or command == "pause": 
             api_client = get_api_client()
@@ -268,14 +261,6 @@ def main():
     
             api_client = get_api_client()
             api_client.update_api_key(new_password)
-    
-        elif command == "domain":
-            api_client = get_api_client()
-            if len(args) > 1:
-                domain = get_arg(1)
-                api_client.set_domain(domain)
-            else:
-                print api_client.get_domain()
     
         elif command == "runserver":
     

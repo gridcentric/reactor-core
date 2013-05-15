@@ -21,17 +21,21 @@ admin_files = all_files("reactor/server/admin")
 
 packages=[
     "reactor",
-    "reactor.loadbalancer",
     "reactor.zookeeper",
     "reactor.metrics",
     "reactor.cloud",
+    "reactor.loadbalancer",
+    "reactor.loadbalancer.nginx",
+    "reactor.loadbalancer.dnsmasq",
+    "reactor.loadbalancer.tcp",
     "reactor.server",
     "reactor.server.admin",
     "reactor.demo",
 ] + admin_files.keys()
 
 package_data = {
-    "reactor.loadbalancer" : ["nginx.template", "dnsmasq.template", "reactor.conf"],
+    "reactor.loadbalancer.nginx" : ["nginx.template", "reactor.conf"],
+    "reactor.loadbalancer.dnsmasq" : ["dnsmasq.template"],
     "reactor.demo" : ["reactor.png"]
 }
 package_data.update(admin_files.items())

@@ -21,10 +21,7 @@ class ReactorScaleManager(ScaleManager):
     def start_params(self, endpoint=None):
         # Pass a parameter pointed back to this instance.
         params = super(ReactorScaleManager, self).start_params(endpoint=endpoint)
-        if self.domain:
-            params["reactor"] = "api.%s" % self.domain
-        else:
-            params["reactor"] = ips.find_global()[0]
+        params["reactor"] = ips.find_global()[0]
 
         return params
 
@@ -76,9 +73,3 @@ class ReactorScaleManager(ScaleManager):
             self.create_endpoint(endpoint_name)
         else:
             super(ReactorScaleManager, self).remove_endpoint(endpoint_name, unmanage=unmanage)
-
-    def reload_domain(self, domain):
-        super(ReactorScaleManager, self).reload_domain(domain)
-        if self.api_endpoint:
-            # Make sure that the API endpoint reloads appropriately.
-            self.api_endpoint.api_config()
