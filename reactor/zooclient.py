@@ -2,6 +2,7 @@ import json
 
 from reactor.endpoint import EndpointConfig
 from reactor.zookeeper.connection import ZookeeperConnection
+from reactor.config import fromstr
 import reactor.zookeeper.paths as paths
 
 class ReactorClient(object):
@@ -81,10 +82,7 @@ class ReactorClient(object):
         return self.zk_conn.read(paths.endpoint_manager(endpoint_name))
 
     def get_endpoint_config(self, endpoint_name):
-        try:
-            return json.loads(self.zk_conn.read(paths.endpoint(endpoint_name)))
-        except:
-            return {}
+        return fromstr(self.zk_conn.read(paths.endpoint(endpoint_name)))
 
     def update_manager_config(self, manager, config):
         self.zk_conn.write(paths.manager_config(manager), json.dumps(config))

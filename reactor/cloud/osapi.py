@@ -19,15 +19,19 @@ class BaseOsEndpointConfig(Config):
     # occur (and hopefully that will be obvious).
     auth_url = Config.string(default="http://localhost:5000/v2.0/", order=0,
         validate=lambda self: self._novaclient().flavors.list(),
+        alternates=["authurl"],
         description="The OpenStack authentication URL (OS_AUTH_URL).")
 
     username = Config.string(default="admin", order=1,
+        alternates=["user"],
         description="The user for authentication (OS_USERNAME).")
 
     password = Config.string(default="admin", order=1,
+        alternates=["apikey"],
         description="The api key or password (OS_PASSWORD).")
 
     tenant_name = Config.string(default="admin", order=1,
+        alternates=["project"],
         description="The project or tenant (OS_TENANT_NAME).")
 
     region_name = Config.string(order=1,

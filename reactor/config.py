@@ -10,7 +10,8 @@ ConfigSpec = namedtuple("ConfigSpec", \
      "normalize",
      "validate",
      "order",
-     "description"])
+     "description",
+     "alternates"])
 
 class Config(object):
 
@@ -20,6 +21,7 @@ class Config(object):
         self._setters = {}
         self._deleters = {}
         self._validation = {}
+        self._alternates = {}
 
         # The underlying object is the magic of the config.
         # It contains essentially a specification of all the available
@@ -79,7 +81,16 @@ class Config(object):
             self._setters[k] = setx
             self._deleters[k] = delx
             self._validation[k] = spec.validate
+            if spec.alternates:
+                for alt in spec.alternates:
+                    self._alternates[alt] = k
             defaults[k] = spec.default
+
+        for k in self._obj.get(self._section, {}).keys():
+            if k in self._alternates:
+                # Move the underlying spec.
+                self._obj[self._section][self._alternates[k]] = self._obj[self._section][k]
+                del self._obj[self._section][k]
 
         for k,v in defaults.items():
             if len(self._get_obj(k)) == 0:
@@ -130,20 +141,12 @@ class Config(object):
         return self._obj[section][key]
 
     def _update(self, obj):
-        if type(obj) == str:
-            try:
-                obj = json.loads(obj)
-            except:
-                if len(obj) == 0:
-                    obj = {}
-                else:
-                    config = SafeConfigParser()
-                    config.readfp(StringIO(obj))
-                    obj = fromini(config)
-
+        obj = fromstr(obj)
         for name,section in obj.items():
             for k,v in section.items():
                 # Set the value always.
+                if k in self._alternates:
+                    k = self._alternates[k]
                 self._get_obj(k, section=name)["value"] = v
 
     def _spec(self):
@@ -206,25 +209,25 @@ class Config(object):
         raise Exception(reason)
 
     @staticmethod
-    def integer(default=0, order=1, validate=None, description="No description."):
-        return ConfigSpec("integer", default, int, validate, order, description)
+    def integer(default=0, order=1, validate=None, description="No description.", alternates=None):
+        return ConfigSpec("integer", default, int, validate, order, description, alternates)
 
     @staticmethod
-    def string(default='', order=1, validate=None, description="No description."):
-        return ConfigSpec("string", default, str, validate, order, description)
+    def string(default='', order=1, validate=None, description="No description.", alternates=None):
+        return ConfigSpec("string", default, str, validate, order, description, alternates)
 
     @staticmethod
-    def boolean(default=False, order=1, validate=None, description="No description."):
+    def boolean(default=False, order=1, validate=None, description="No description.", alternates=None):
         def normalize(value):
             if type(value) == str or type(value) == unicode:
                 return value.lower() == "true"
             elif type(value) == bool:
                 return value
             return False
-        return ConfigSpec("boolean", default, normalize, validate, order, description)
+        return ConfigSpec("boolean", default, normalize, validate, order, description, alternates)
 
     @staticmethod
-    def list(default=[], order=1, validate=None, description="No description."):
+    def list(default=[], order=1, validate=None, description="No description.", alternates=None):
         def normalize(value):
             if type(value) == str or type(value) == unicode:
                 value = value.strip()
@@ -233,7 +236,7 @@ class Config(object):
             elif type(value) == list:
                 return value
             return []
-        return ConfigSpec("list", default, normalize, validate, order, description)
+        return ConfigSpec("list", default, normalize, validate, order, description, alternates)
 
 def fromini(ini):
     """ Create a JSON object from a ini-style config. """
@@ -243,6 +246,20 @@ def fromini(ini):
         for option in ini.options(section):
             json[section][option] = ini.get(section, option)
     return json
+
+def fromstr(obj):
+    """ Create a JSON object from an arbitrary string. """
+    if type(obj) == str:
+        try:
+            obj = json.loads(obj)
+        except:
+            if len(obj) == 0:
+                obj = {}
+            else:
+                config = SafeConfigParser()
+                config.readfp(StringIO(obj))
+                obj = fromini(config)
+    return obj
 
 class Connection:
 
