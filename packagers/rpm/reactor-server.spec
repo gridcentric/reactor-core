@@ -6,7 +6,11 @@ Group: System
 License: Copyright 2012 GridCentric Inc.
 URL: http://www.gridcentric.com
 Packager: GridCentric Inc. <support@gridcentric.com>
-Requires: python-paste, python-pyramid, python-netifaces, python-ldap
+Requires: python-paste, python-pyramid, python-mako
+Requires: python-netifaces, python-ldap
+Requires: python-httplib2, python-webob
+Requires: python-zookeeper zookeeper
+Obsoletes: reactor-agent
 BuildRoot: %{_tmppath}/%{name}.%{version}-buildroot
 AutoReq: no
 AutoProv: no
@@ -23,7 +27,22 @@ Reactor server.
 true
 
 %files
-/
+/usr/
+/etc/init.d/reactor
+/etc/logrotate.d/reactor
+/etc/gridcentric
+
+%preun
+if [ "$1" = "0" ]; then
+    service reactor stop
+    chkconfig reactor off
+fi
+
+%post
+if [ "$1" = "1" ]; then
+    chkconfig reactor on
+    service reactor start
+fi
 
 %changelog
 * Tue Apr 23 2012 Adin Scannell <adin@scannell.ca>

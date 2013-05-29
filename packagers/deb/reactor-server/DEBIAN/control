@@ -2,6 +2,12 @@ Package: reactor-server
 Section: extra
 Version: VERSION
 Architecture: all
-Depends: zookeeperd, python-zookeeper, python-paste, python-pyramid, python-netifaces, python-ldap
+Depends: python-paste, python-pyramid, python-mako,
+    python-netifaces, python-ldap,
+    python-webob, python-httplib2,
+    zookeeperd, python-zookeeper
+Provides: reactor-agent
+Conflicts: reactor-agent
+Replaces: reactor-agent
 Maintainer: Gridcentric Inc. <support@gridcentric.com>
 Description: Reactor server

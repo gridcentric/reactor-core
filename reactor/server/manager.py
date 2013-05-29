@@ -1,3 +1,4 @@
+import os
 import logging
 
 from reactor.manager import ManagerConfig
@@ -8,6 +9,8 @@ import reactor.zookeeper.paths as paths
 from reactor.server.endpoint import APIEndpoint
 import reactor.server.iptables as iptables
 import reactor.server.ips as ips
+import reactor.loadbalancer as loadbalancer
+import reactor.cloud as cloud
 
 class ReactorScaleManager(ScaleManager):
     def __init__(self, zk_servers):
@@ -34,13 +37,23 @@ class ReactorScaleManager(ScaleManager):
                 hosts.append(host)
         iptables.setup(hosts, extra_ports=[8080])
 
+    def _discover_submodules(self, mod):
+        discovered = []
+        for path in mod.__path__:
+            for name in os.listdir(path):
+                try:
+                    # Check if it's a directory, and we can 
+                    # successfully perform get_connection().
+                    if os.path.isdir(os.path.join(path, name)):
+                        mod.get_connection(name, config=config)
+                        discovered.append(name)
+                except:
+                    continue
+
     def manager_register(self, config=None):
-        # Ensure that the default loadbalancers are available.
         manager_config = ManagerConfig(values=config)
-        if len(manager_config.loadbalancers) == 0:
-            manager_config.loadbalancers = ["dnsmasq", "nginx", "tcp"]
-        if len(manager_config.clouds) == 0:
-            manager_config.clouds = ["osapi", "osvms"]
+        manager_config.loadbalancers = self._discover_submodules(loadbalancer)
+        manager_config.clouds = self._discover_submodules(cloud)
         super(ReactorScaleManager, self).manager_register(manager_config._values())
 
     def serve(self):

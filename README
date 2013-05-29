@@ -1,8 +1,7 @@
 ==Quick Start==
 
 1. Ensure that the dependent projects (outlined below) are installed and that
-the zookeeper server is running. `make env` can be used to install the
-dependent projects.
+the zookeeper server is running.
 
 2. Using Openstack, with the gridcentric extensions installed, boot a new
 instance. Install the VMS agent in this instance, and deploy your favorite
@@ -46,15 +45,6 @@ dnsmasq (optional)
 zookeeper (3.4.x) (http://zookeeper.apache.org/)
     This the main datastore / control mechanism.
     You must also install the python bindings. 
-
-mako (http://www.makotemplates.org/)
-    A simple python templating engine used to update load balancer configurations.
-
-pyramid (http://docs.pylonsproject.org/projects/pyramid/en/1.2-branch/index.html)
-    A simple web framework used by the API.
-
-python-netifaces
-    A python module for querying network interfaces.
 
 ==Project Contents==
 

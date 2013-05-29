@@ -38,7 +38,7 @@ class ManagerConfig(Config):
 
     loadbalancers = Config.list(order=1,
        validate=lambda self: \
-            [lb_connection.get_connection(lb, config=self, scale_manager=None) \
+            [lb_connection.get_connection(lb, config=self) \
                 for lb in self.loadbalancers],
         description="List of supported loadbalancers (e.g. nginx).")
 

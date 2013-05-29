@@ -9,37 +9,6 @@ except ImportError:
         use_setuptools()
         from setuptools import setup, find_packages
 
-def all_files(path):
-    found = {}
-    for root, dirs, files in os.walk(path):
-        package = root.replace('/', '.')
-        found[package] = files
-    return found
-
-# Index all the administration console files.
-admin_files = all_files("reactor/server/admin")
-
-packages=[
-    "reactor",
-    "reactor.zookeeper",
-    "reactor.metrics",
-    "reactor.cloud",
-    "reactor.loadbalancer",
-    "reactor.loadbalancer.nginx",
-    "reactor.loadbalancer.dnsmasq",
-    "reactor.loadbalancer.tcp",
-    "reactor.server",
-    "reactor.server.admin",
-    "reactor.demo",
-] + admin_files.keys()
-
-package_data = {
-    "reactor.loadbalancer.nginx" : ["nginx.template", "reactor.conf"],
-    "reactor.loadbalancer.dnsmasq" : ["dnsmasq.template"],
-    "reactor.demo" : ["reactor.png"]
-}
-package_data.update(admin_files.items())
-
 setup(
     name="reactor",
     description="Load balancer and scale manager.",
@@ -47,8 +16,23 @@ setup(
     author="Gridcentric Inc.",
     author_email="support@gridcentric.com",
     url="http://www.gridcentric.com",
-    packages=packages,
-    package_data=package_data,
+    install_requires=[
+        "httplib2",
+        "pyramid>=1.2",
+        "webob>=1.1",
+        "zope.interface>=3.6",
+        "Mako>=0.4.2",
+        "PasteDeploy>=1.5",
+        "zookeeper",
+        "netifaces",
+        "python-ldap",
+    ],
+    packages=find_packages(),
+    package_data={
+        "reactor.loadbalancer.nginx" : ["nginx.template", "reactor.conf"],
+        "reactor.loadbalancer.dnsmasq" : ["dnsmasq.template"],
+        "reactor.demo" : ["reactor.png"]
+    },
     include_package_data=True,
     entry_points={
         'console_scripts': [
@@ -56,5 +40,18 @@ setup(
             'reactor-server = reactor.cli:server',
             'reactor-demo = reactor.demo:main'
         ]
-    }
+    },
+    data_files=[
+        ('/etc/gridcentric/boot.d', ['agent/etc/gridcentric/boot.d/90_reactor']),
+        ('/etc/gridcentric/clone.d', ['agent/etc/gridcentric/clone.d/90_reactor']),
+    ],
+    classifiers=[
+          'Development Status :: 5 - Production/Stable',
+          'Environment :: Openstack',
+          'Intended Audience :: System Administrators',
+          'Operating System :: POSIX :: Linux',
+          'Programming Language :: Python',
+          'Topic :: Internet :: Proxy Servers',
+          'Topic :: System :: Clustering',
+    ],
 )
