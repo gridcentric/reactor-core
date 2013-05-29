@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -e
+
+function service_start() {
+    service reactor start || service reactor restart;
+}
+
+case $1 in
+    configure) service_start;;
+    triggered) service_start;;
+esac

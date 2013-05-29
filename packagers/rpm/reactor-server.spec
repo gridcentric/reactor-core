@@ -6,6 +6,7 @@ Group: System
 License: Copyright 2012 GridCentric Inc.
 URL: http://www.gridcentric.com
 Packager: GridCentric Inc. <support@gridcentric.com>
+Requires: python-paste, python-pyramid, python-netifaces, python-ldap
 BuildRoot: %{_tmppath}/%{name}.%{version}-buildroot
 AutoReq: no
 AutoProv: no
