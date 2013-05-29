@@ -127,11 +127,19 @@ def calculate_ideal_uniform(endpoint_spec, metric_averages, num_instances):
 
 class EndpointCriteria(object):
 
+    PATTERN = "((.+)(<=?))?(.+)(<=?)(.+)"
+
     def __init__(self, criteria_str):
         self.values = []
         self.operators = []
         self.key = None
         self._parse(criteria_str)
+
+    @staticmethod
+    def validate(self, criteria_str):
+        m = re.match(EndpointCriteria.PATTERN, criteria_str)
+        if not m:
+            raise Exception("Rules must match: %s" % EndpointCritera.PATTERN)
 
     def upper_bound(self):
         if len(self.values) < 2:
@@ -153,10 +161,7 @@ class EndpointCriteria(object):
         The criteria string is of the form:
         x [<=] metric_key [<=] y
         """
-
-        pattern = "((.+)(<=?))?(.+)(<=?)(.+)"
-
-        m = re.match(pattern, criteria_str)
+        m = re.match(EndpointCriteria.PATTERN, criteria_str)
         if m != None:
             for group in list(m.groups())[1:]:
                 if group != None:
@@ -173,7 +178,7 @@ class EndpointCriteria(object):
                             self._add_metric_key(group)
 
     def _add_value(self, value):
-            self.values += [value]
+        self.values += [value]
 
     def _add_operator(self, operator):
         self.operators += [operator]
