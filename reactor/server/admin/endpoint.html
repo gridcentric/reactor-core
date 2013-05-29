@@ -92,12 +92,12 @@
     var context = beginMakeConfig("endpoint-conf-container",
                                   {"loadbalancer": "Load Balancer"},
                                   "/endpoint",
-                                  "/v1.0/endpoints/${object}");
+                                  "/v1.1/endpoints/${object}");
 
     function loadState() {
         $("#state").html('Loading...');
         $.ajax({
-            url: "/v1.0/endpoints/${object}/state",
+            url: "/v1.1/endpoints/${object}/state",
             type: 'GET',
             dataType: 'json',
             success: function(result) {
@@ -121,7 +121,7 @@
             $(sel).click(function(e) {
                 e.preventDefault();
                 $.ajax({
-                    url: "/v1.0/endpoints/${object}/state",
+                    url: "/v1.1/endpoints/${object}/state",
                     type: 'POST',
                     dataType: 'json',
                     data: JSON.stringify(value),
@@ -141,7 +141,7 @@
         $("#deleteConfirm").click(function (e) {
             e.preventDefault();
             $.ajax({
-                url: "/v1.0/endpoints/${object}",
+                url: "/v1.1/endpoints/${object}",
                 type: 'DELETE',
                 processData: false,
                 success: function() {

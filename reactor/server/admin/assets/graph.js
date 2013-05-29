@@ -48,7 +48,7 @@ function updateGraph(elem, path, data, metrics, callback, period) {
         }
     }
     $.ajax({
-        url: "/v1.0/" + path,
+        url: "/v1.1/" + path,
         type: 'GET',
         dataType: 'json',
         success: onData,

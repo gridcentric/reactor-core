@@ -54,11 +54,11 @@
     var context = beginMakeConfig("manager-conf-container",
                                   {"loadbalancer": "Load Balancer"},
                                   "/manager",
-                                  "/v1.0/managers/${object}");
+                                  "/v1.1/managers/${object}");
 
     function loadUuid() {
         $.ajax({
-            url: "/v1.0/managers/${object}",
+            url: "/v1.1/managers/${object}",
             type: 'GET',
             dataType: 'json',
             success: function(result) {
@@ -73,7 +73,7 @@
         $("#deleteConfirm").click(function (e) {
             e.preventDefault();
             $.ajax({
-                url: "/v1.0/managers/${object}",
+                url: "/v1.1/managers/${object}",
                 type: 'DELETE',
                 processData: false,
                 success: function() {

@@ -14,10 +14,10 @@
         e.preventDefault();
         var name = $("#${type}name").val();
         $.ajax({
-            url: "/v1.0/${type}s/" + name,
+            url: "/v1.1/${type}s/" + name,
             type: 'POST',
             dataType: 'json',
-            data: JSON.stringify({ "config" : ""}),
+            data: JSON.stringify({}),
             processData: false,
             contentType: 'application/json',
             complete: function() {

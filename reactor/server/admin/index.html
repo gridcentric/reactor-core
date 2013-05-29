@@ -57,7 +57,7 @@
             endpoint_count += 1;
             pending += 1;
             $.ajax({
-                url: "/v1.0/endpoints/" + value + "/state",
+                url: "/v1.1/endpoints/" + value + "/state",
                 type: 'GET',
                 dataType: 'json',
                 success: function(result) {
@@ -80,7 +80,7 @@
     }
 
     $.ajax({
-        url: "/v1.0/endpoints",
+        url: "/v1.1/endpoints",
         type: 'GET',
         dataType: 'json',
         success: process_endpoints,
