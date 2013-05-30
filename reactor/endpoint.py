@@ -60,15 +60,17 @@ class EndpointConfig(Config):
         description="The salt used for computing authentication tokens.")
 
     auth_algo = Config.string(default="sha1", order=3,
+        validate=lambda self: hashlib.new(self.auth_algo, ''),
         description="The algorithm used for computing authentication tokens.")
 
     def _get_endpoint_auth(self):
         return (self.auth_hash, self.auth_salt, self.auth_algo)
 
     static_instances = Config.list(order=1,
+        validate=lambda self: self._static_ips(validate=True),
         description="Static hosts for the endpoint.")
 
-    def _static_ips(self):
+    def _static_ips(self, validate=False):
         """ Returns a list of static ips associated with the configured static instances. """
         static_instances = self.static_instances
 
@@ -83,6 +85,8 @@ class EndpointConfig(Config):
             except:
                 logging.warn("Failed to determine the ip address "
                              "for the static instance %s." % static_instance)
+                if validate:
+                    raise
         return ip_addresses
 
 class ScalingConfig(Config):
@@ -107,6 +111,8 @@ class ScalingConfig(Config):
         description="Upper limit on dynamic instances.")
 
     rules = Config.list(order=1,
+        validate=lambda self: \
+            [metric_calculator.EndpointCriteria.validate(x) for x in self.rules],
         description="List of scaling rules (e.g. 0.5<active<0.8).")
 
     ramp_limit = Config.integer(default=5, order=2,
