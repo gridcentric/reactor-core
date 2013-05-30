@@ -21,7 +21,15 @@ class Connection(LoadBalancerConnection):
 
     def __init__(self, **kwargs):
         LoadBalancerConnection.__init__(self, **kwargs)
-        template_file = os.path.join(os.path.dirname(__file__),'dnsmasq.template')
+        # the __path__ symbol is set to the path from where this
+        # module gets loaded.  In our case, the parent module loads
+        # us, so the path is actually the parent directory, not the
+        # directory of this source code (python doesn't statically
+        # bind the symbol at compile-time like C.  We do a basic file
+        # check just in case.
+        template_file = os.path.join(os.path.dirname(__file__), 'dnsmasq.template')
+        if not os.path.isfile(template_file):
+            template_file = os.path.join(os.path.dirname(__file__), 'dnsmasq', 'dnsmasq.template')
         self.template = Template(filename=template_file)
         self.ipmappings = {}
 
@@ -40,7 +48,7 @@ class Connection(LoadBalancerConnection):
     def redirect(self, url, names, other_url, config=None):
         # We simply serve up the public servers as our DNS
         # records. It's very difficult to implement CNAME
-        # records or even parse what is being specified in 
+        # records or even parse what is being specified in
         # the other_url.
         self.change(url, names, [], [])
 
