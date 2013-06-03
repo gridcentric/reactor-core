@@ -154,7 +154,7 @@ function makeConfig(context) {
     context["toplevel_folds"] = constructScaffolding(context,
                                                      container_elt,
                                                      context["toplevel_sections"],
-                                                     true,
+                                                     false,
                                                      false);
 
     // Build sub template scaffolding.
@@ -164,7 +164,7 @@ function makeConfig(context) {
             constructScaffolding(context,
                                  context["toplevel_folds"][sub_template_name],
                                  Object.keys(sub_template),
-                                 true,
+                                 false,
                                  true);
     });
 
