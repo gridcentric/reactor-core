@@ -10,7 +10,6 @@ Requires: python-paste, python-pyramid, python-mako
 Requires: python-netifaces, python-ldap
 Requires: python-httplib2, python-webob
 Requires: python-zookeeper zookeeper
-Obsoletes: reactor-agent
 BuildRoot: %{_tmppath}/%{name}.%{version}-buildroot
 AutoReq: no
 AutoProv: no
@@ -30,7 +29,6 @@ true
 /usr/
 /etc/init.d/reactor
 /etc/logrotate.d/reactor
-/etc/gridcentric
 
 %preun
 if [ "$1" = "0" ]; then

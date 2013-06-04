@@ -41,10 +41,6 @@ setup(
             'reactor-demo = reactor.demo:main'
         ]
     },
-    data_files=[
-        ('/etc/gridcentric/boot.d', ['agent/etc/gridcentric/boot.d/90_reactor']),
-        ('/etc/gridcentric/clone.d', ['agent/etc/gridcentric/clone.d/90_reactor']),
-    ],
     classifiers=[
           'Development Status :: 5 - Production/Stable',
           'Environment :: Openstack',

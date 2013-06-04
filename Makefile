@@ -28,7 +28,7 @@ install: dist
 	@VERSION=$(PACKAGE_VERSION) python$(PYTHON_VER) setup.py install --prefix=$(DESTDIR)
 .PHONY: install
 
-dist_install: clean
+dist_install: dist_clean
 	@VERSION=$(PACKAGE_VERSION) python$(PYTHON_VER) setup.py bdist -p bdist
 ifneq ($(DESTDIR),)
 	@$(INSTALL_DIR) $(DESTDIR)
@@ -46,10 +46,14 @@ endif
 	@$(INSTALL_DATA) etc/logrotate.d/reactor $(DESTDIR)/etc/logrotate.d
 endif
 
-clean:
+dist_clean:
 	@rm -rf dist build reactor.egg-info
+	@rm -rf debbuild rpmbuild
 	@find . -name \*.pyc -exec rm -f {} \;
-	@rm -rf *.deb *.rpm debbuild rpmbuild
+.PHONY: dist_clean
+
+clean: dist_clean
+	@rm -rf *.deb *.rpm
 .PHONY: clean
 
 $(RPMBUILD):
