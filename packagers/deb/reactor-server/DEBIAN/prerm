@@ -2,4 +2,4 @@
 
 set -e
 
-service reactor stop 2>/dev/null || true
+invoke-rc.d reactor stop || exit $?

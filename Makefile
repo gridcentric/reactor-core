@@ -39,8 +39,8 @@ ifneq ($(DESTDIR),)
 	@[ -d $(DESTDIR)/usr/lib*/python$(PYTHON_VER)/$(PACKAGES_DIR) ] || \
 	    (cd $(DESTDIR)/usr/lib*/python$(PYTHON_VER) && mv *-packages $(PACKAGES_DIR))
 ifneq ($(INIT),)
-	@$(INSTALL_DIR) $(DESTDIR)/$(INIT)
-	@rsync -ruv $(INIT)/ $(DESTDIR)/$(INIT)
+	@$(INSTALL_DIR) $(DESTDIR)/etc
+	@rsync -ruav $(INIT)/ $(DESTDIR)/etc
 endif
 	@$(INSTALL_DIR) $(DESTDIR)/etc/logrotate.d
 	@$(INSTALL_DATA) etc/logrotate.d/reactor $(DESTDIR)/etc/logrotate.d
@@ -94,7 +94,7 @@ server.deb: $(DEBBUILD)
 	@$(MAKE) dist_install \
 	    PYTHON_VER=2.7 \
 	    PACKAGES_DIR=dist-packages \
-	    INIT=etc/init \
+	    INIT=etc/upstart \
 	    DESTDIR=$(DEBBUILD)/reactor-server
 	@rsync -ruav packagers/deb/reactor-server/ $(DEBBUILD)/reactor-server
 	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-server/DEBIAN/control
@@ -106,7 +106,7 @@ server.rpm: $(RPMBUILD)
 	@$(MAKE) dist_install \
 	    PYTHON_VER=2.6 \
 	    PACKAGES_DIR=site-packages \
-	    INIT=etc/init.d \
+	    INIT=etc/sysV \
 	    DESTDIR=$(CURDIR)/$(RPMBUILD)/BUILDROOT
 	@rpmbuild --with=suggests -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
 	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \

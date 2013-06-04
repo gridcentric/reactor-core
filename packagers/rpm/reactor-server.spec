@@ -30,16 +30,18 @@ true
 /etc/init.d/reactor
 /etc/logrotate.d/reactor
 
-%preun
-if [ "$1" = "0" ]; then
-    service reactor stop
-    chkconfig reactor off
-fi
-
 %post
 if [ "$1" = "1" ]; then
     chkconfig reactor on
     service reactor start
+else
+    service reactor restart
+fi
+
+%preun
+if [ "$1" = "0" ]; then
+    service reactor stop
+    chkconfig reactor off
 fi
 
 %changelog
