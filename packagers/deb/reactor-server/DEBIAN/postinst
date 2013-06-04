@@ -3,7 +3,12 @@
 set -e
 
 function service_start() {
-    service reactor start || service reactor restart;
+    if initctl status reactor | grep process >/dev/null 2>&1; then
+        service reactor restart 2>/dev/null || \
+        service reactor start;
+    else
+        service reactor restart 2>/dev/null || true
+    fi
 }
 
 case $1 in

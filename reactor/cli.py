@@ -1,3 +1,4 @@
+import os
 import getopt
 import logging
 import signal
@@ -6,6 +7,7 @@ import traceback
 import threading
 import json
 import gc
+import atexit
 
 from StringIO import StringIO
 from ConfigParser import SafeConfigParser
@@ -34,22 +36,22 @@ def sig_usr2_handler(signum, frame):
 signal.signal(signal.SIGUSR2, sig_usr2_handler)
 
 def main_usage():
-    print "usage: %s < -h|--help | [options] command >" % sys.argv[0]
+    print "usage: %s < --help | [options] command >" % sys.argv[0]
     print ""
     print "Optional arguments:"
-    print "   -h, --help              Display this help message"
+    print "   --help                  Display this help message."
     print ""
-    print "   -a, --api=              The API url (default is localhost)."
+    print "   --api=                  The API url (default is localhost)."
     print ""
-    print "   -p, --password=         The password used to connect to the API."
+    print "   --password=             The password used to connect to the API."
     print ""
-    print "   -z, --zookeeper=        The host:port of a zookeeper instance. Use this option"
+    print "   --zookeeper=            The host:port of a zookeeper instance. Use this option"
     print "                           multiple times to specific multiple instances. Only"
     print "                           necessary for run commands. The default is localhost."
     print ""
-    print "   -d, --debug             Enables debugging log and full stack trace errors."
+    print "   --debug                 Enables debugging log and full stack trace errors."
     print ""
-    print "   -l, --log=              Log to a file instead of stdout."
+    print "   --log=                  Log to a file instead of stdout."
     print ""
     print "Commands:"
     print "    version                Get the server API version."
@@ -95,23 +97,29 @@ def main():
     debug = False
     logfile = None
 
-    opts, args = getopt.getopt(sys.argv[1:],
-                                "ha:p:z:dl:",
-                               ["help","api_server=","password=","zookeeper=","debug","log="])
+    opts, args = getopt.getopt(sys.argv[1:], "",
+        [
+            "help",
+            "api_server=",
+            "password=",
+            "zookeeper=",
+            "debug",
+            "log=",
+        ])
 
     for o, a in opts:
-        if o in ('-h', '--help'):
+        if o in ('--help',):
             main_usage()
             sys.exit(0)
-        elif o in ('-a', '--api'):
+        elif o in ('--api',):
             api_server = a
-        elif o in ('-p', '--password'):
+        elif o in ('--password',):
             password = a
-        elif o in ('-z', '--zookeeper'):
+        elif o in ('--zookeeper',):
             zk_servers.append(a)
-        elif o in ('-d', '--debug'):
+        elif o in ('--debug',):
             debug = True
-        elif o in ('-l','--log'):
+        elif o in ('--log',):
             logfile = a
     
     if len(zk_servers) == 0:
@@ -294,29 +302,89 @@ def server_usage():
     print "usage: %s < -h|--help | [options] command >" % sys.argv[0]
     print ""
     print "Optional arguments:"
-    print "   -h, --help              Display this help message"
+    print "   --help                  Display this help message."
     print ""
-    print "   -d, --debug             Enables debugging log and full stack trace errors."
+    print "   --debug                 Enables debugging log and full stack trace errors."
     print ""
-    print "   -l, --log=              Log to a file instead of stdout."
+    print "   --log=                  Log to a file instead of stdout."
     print ""
+    print "   --pidfile=              Write the current pid to thte given file."
+    print ""
+
+def daemonize(pidfile):
+    # Perform a double fork().
+    # This will allow us to integrate cleanly
+    # with startup workflows (i.e. the daemon
+    # function on RedHat / CentOS).
+    pid = os.fork()
+    if pid > 0:
+        sys.exit(0)
+
+    # Move to the root.
+    os.chdir("/")
+    os.setsid()
+    os.umask(0)
+
+    pid = os.fork()
+    if pid > 0:
+        sys.exit(0)
+
+    # Close standard file descriptors.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    null = "/dev/null"
+    si = file(null, 'r')
+    so = file(null, 'a+')
+    se = file(null, 'a+', 0)
+    os.dup2(si.fileno(), sys.stdin.fileno())
+    os.dup2(so.fileno(), sys.stdout.fileno())
+    os.dup2(se.fileno(), sys.stderr.fileno())
+
+    try:
+        maxfd = os.sysconf("SC_OPEN_MAX")
+    except (AttributeError, ValueError):
+        maxfd = 1024
+    for fd in range(3, maxfd):
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+    # Write out the pidfile.
+    def rmpidfile():
+        os.remove(pidfile)
+    atexit.register(rmpidfile)
+    pid = str(os.getpid())
+    f = open(pidfile,'w+')
+    f.write("%s\n" % pid)
+    f.close()
 
 def server():
     debug = False
     logfile = None
+    pidfile = None
 
-    opts, args = getopt.getopt(sys.argv[1:],
-                                "hdl:u",
-                               ["help","debug","log="])
+    opts, args = getopt.getopt(sys.argv[1:], "",
+        [
+            "help",
+            "debug",
+            "log=",
+            "pidfile="
+        ])
 
     for o, a in opts:
-        if o in ('-h', '--help'):
+        if o in ('--help',):
             server_usage()
             sys.exit(0)
-        elif o in ('-d', '--debug'):
+        elif o in ('--debug',):
             debug = True
-        elif o in ('-l','--log'):
+        elif o in ('--log',):
             logfile = a
+        elif o in ('--pidfile',):
+            pidfile = a
+
+    if pidfile:
+        daemonize(pidfile)
 
     from paste.httpserver import serve
     import reactor.server.config as config

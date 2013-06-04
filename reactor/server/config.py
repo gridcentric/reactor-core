@@ -4,8 +4,26 @@ import os
 
 import reactor.server.ips as ips
 
-ZOOKEEPER_ID_FILE = "/etc/zookeeper/conf/myid"
-ZOOKEEPER_CONFIG_FILE = "/etc/zookeeper/conf/zoo.cfg"
+ZOOKEEPER_CONF_DIRS = [
+    "/etc/zookeeper/conf",
+    "/etc/zookeeper",
+]
+for path in ZOOKEEPER_CONF_DIRS:
+    if os.path.exists(path) and os.path.isdir(path):
+        ZOOKEEPER_CONF_DIR = path
+        break
+
+ZOOKEEPER_RUN_DIRS = [
+    "/var/run/zookeeper",
+    "/var/run"
+]
+for path in ZOOKEEPER_RUN_DIRS:
+    if os.path.exists(path) and os.path.isdir(path):
+        ZOOKEEPER_RUN_DIR = path
+        break
+
+ZOOKEEPER_ID_FILE = os.path.join(ZOOKEEPER_CONF_DIR, "myid")
+ZOOKEEPER_CONFIG_FILE = os.path.join(ZOOKEEPER_CONF_DIR, "zoo.cfg")
 ZOOKEEPER_CONFIG_DATA = \
 """# This file has been automatically generated, do not edit.
 tickTime=2000
@@ -19,7 +37,7 @@ leaderServes=yes
 """
 ZOOKEEPER_DATA_PORT = 2888
 ZOOKEEPER_ELECTION_PORT = 3888
-ZOOKEEPER_PID_FILE = "/var/run/zookeeper/zookeeper.pid"
+ZOOKEEPER_PID_FILE = os.path.join(ZOOKEEPER_RUN_DIR, "zookeeper.pid")
 
 def generate_config(myid, servers):
     # Write out the ID file.

@@ -2,5 +2,4 @@
 
 set -e
 
-# Always stop the service fully.
 service reactor stop 2>/dev/null || true
