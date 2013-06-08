@@ -31,7 +31,14 @@ setup(
     package_data={
         "reactor.loadbalancer.nginx" : ["nginx.template", "reactor.conf"],
         "reactor.loadbalancer.dnsmasq" : ["dnsmasq.template"],
-        "reactor.demo" : ["reactor.png"]
+        "reactor.demo" : ["reactor.png"],
+        "reactor.server" : ["admin/*.html",
+                            "admin/include/*.html",
+                            "admin/assets/*.js",
+                            "admin/assets/*.png",
+                            "admin/assets/*.css",
+                            "admin/assets/lib/*.js",
+                            "admin/assets/lib/bootstrap/*/*"]
     },
     include_package_data=True,
     entry_points={
