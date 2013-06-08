@@ -553,7 +553,7 @@ function generateSingleConfig(root, config_name, config)
     case "list":
         input_elt = $("#conf-input-list").clone().appendTo(slot);
         if (config["present"])
-            input_elt.html(config["value"]);
+            input_elt.html(config["value"].join("\n"));
         config["skip-init"]["value"] = true;
         break;
     case "string":
