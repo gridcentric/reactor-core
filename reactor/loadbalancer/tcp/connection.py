@@ -119,6 +119,8 @@ class ConnectionConsumer(threading.Thread):
         # Attempt to flush all connections.
         while self.producer.has_pending():
             connection = self.producer.next()
+            if not(connection):
+                break
             if not(self.handle(connection)):
                 self.producer.push(connection)
                 break
@@ -126,6 +128,9 @@ class ConnectionConsumer(threading.Thread):
     def run(self):
         while self.execute:
             connection = self.producer.next()
+
+            if not(connection):
+                break
 
             self.cond.acquire()
             try:
