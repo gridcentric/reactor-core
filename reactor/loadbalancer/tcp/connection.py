@@ -15,9 +15,9 @@ def close_fds(except_fds=[]):
         maxfd = os.sysconf("SC_OPEN_MAX")
     except (AttributeError, ValueError):
         maxfd = 1024
-        for fd in range(0, maxfd):
-            if not(fd in except_fds):
-                os.close(fd)
+    for fd in range(0, maxfd):
+        if not(fd in except_fds):
+            os.close(fd)
 
 def fork_and_exec(cmd, child_fds=[]):
     # Close all file descriptors, except
