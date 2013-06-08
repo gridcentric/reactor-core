@@ -10,7 +10,6 @@ import socket
 from StringIO import StringIO
 
 from reactor.config import Config
-from reactor.config import Connection
 from reactor.config import fromini
 
 from reactor.endpoint import Endpoint
