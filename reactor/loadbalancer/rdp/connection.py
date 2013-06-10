@@ -12,6 +12,11 @@ import ldap.modlist as modlist
 
 from reactor.config import Config
 from reactor.config import Connection
+from reactor.loadbalancer.connection import LoadBalancerConnection
+from reactor.loadbalancer.netstat import connection_count
+
+from reactor.loadbalancer.tcp.connection import TcpEndpointConfig
+from reactor.loadbalancer.tcp.connection import Connection as TcpConnection
 
 COMPUTER_ATTRS = [
     "operatingsystem",
@@ -291,11 +296,7 @@ class LdapConnection:
 
         return (name, base64_password)
 
-class WindowsConfig(Config):
-
-    # Our cached connection.
-    _connection = None
-
+class RdpEndpointConfig(TcpEndpointConfig):
     domain = Config.string(order=0,
         validate=lambda self: self._check_connection(),
         description="The Windows domain.")
@@ -341,12 +342,9 @@ class WindowsConfig(Config):
             conn._open()
             del conn
 
-class WindowsConnection(Connection):
+class Connection(TcpConnection):
 
-    _ENDPOINT_CONFIG_CLASS = WindowsConfig
-
-    def __init__(self, **kwargs):
-        Connection.__init__(self, object_class=None, **kwargs)
+    _ENDPOINT_CONFIG_CLASS = RdpEndpointConfig
 
     def start_params(self, config):
         config = self._endpoint_config(config)
