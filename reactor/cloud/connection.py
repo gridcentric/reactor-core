@@ -9,12 +9,12 @@ from reactor import utils
 from reactor.config import Config
 from reactor.config import Connection
 
-def get_connection(name, config):
+def get_connection(name, config=None):
     if not name:
         return CloudConnection(name, config)
 
     try:
-        cloud_class = "reactor.cloud.%s.Connection" % name
+        cloud_class = "reactor.cloud.%s.connection.Connection" % name
         cloud_conn_class = utils.import_class(cloud_class)
         return cloud_conn_class(name, config)
     except:

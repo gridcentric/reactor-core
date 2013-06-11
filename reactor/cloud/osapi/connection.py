@@ -4,6 +4,7 @@ from httplib import HTTPException
 
 from novaclient import shell
 from novaclient.v1_1.client import Client as NovaClient
+import novaclient.exceptions
 
 from reactor.config import Config
 from reactor.cloud.connection import CloudConnection
@@ -14,11 +15,8 @@ class BaseOsEndpointConfig(Config):
     _client = None
 
     # Common authentication elements.
-    # NOTE: Validation for basic connection stuff is only done here.
-    # The user will have to update other fields if authentication errors
-    # occur (and hopefully that will be obvious).
     auth_url = Config.string(default="http://localhost:5000/v2.0/", order=0,
-        validate=lambda self: self._novaclient().flavors.list(),
+        validate=lambda self: self._validate_connection_params(),
         alternates=["authurl"],
         description="The OpenStack authentication URL (OS_AUTH_URL).")
 
@@ -52,8 +50,26 @@ class BaseOsEndpointConfig(Config):
                                       self.tenant_name,
                                       self.auth_url,
                                       region_name=self.region_name,
+                                      service_type="compute",
                                       extensions=extensions)
         return self._client
+
+    def _validate_connection_params(self, throwerror=True):
+        try:
+            self._novaclient().authenticate()
+        except Exception, e:
+            if throwerror:
+                # If we got an unathorized exception, propagate
+                if type(e) == novaclient.exceptions.Unauthorized:
+                    Config.error(e.message)
+                elif type(e) == novaclient.exceptions.EndpointNotFound:
+                    Config.error("Problem connecting to cloud endpoint. Bad Region?")
+                # Else it could be a number of things
+                else:
+                    Config.error("Could not connect to OpenStack cloud. Bad URL?")
+            else:
+                return False
+        return True
 
 class BaseOsConnection(CloudConnection):
 
@@ -124,19 +140,49 @@ class OsApiEndpointConfig(BaseOsEndpointConfig):
         description="The name given to new instances.")
 
     flavor_id = Config.string(order=2,
-        validate=lambda self: self.flavor_id in \
-            [flavor._info['id'] for flavor in self._novaclient().flavors.list()],
+        validate=lambda self: self._validate_flavor(),
         description="The flavor to use.")
 
     image_id = Config.string(order=2,
-        validate=lambda self: self.image_id in \
-            [image._info['id'] for image in self._novaclient().images.list()],
+        validate=lambda self: self._validate_image(),
         description="The image ID to boot.")
 
     key_name = Config.string(order=2,
-        validate=lambda self: self.key_name in \
-            [key._info['keypair']['name'] for key in self._novaclient().keypairs.list()],
+        validate=lambda self: self._validate_keyname(),
         description="The key_name (for injection).")
+
+    def _validate_flavor(self):
+        if self._validate_connection_params(False):
+            avail = [flavor._info['id'] for flavor in self._novaclient().flavors.list()]
+            if self.flavor_id in avail:
+                return True
+            else:
+                Config.error("Flavor %s not found" % self.flavor_id)
+        else:
+            # Can't connect to cloud, ignore this param for now
+            return True
+
+    def _validate_image(self):
+        if self._validate_connection_params(False):
+            avail = [image._info['id'] for image in self._novaclient().images.list()]
+            if self.image_id in avail:
+                return True
+            else:
+                Config.error("Image %s not found" % self.image_id)
+        else:
+            # Can't connect to cloud, ignore this param for now
+            return True
+
+    def _validate_keyname(self):
+        if self._validate_connection_params(False):
+            avail = [key._info['keypair']['name'] for key in self._novaclient().keypairs.list()]
+            if self.key_name in avail:
+                return True
+            else:
+                Config.error("Keyname %s not found" % self.key_name)
+        else:
+            # Can't connect to cloud, ignore this param for now
+            return True
 
 class Connection(BaseOsConnection):
 

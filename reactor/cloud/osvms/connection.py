@@ -1,7 +1,7 @@
 from reactor.config import Config
 
-from reactor.cloud.osapi import BaseOsEndpointConfig
-from reactor.cloud.osapi import BaseOsConnection
+from reactor.cloud.osapi.connection import BaseOsEndpointConfig
+from reactor.cloud.osapi.connection import BaseOsConnection
 
 class OsVmsEndpointConfig(BaseOsEndpointConfig):
 
