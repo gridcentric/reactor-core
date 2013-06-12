@@ -5,6 +5,7 @@ Architecture: all
 Depends: python-paste, python-pyramid, python-mako,
     python-netifaces, python-ldap,
     python-webob, python-httplib2,
-    zookeeperd, python-zookeeper
+    zookeeperd, python-zookeeper,
+    python-novaclient
 Maintainer: Gridcentric Inc. <support@gridcentric.com>
 Description: Reactor server

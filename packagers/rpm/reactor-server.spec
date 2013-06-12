@@ -10,6 +10,7 @@ Requires: python-paste, python-pyramid, python-mako
 Requires: python-netifaces, python-ldap
 Requires: python-httplib2, python-webob
 Requires: python-zookeeper zookeeper
+Requires: python-novaclient
 BuildRoot: %{_tmppath}/%{name}.%{version}-buildroot
 AutoReq: no
 AutoProv: no
