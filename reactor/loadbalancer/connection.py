@@ -80,3 +80,9 @@ class LoadBalancerConnection(Connection):
     def metrics(self):
         # Returns { host : (weight, value) }
         return {}
+    def start_params(self, config):
+        return {}
+    def cleanup_start_params(self, config, start_params):
+        pass
+    def cleanup(self, config, name):
+        pass
