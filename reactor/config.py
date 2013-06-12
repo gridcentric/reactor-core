@@ -214,7 +214,8 @@ class Config(object):
 
     @staticmethod
     def string(default='', order=1, validate=None, description="No description.", alternates=None):
-        return ConfigSpec("string", default, str, validate, order, description, alternates)
+        return ConfigSpec("string", default, lambda s: s and str(s) or None, validate,
+                order, description, alternates)
 
     @staticmethod
     def boolean(default=False, order=1, validate=None, description="No description.", alternates=None):

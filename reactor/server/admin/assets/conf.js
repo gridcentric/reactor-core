@@ -565,9 +565,8 @@ function generateSingleConfig(root, config_name, config)
         input_elt = $("#conf-input-number").clone().appendTo(slot);
         break;
     case "boolean":
-        input_elt = $("#conf-input-boolean").clone()
-            .prop("checked", config["value"]).appendTo(slot);
-        input_elt = input_elt.find("input#conf-input-boolean-checkbox");
+        input_elt = $("#conf-input-boolean").clone().appendTo(slot);
+        input_elt.attr("checked", config["value"]);
         attachTooltip(input_elt, config, "hover", 750);
         break;
     default:
