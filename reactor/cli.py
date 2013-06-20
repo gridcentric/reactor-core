@@ -81,7 +81,6 @@ def main_usage():
     print ""
     print "    manager-update [ip]    Set the configuration for the given manager."
     print "    manager-show [ip]      Show the current configuration for the manager."
-    print "    manager-log <uuid>     Show the log for the given manager."
     print "    manager-forget <ip>    Remove and forget the given manager."
     print ""
     print "    passwd [password]      Updates the API's password."
@@ -198,7 +197,7 @@ def main():
             api_client = get_api_client()
             config = SafeConfigParser()
             config.readfp(StringIO(new_conf))
-            config = fromini(config_value.getvalue())
+            config = fromini(config)
             api_client.update_manager(manager, config)
 
         elif command == "manager-show":
@@ -206,12 +205,6 @@ def main():
             api_client = get_api_client()
             config = api_client.get_manager_config(manager)
             print json.dumps(config, indent=2)
-
-        elif command == "manager-log":
-            manager = get_arg(1)
-            api_client = get_api_client()
-            log = api_client.get_manager_log(manager)
-            sys.stdout.write(log)
 
         elif command == "manager-forget":
             manager = get_arg(1)
