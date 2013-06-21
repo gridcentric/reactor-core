@@ -5,7 +5,7 @@ from reactor.cloud.osapi.connection import BaseOsConnection
 
 class OsVmsEndpointConfig(BaseOsEndpointConfig):
 
-    instance_id = Config.string(order=2,
+    instance_id = Config.string(label="Live-Image", order=2,
         validate=lambda self: \
             self._novaclient().servers.get(self.instance_id)._info['status'] == 'BLESSED' or \
             Config.error("Server is not in BLESSED state."),

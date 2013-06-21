@@ -260,10 +260,10 @@ class ConnectionProducer(threading.Thread):
 
 class TcpEndpointConfig(Config):
 
-    exclusive = Config.boolean(default=True,
+    exclusive = Config.boolean(label="One VM per connection", default=True,
         description="Whether backends are exclusive.")
 
-    kill = Config.boolean(default=False,
+    kill = Config.boolean(label="Kill VMs on Disconnect", default=False,
         description="Whether backends should be killed after use.")
 
 class Connection(LoadBalancerConnection):

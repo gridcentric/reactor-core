@@ -30,32 +30,33 @@ class ManagerConfig(Config):
     def __init__(self, **kwargs):
         Config.__init__(self, "manager", **kwargs)
 
-    ips = Config.list(order=1,
+    ips = Config.list(label="Additional IPs", order=1,
         description="Floating or public IPs.")
 
-    loadbalancers = Config.list(order=1,
+    loadbalancers = Config.list(label="Enabled Loadbalancer Drivers", order=1,
        validate=lambda self: \
             [lb_connection.get_connection(lb, config=self) \
                 for lb in self.loadbalancers],
         description="List of supported loadbalancers (e.g. nginx).")
 
-    clouds = Config.list(order=1,
+    clouds = Config.list(label="Enabled Cloud Drivers", order=1,
         validate=lambda self: \
             [cloud_connection.get_connection(cloud, config=self) \
                 for cloud in self.clouds],
         description="List of supported clouds (e.g. osapi).")
 
-    health_check = Config.integer(default=5, order=1,
+    health_check = Config.integer(label="Health Check Interval (seconds)", default=5, order=1,
         validate=lambda self: self.health_check > 0 or \
             Config.error("Health_check must be positive."),
         description="Period for decomissioning and timing out instances.")
 
-    marks = Config.integer(default=10, order=2,
+    marks = Config.integer(label="Maximum Failed Health Checks", 
+        default=10, order=2,
         validate=lambda self: self.marks > 0 or \
             Config.error("Marks must be positive."),
         description="Timeout for unregistered and decomissioned VMs.")
 
-    keys = Config.integer(default=64, order=2,
+    keys = Config.integer(label="Keys per Manager", default=64, order=2,
         validate=lambda self: self.keys >= 0 or \
             Config.error("Keys must be non-negative."),
         description="Key count for managing services on the ring.")

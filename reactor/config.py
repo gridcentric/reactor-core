@@ -6,6 +6,7 @@ from collections import namedtuple
 
 ConfigSpec = namedtuple("ConfigSpec", \
     ["type",
+     "label",
      "default",
      "normalize",
      "validate",
@@ -65,7 +66,7 @@ class Config(object):
                 def setx(self, value):
                     if spec.normalize:
                         value = spec.normalize(value)
-                    self._set(k, spec.type, value, spec.default, spec.order, spec.description)
+                    self._set(k, spec.type, spec.label, value, spec.default, spec.order, spec.description)
                 def delx(self):
                     setx(self, spec.default)
                 return (getx, setx, delx)
@@ -195,9 +196,10 @@ class Config(object):
     def _get(self, key, default):
         return self._get_obj(key).get("value", default)
 
-    def _set(self, key, typ, value, default, order, description):
+    def _set(self, key, typ, label, value, default, order, description):
         self._get_obj(key).update([
             ("type", typ),
+            ("label", label),
             ("default", default),
             ("description", description),
             ("order", order),
@@ -209,26 +211,26 @@ class Config(object):
         raise Exception(reason)
 
     @staticmethod
-    def integer(default=0, order=1, validate=None, description="No description.", alternates=None):
-        return ConfigSpec("integer", default, int, validate, order, description, alternates)
+    def integer(label=None, default=0, order=1, validate=None, description="No description.", alternates=None):
+        return ConfigSpec("integer", label, default, int, validate, order, description, alternates)
 
     @staticmethod
-    def string(default='', order=1, validate=None, description="No description.", alternates=None):
-        return ConfigSpec("string", default, lambda s: s and str(s) or None, validate,
+    def string(label=None, default='', order=1, validate=None, description="No description.", alternates=None):
+        return ConfigSpec("string", label, default, lambda s: s and str(s) or None, validate,
                 order, description, alternates)
 
     @staticmethod
-    def boolean(default=False, order=1, validate=None, description="No description.", alternates=None):
+    def boolean(label=None, default=False, order=1, validate=None, description="No description.", alternates=None):
         def normalize(value):
             if type(value) == str or type(value) == unicode:
                 return value.lower() == "true"
             elif type(value) == bool:
                 return value
             return False
-        return ConfigSpec("boolean", default, normalize, validate, order, description, alternates)
+        return ConfigSpec("boolean", label, default, normalize, validate, order, description, alternates)
 
     @staticmethod
-    def list(default=[], order=1, validate=None, description="No description.", alternates=None):
+    def list(label=None, default=[], order=1, validate=None, description="No description.", alternates=None):
         def normalize(value):
             if type(value) == str or type(value) == unicode:
                 value = value.strip()
@@ -237,7 +239,7 @@ class Config(object):
             elif type(value) == list:
                 return value
             return []
-        return ConfigSpec("list", default, normalize, validate, order, description, alternates)
+        return ConfigSpec("list", label, default, normalize, validate, order, description, alternates)
 
 def fromini(ini):
     """ Create a JSON object from a ini-style config. """

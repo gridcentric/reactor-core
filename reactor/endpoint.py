@@ -34,43 +34,43 @@ class EndpointConfig(Config):
     def __init__(self, **kwargs):
         Config.__init__(self, section="endpoint", **kwargs)
 
-    url = Config.string(order=0,
+    url = Config.string(label="Endpoint URL", order=0,
         description="The URL for this endpoint.")
 
-    port = Config.integer(order=1,
+    port = Config.integer(label="Backend Port", order=1,
         validate=lambda self: self.port >= 0 or \
             Config.error("Port must be non-negative."),
         description="The backend port for this service.")
 
-    redirect = Config.string(order=1,
+    redirect = Config.string(label="Fallback URL", order=1,
         description="A redirect URL for when no instances are available.")
 
-    weight = Config.integer(default=1, order=1,
+    weight = Config.integer(label="Weight", default=1, order=1,
         validate=lambda self: self.weight >= 0 or \
             Config.error("Weight must be non-negative."),
-        description="Relative weight (if sharing URLs).")
+        description="Relative weight (if more than one endpoint exists for this URL).")
 
-    cloud = Config.string(order=2,
+    cloud = Config.string(label="Cloud Driver", order=2,
         description="The cloud type (e.g. osvms, osapi).")
 
-    loadbalancer = Config.string(order=2,
+    loadbalancer = Config.string(label="Loadbalancer Driver", order=2,
         description="The loadbalancer type (e.g. nginx, tcp)",
         default="nginx")
 
-    auth_hash = Config.string(default=None, order=3,
+    auth_hash = Config.string(label="Auth Hash Token", default=None, order=3,
         description="The authentication token for this endpoint.")
 
-    auth_salt = Config.string(default="", order=3,
+    auth_salt = Config.string(label="Auth Hash Salt", default="", order=3,
         description="The salt used for computing authentication tokens.")
 
-    auth_algo = Config.string(default="sha1", order=3,
+    auth_algo = Config.string(label="Auth Hash Algorithm", default="sha1", order=3,
         validate=lambda self: hashlib.new(self.auth_algo, ''),
         description="The algorithm used for computing authentication tokens.")
 
     def _get_endpoint_auth(self):
         return (self.auth_hash, self.auth_salt, self.auth_algo)
 
-    static_instances = Config.list(order=1,
+    static_instances = Config.list(label="Static Backends", order=1,
         validate=lambda self: self._static_ips(validate=True),
         description="Static hosts for the endpoint.")
 
@@ -98,33 +98,33 @@ class ScalingConfig(Config):
     def __init__(self, **kwargs):
         Config.__init__(self, "scaling", **kwargs)
 
-    min_instances = Config.integer(default=0, order=0,
+    min_instances = Config.integer(label="Minimum Instances", default=0, order=0,
         validate=lambda self: (self.min_instances >= 0 or \
-            Config.error("Min_instances must be non-negative.")) and \
+            Config.error("Min instances must be non-negative.")) and \
             (self.max_instances >= self.min_instances or \
-            Config.error("Min_instances (%d) must be less than Max_instances (%d)" % \
+            Config.error("Min instances (%d) must be less than Max instances (%d)" % \
                 (self.min_instances, self.max_instances))),
         description="Lower limit on dynamic instances.")
 
-    max_instances = Config.integer(default=1, order=1,
+    max_instances = Config.integer(label="Maximum Instances", default=1, order=1,
         validate=lambda self: (self.max_instances >= 0 or \
-            Config.error("Max_instances must be non-negative.")) and \
+            Config.error("Max instances must be non-negative.")) and \
             (self.max_instances >= self.min_instances or \
-            Config.error("Min_instances (%d) must be less than Max_instances (%d)" % \
+            Config.error("Min instances (%d) must be less than Max instances (%d)" % \
                 (self.min_instances, self.max_instances))),
         description="Upper limit on dynamic instances.")
 
-    rules = Config.list(order=1,
+    rules = Config.list(label="Scaling Rules", order=1,
         validate=lambda self: \
             [metric_calculator.EndpointCriteria.validate(x) for x in self.rules],
         description="List of scaling rules (e.g. 0.5<active<0.8).")
 
-    ramp_limit = Config.integer(default=5, order=2,
+    ramp_limit = Config.integer(label="Ramp Limit", default=5, order=2,
         validate=lambda self: self.ramp_limit > 0 or \
-            Config.error("Ramp_limit must be positive."),
+            Config.error("Ramp limit must be positive."),
         description="The maximum operations (start and stop instances) per round.")
 
-    url = Config.string(order=3,
+    url = Config.string(label="Metrics URL", order=3,
         description="The source url for metrics.")
 
 class Endpoint(object):

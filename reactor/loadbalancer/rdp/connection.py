@@ -301,25 +301,26 @@ class RdpEndpointConfig(TcpEndpointConfig):
         TcpEndpointConfig.__init__(self, **kwargs)
         self._connection = None
 
-    domain = Config.string(order=0,
+    domain = Config.string(label="Active Directory Domain", order=0,
         validate=lambda self: self._check_credentials(),
         description="The Windows domain.")
 
-    username = Config.string(order=1,
+    username = Config.string(label="Active Directory Username", order=1,
         description="An Administrator within the domain.")
 
-    password = Config.string(order=2,
+    password = Config.string(label="Active Driectory Password", order=2,
         description="The Administrator password.")
 
-    orgunit = Config.string(order=3,
+    orgunit = Config.string(label="Active Directory Orginational Unit", order=3,
         description="The orgunit for new machines.")
 
-    template = Config.string(default="windowsVM######", order=4,
+    template = Config.string(label="Machine Name Template",
+        default="windowsVM######", order=4,
         validate=lambda self: len(self.template) == 15 or \
             Config.error("Template must be 15 characters long."),
         description="The template machine name for new machines.")
 
-    host = Config.string(order=5,
+    host = Config.string(label="Domain Controller", order=5,
         validate=lambda self: self._check_connection(),
         description="The AD server to contact.")
 

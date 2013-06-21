@@ -9,10 +9,10 @@ from reactor.loadbalancer.netstat import connection_count
 
 class DnsmasqManagerConfig(Config):
 
-    config_path = Config.string(default="/etc/dnsmasq.d", \
+    config_path = Config.string(label="Configuration Path", default="/etc/dnsmasq.d", \
         description="The configuration directory to insert base configuration.")
 
-    hosts_path = Config.string(default="/etc/hosts.reactor", \
+    hosts_path = Config.string(label="Site Config Path", default="/etc/hosts.reactor", \
         description="The directory in which to generate site configurations.")
 
 class Connection(LoadBalancerConnection):

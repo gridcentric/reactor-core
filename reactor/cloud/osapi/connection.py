@@ -15,31 +15,36 @@ class BaseOsEndpointConfig(Config):
     _client = None
 
     # Common authentication elements.
-    auth_url = Config.string(default="http://localhost:5000/v2.0/", order=0,
+    auth_url = Config.string(label="OpenStack Auth URL",
+        default="http://localhost:5000/v2.0/", order=0,
         validate=lambda self: self._validate_connection_params(),
         alternates=["authurl"],
         description="The OpenStack authentication URL (OS_AUTH_URL).")
 
-    username = Config.string(default="admin", order=1,
+    username = Config.string(label="OpenStack User",
+        default="admin", order=1,
         alternates=["user"],
         description="The user for authentication (OS_USERNAME).")
 
-    password = Config.string(default="admin", order=1,
+    password = Config.string(label="OpenStack Password",
+        default="admin", order=1,
         alternates=["apikey"],
         description="The api key or password (OS_PASSWORD).")
 
-    tenant_name = Config.string(default="admin", order=1,
+    tenant_name = Config.string("OpenStack Tenant/Project",
+        default="admin", order=1,
         alternates=["project"],
         description="The project or tenant (OS_TENANT_NAME).")
 
-    region_name = Config.string(order=1,
+    region_name = Config.string(label="Region Name",
+        order=1,
         description="The region (OS_REGION_NAME).")
 
     # Elements common to launching and booting.
-    security_groups = Config.list(order=3,
-        description="Security groups for new instances.")
+    security_groups = Config.list(label="Security Groups",
+        order=3, description="Security groups for new instances.")
 
-    availability_zone = Config.string(order=3,
+    availability_zone = Config.string(label="Availability Zone", order=3,
         description="Availability zone for new instances.")
 
     def _novaclient(self):
@@ -136,18 +141,18 @@ class BaseOsConnection(CloudConnection):
 
 class OsApiEndpointConfig(BaseOsEndpointConfig):
 
-    instance_name = Config.string(order=2,
+    instance_name = Config.string(label="Instance Name", order=2,
         description="The name given to new instances.")
 
-    flavor_id = Config.string(order=2,
+    flavor_id = Config.string(label="Flavor", order=2,
         validate=lambda self: self._validate_flavor(),
         description="The flavor to use.")
 
-    image_id = Config.string(order=2,
+    image_id = Config.string(label="Image", order=2,
         validate=lambda self: self._validate_image(),
         description="The image ID to boot.")
 
-    key_name = Config.string(order=2,
+    key_name = Config.string(label="Key Name", order=2,
         validate=lambda self: self._validate_keyname(),
         description="The key_name (for injection).")
 

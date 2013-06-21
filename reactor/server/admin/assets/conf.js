@@ -535,7 +535,7 @@ function generateSingleConfig(root, config_name, config)
 
     function buildConfigSlot(root, name) {
         var cgroup = $("#conf-slot-template").clone().appendTo(root);
-        cgroup.find("#conf-label").html(name.replace("_", " "));
+        cgroup.find("#conf-label").html(name);
 
         return cgroup.find("#conf-box")
     }
@@ -544,7 +544,8 @@ function generateSingleConfig(root, config_name, config)
     var input_elt = null;
 
     // Setup the generic scaffolding for a config variable.
-    var slot = buildConfigSlot(root, config_name);
+    var slot = buildConfigSlot(root, 
+            config["label"] || config_name.replace("_", " "));
 
     config["present"] = ("value" in config);
 
