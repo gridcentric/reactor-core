@@ -297,20 +297,21 @@ class LdapConnection:
         return (name, base64_password)
 
 class RdpEndpointConfig(TcpEndpointConfig):
+    def __init__(self, **kwargs):
+        TcpEndpointConfig.__init__(self, **kwargs)
+        self._connection = None
+
     domain = Config.string(order=0,
-        validate=lambda self: self._check_connection(),
+        validate=lambda self: self._check_credentials(),
         description="The Windows domain.")
 
     username = Config.string(order=1,
-        validate=lambda self: self._check_connection(),
         description="An Administrator within the domain.")
 
     password = Config.string(order=2,
-        validate=lambda self: self._check_connection(),
         description="The Administrator password.")
 
     orgunit = Config.string(order=3,
-        validate=lambda self: self._check_connection(),
         description="The orgunit for new machines.")
 
     template = Config.string(default="windowsVM######", order=4,
@@ -333,14 +334,36 @@ class RdpEndpointConfig(TcpEndpointConfig):
                                               self.host)
         return self._connection
 
-    def _check_connection(self):
+    def _check_credentials(self):
+        try:
+            self._check_connection(False)
+        except ldap.INVALID_CREDENTIALS:
+            Config.error("Invalid credentials")
+        except Exception as e:
+            Config.error("Unknown exception: %s" % repr(e))
+
+    def _check_connection(self, hostcheck=True):
+        try:
+            self._try_connection()
+        except ldap.SERVER_DOWN:
+            if hostcheck:
+                Config.error("Could not connect to host")
+        except Exception as e:
+            # If we're not just validating the host, propagate
+            if not hostcheck:
+                raise e
+
+    def _try_connection(self):
         conn = self._get_connection()
         if conn:
             # If we have a connection (i.e. the user has
             # specified a windows domain in their config)
             # then we ensure that we can connect.
-            conn._open()
-            del conn
+            try:
+                conn._open()
+            finally:
+                del conn
+                self._connection = None
 
 class Connection(TcpConnection):
 
