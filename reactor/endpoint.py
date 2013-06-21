@@ -405,7 +405,7 @@ class Endpoint(object):
             self.scale_manager.recommission_instance(self.name, instance_id)
 
         # Update the load balancer.
-        self._update_loadbalancer()
+        self.update_loadbalancer()
 
     def decommission_instances(self, instances, reason):
         """
