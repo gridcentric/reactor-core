@@ -10,11 +10,13 @@
 <!-- Pull in local libraries. -->
 <link href="/admin/assets/lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
 <link href="/admin/assets/lib/bootstrap/css/bootstrap-responsive.css" rel="stylesheet">
+<link href="/admin/assets/lib/bootstrap/chosen/chosen.min.css" rel="stylesheet">
 <script src="/admin/assets/lib/jquery-1.9.1.min.js"></script>
 <script src="/admin/assets/lib/bootstrap/js/bootstrap.min.js"></script>
 <script src="/admin/assets/lib/jquery.flot.js"></script>
 <script src="/admin/assets/lib/jquery.flot.resize.js"></script>
 <script src="/admin/assets/lib/jquery.validate.min.js"></script>
+<script src="/admin/assets/lib/bootstrap/chosen/chosen.jquery.min.js"></script>
 
 <!-- Pull in customization. -->
 <link rel="stylesheet" type="text/css" href="/admin/assets/admin.css" media="screen"/>
@@ -59,6 +61,9 @@ function enableLogout() {
     if ('${loggedin}' == 'True') {
         $("#logoutButton").show();
     }
+}
+function enableChosen() {
+    $(".chzn-select").chosen({disable_search: true});
 }
 enableAccountMenu();
 enableLogout();

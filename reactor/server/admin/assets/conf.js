@@ -197,6 +197,9 @@ function makeConfig(context) {
 
     enableButtons(context);
 
+    // Enable custom CSS that needs to be run post-construction
+    enableChosen();
+
     return context;
 }
 
@@ -264,7 +267,7 @@ function stripAnnotations(context) {
     function removeAnnotation(section) {
         $.each(section, function(key, field) {
             field["ref"].closest(".control-group").attr("class", "control-group")
-                .find("span").slideUp(150, function() { this.remove() });
+                .find("span.help-block").slideUp(150, function() { this.remove() });
         });
     }
 
@@ -563,7 +566,8 @@ function generateSingleConfig(root, config_name, config)
             input_elt.attr("type", "password");
         break;
     case "select":
-        input_elt = $("#conf-input-select").clone().appendTo(slot);
+        span_elt = $("#conf-input-select").clone().appendTo(slot);
+        input_elt = span_elt.find("select");
         $.each(config["options"], function(i, item) {
             $('<option>', {
                 text: item[0], value: item[1]
@@ -572,9 +576,12 @@ function generateSingleConfig(root, config_name, config)
         if (config["present"])
             input_elt.val(config["value"]);
         config["skip-init"]["value"] = true;
+        attachTooltip(span_elt, config, "hover", 250);
+        config["skip-init"]["tooltip"] = true;
         break;
     case "multiselect":
-        input_elt = $("#conf-input-multiselect").clone().appendTo(slot);
+        span_elt = $("#conf-input-multiselect").clone().appendTo(slot);
+        input_elt = span_elt.find("select");
         $.each(config["options"], function(i, item) {
             label = item[0];
             value = item[1];
@@ -587,6 +594,8 @@ function generateSingleConfig(root, config_name, config)
             opt.appendTo(input_elt);
         });
         config["skip-init"]["value"] = true;
+        attachTooltip(span_elt, config, "hover", 250);
+        config["skip-init"]["tooltip"] = true;
         break;
     case "integer":
         input_elt = $("#conf-input-number").clone().appendTo(slot);
