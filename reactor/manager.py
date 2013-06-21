@@ -375,6 +375,10 @@ class ScaleManager(object):
         self._determine_manager_keys(manager_config.keys)
         self._select_endpoints()
 
+        # Initialize health check variables
+        self.marks = manager_config.marks
+        self.health_check = manager_config.health_check
+
     @locked
     def manager_change(self, managers):
         for manager in managers:
