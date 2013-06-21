@@ -8,6 +8,7 @@ ConfigSpec = namedtuple("ConfigSpec", \
     ["type",
      "label",
      "default",
+     "options",
      "normalize",
      "validate",
      "order",
@@ -66,7 +67,7 @@ class Config(object):
                 def setx(self, value):
                     if spec.normalize:
                         value = spec.normalize(value)
-                    self._set(k, spec.type, spec.label, value, spec.default, spec.order, spec.description)
+                    self._set(k, spec.type, spec.label, value, spec.default, spec.options, spec.order, spec.description)
                 def delx(self):
                     setx(self, spec.default)
                 return (getx, setx, delx)
@@ -196,11 +197,12 @@ class Config(object):
     def _get(self, key, default):
         return self._get_obj(key).get("value", default)
 
-    def _set(self, key, typ, label, value, default, order, description):
+    def _set(self, key, typ, label, value, default, options, order, description):
         self._get_obj(key).update([
             ("type", typ),
             ("label", label),
             ("default", default),
+            ("options", options),
             ("description", description),
             ("order", order),
             ("value", value)
@@ -212,11 +214,11 @@ class Config(object):
 
     @staticmethod
     def integer(label=None, default=0, order=1, validate=None, description="No description.", alternates=None):
-        return ConfigSpec("integer", label, default, int, validate, order, description, alternates)
+        return ConfigSpec("integer", label, default, None, int, validate, order, description, alternates)
 
     @staticmethod
     def string(label=None, default='', order=1, validate=None, description="No description.", alternates=None):
-        return ConfigSpec("string", label, default, lambda s: s and str(s) or None, validate,
+        return ConfigSpec("string", label, default, None, lambda s: s and str(s) or None, validate,
                 order, description, alternates)
 
     @staticmethod
@@ -227,7 +229,7 @@ class Config(object):
             elif type(value) == bool:
                 return value
             return False
-        return ConfigSpec("boolean", label, default, normalize, validate, order, description, alternates)
+        return ConfigSpec("boolean", label, default, None, normalize, validate, order, description, alternates)
 
     @staticmethod
     def list(label=None, default=[], order=1, validate=None, description="No description.", alternates=None):
@@ -239,7 +241,24 @@ class Config(object):
             elif type(value) == list:
                 return value
             return []
-        return ConfigSpec("list", label, default, normalize, validate, order, description, alternates)
+        return ConfigSpec("list", label, default, None, normalize, validate, order, description, alternates)
+
+    @staticmethod
+    def select(label=None, default='', options=[], order=1, validate=None, description="No description.", alternates=None):
+        return ConfigSpec("select", label, default, options, lambda s: s and str(s) or None, validate,
+                order, description, alternates)
+
+    @staticmethod
+    def multiselect(label=None, default=[], options=[], order=1, validate=None, description="No description.", alternates=None):
+        def normalize(value):
+            if type(value) == str or type(value) == unicode:
+                value = value.strip()
+                if value:
+                    return value.split(",")
+            elif type(value) == list:
+                return value
+            return []
+        return ConfigSpec("multiselect", label, default, options, normalize, validate, order, description, alternates)
 
 def fromini(ini):
     """ Create a JSON object from a ini-style config. """
@@ -279,6 +298,10 @@ class Connection:
             self._config = {}
         else:
             self._config = config
+
+    def description(self):
+        """ Return a human-readable description of this connection class """
+        return self._name
 
     def _manager_config(self, config=None, values=None):
         """ Return the manager config associated with this connection. """

@@ -6,7 +6,9 @@ import sys
 import copy
 
 from reactor.config import Config
+from reactor.submodules import cloud_options, loadbalancer_options
 import reactor.cloud.connection as cloud_connection
+import reactor.loadbalancer.connection as lb_connection
 import reactor.metrics.calculator as metric_calculator
 
 def compute_key(url):
@@ -50,12 +52,13 @@ class EndpointConfig(Config):
             Config.error("Weight must be non-negative."),
         description="Relative weight (if more than one endpoint exists for this URL).")
 
-    cloud = Config.string(label="Cloud Driver", order=2,
+    cloud = Config.select(label="Cloud Driver", order=2,
+        options=cloud_options(),
         description="The cloud type (e.g. osvms, osapi).")
 
-    loadbalancer = Config.string(label="Loadbalancer Driver", order=2,
-        description="The loadbalancer type (e.g. nginx, tcp)",
-        default="nginx")
+    loadbalancer = Config.select(label="Loadbalancer Driver", order=2,
+        options=loadbalancer_options(),
+        description="The loadbalancer type (e.g. nginx, tcp)")
 
     auth_hash = Config.string(label="Auth Hash Token", default=None, order=3,
         description="The authentication token for this endpoint.")

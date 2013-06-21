@@ -33,6 +33,9 @@ class Connection(LoadBalancerConnection):
         self.template = Template(filename=template_file)
         self.ipmappings = {}
 
+    def description(self):
+        return "DNS-based (dnsmasq)"
+
     def _determine_dnsmasq_pid(self):
         if os.path.exists("/var/run/dnsmasq/dnsmasq.pid"):
             pid_file = file("/var/run/dnsmasq/dnsmasq.pid",'r')

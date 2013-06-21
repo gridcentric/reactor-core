@@ -12,6 +12,8 @@ from StringIO import StringIO
 from reactor.config import Config
 from reactor.config import fromini
 
+import reactor.submodules as submodules
+
 from reactor.endpoint import Endpoint
 from reactor.endpoint import State
 
@@ -33,16 +35,14 @@ class ManagerConfig(Config):
     ips = Config.list(label="Additional IPs", order=1,
         description="Floating or public IPs.")
 
-    loadbalancers = Config.list(label="Enabled Loadbalancer Drivers", order=1,
-       validate=lambda self: \
-            [lb_connection.get_connection(lb, config=self) \
-                for lb in self.loadbalancers],
+    loadbalancers = Config.multiselect(label="Enabled Loadbalancer Drivers", order=1,
+        options=submodules.loadbalancer_options(),
+        default=submodules.loadbalancer_submodules(),
         description="List of supported loadbalancers (e.g. nginx).")
 
-    clouds = Config.list(label="Enabled Cloud Drivers", order=1,
-        validate=lambda self: \
-            [cloud_connection.get_connection(cloud, config=self) \
-                for cloud in self.clouds],
+    clouds = Config.multiselect(label="Enabled Cloud Drivers", order=1,
+        options=submodules.cloud_options(),
+        default=submodules.cloud_submodules(),
         description="List of supported clouds (e.g. osapi).")
 
     health_check = Config.integer(label="Health Check Interval (seconds)", default=5, order=1,

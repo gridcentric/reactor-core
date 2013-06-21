@@ -284,6 +284,9 @@ class Connection(LoadBalancerConnection):
         self.consumer = ConnectionConsumer(self.locks, self.producer)
         self.consumer.start()
 
+    def description(self):
+        return "Raw TCP"
+
     def __del__(self):
         if self.producer:
             self.producer.stop()

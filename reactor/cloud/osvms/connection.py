@@ -16,6 +16,9 @@ class Connection(BaseOsConnection):
 
     _ENDPOINT_CONFIG_CLASS = OsVmsEndpointConfig
 
+    def description(self):
+        return "OpenStack + VMS"
+
     def _list_instances(self, config):
         """ 
         Returns a list of instances from the endpoint.

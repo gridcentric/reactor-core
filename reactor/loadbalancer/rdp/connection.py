@@ -370,6 +370,9 @@ class Connection(TcpConnection):
 
     _ENDPOINT_CONFIG_CLASS = RdpEndpointConfig
 
+    def description(self):
+        return "Remote Desktop Protocol"
+
     def start_params(self, config):
         config = self._endpoint_config(config)
         connection = config._get_connection()

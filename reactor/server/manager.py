@@ -9,8 +9,7 @@ import reactor.zookeeper.paths as paths
 from reactor.server.endpoint import APIEndpoint
 import reactor.server.iptables as iptables
 import reactor.server.ips as ips
-import reactor.loadbalancer.connection as loadbalancer
-import reactor.cloud.connection as cloud
+from reactor.submodules import cloud_submodules, loadbalancer_submodules
 
 class ReactorScaleManager(ScaleManager):
     def __init__(self, zk_servers):
@@ -37,26 +36,10 @@ class ReactorScaleManager(ScaleManager):
                 hosts.append(host)
         iptables.setup(hosts, extra_ports=[8080])
 
-    def _discover_submodules(self, mod):
-        discovered = []
-        path = os.path.dirname(mod.__file__)
-        for name in os.listdir(path):
-            try:
-                # Check if it's a directory, and we can
-                # successfully perform get_connection().
-                if os.path.isdir(os.path.join(path, name)):
-                    mod.get_connection(name)
-                    discovered.append(name)
-            except:
-                import traceback
-                logging.debug("Unable to load module %s: %s" % (name, traceback.format_exc()))
-                continue
-        return discovered
-
     def manager_register(self, config=None):
         manager_config = ManagerConfig(values=config)
-        manager_config.loadbalancers = self._discover_submodules(loadbalancer)
-        manager_config.clouds = self._discover_submodules(cloud)
+        manager_config.loadbalancers = loadbalancer_submodules()
+        manager_config.clouds = cloud_submodules()
         super(ReactorScaleManager, self).manager_register(manager_config._values())
 
     def serve(self):

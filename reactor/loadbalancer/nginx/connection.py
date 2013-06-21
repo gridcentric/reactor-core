@@ -175,6 +175,9 @@ class Connection(LoadBalancerConnection):
         self.log_reader = NginxLogWatcher("/var/log/nginx/access.log")
         self.log_reader.start()
 
+    def description(self):
+        return "HTTP-based (nginx)"
+
     def __del__(self):
         self.log_reader.stop()
 

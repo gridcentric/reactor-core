@@ -562,6 +562,32 @@ function generateSingleConfig(root, config_name, config)
         if (contains(config_name.toLowerCase(), "password"))
             input_elt.attr("type", "password");
         break;
+    case "select":
+        input_elt = $("#conf-input-select").clone().appendTo(slot);
+        $.each(config["options"], function(i, item) {
+            $('<option>', {
+                text: item[0], value: item[1]
+            }).appendTo(input_elt);
+        });
+        if (config["present"])
+            input_elt.val(config["value"]);
+        config["skip-init"]["value"] = true;
+        break;
+    case "multiselect":
+        input_elt = $("#conf-input-multiselect").clone().appendTo(slot);
+        $.each(config["options"], function(i, item) {
+            label = item[0];
+            value = item[1];
+            selected = config["present"] && $.inArray(value, config["value"]) >= 0;
+            opt = $('<option>', {
+                text: label, value: value
+            });
+            if (selected)
+                opt.attr('selected', true);
+            opt.appendTo(input_elt);
+        });
+        config["skip-init"]["value"] = true;
+        break;
     case "integer":
         input_elt = $("#conf-input-number").clone().appendTo(slot);
         break;
