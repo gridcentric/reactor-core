@@ -136,7 +136,7 @@ class EndpointCriteria(object):
         self._parse(criteria_str)
 
     @staticmethod
-    def validate(self, criteria_str):
+    def validate(criteria_str):
         m = re.match(EndpointCriteria.PATTERN, criteria_str)
         if not m:
             raise Exception("Rules must match: %s" % EndpointCritera.PATTERN)
