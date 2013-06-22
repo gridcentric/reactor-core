@@ -18,8 +18,8 @@
 <%include file="/list.html" args="id='#managersActiveList',name=manager_name,path='/v1.1/managers',field='active',key=True,link='/admin/managers/'"/>
 <%include file="/list.html" args="id='#managersConfiguredList',name=manager_name,path='/v1.1/managers',field='configured',link='/admin/managers/'"/>
 
-<%include file="/new.html" args="type='endpoint'"/>
-<%include file="/new.html" args="type='manager'"/>
+<%include file="/new.html" args="type='endpoint',path='/v1.1/endpoints',field='endpoints'"/>
+<%include file="/new.html" args="type='manager',path='/v1.1/managers',field='configured'"/>
 
 </div>
 

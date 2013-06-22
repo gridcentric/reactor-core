@@ -1,10 +1,18 @@
-<%page args="type"/>
+<%page args="type,path,field"/>
 
 <div class="row">
 <div class="span10 offset2">
 <form class="form-inline">
-<input type="text" id="${type}name" placeholder="New ${type}" class="input-medium"></input>
-<button id="${type}create" class="btn btn-primary" type="submit">Create</button>
+<div class="input-append">
+<input id="${type}name" class="input-small" placeholder="New ${type}" type="text">
+  <div class="btn-group">
+    <button class="btn dropdown-toggle" data-toggle="dropdown" required=" ">
+          Create<span class="caret"></span></button>
+    <ul id="${type}-create-dropdown" class="dropdown-menu">
+      <li><a id="${type}create" typehref="#">Unconfigured ${type}</a></li>
+    </ul>
+  </div>
+</div>
 </form>
 </div>
 </div>
@@ -45,4 +53,52 @@
             });
         }
     });
+
+    function ${type}_process(result) {
+        var keys = [];
+        $.each(result['${field}'], function(index, value) {
+            keys.push(value);
+        });
+        keys.sort();
+        $.each(keys, function(index, endpoint) {
+            $("#${type}-create-dropdown").append(
+                '<li><a id="${type}-copy-' + endpoint +
+                '" typehref="#">Clone of ${type} ' + endpoint + '</a></li>');
+            $("#${type}-copy-" + endpoint).click(function (e) {
+                e.preventDefault();
+                var name = $("#${type}name").val();
+                if (name.match(/^[\w-]+$/g) === null) {
+                    $("#${type}-prompt-modal").modal("show");
+                } else {
+                    // Get config to copy
+                    $.ajax({
+                        url: '${path}/' + endpoint,
+                        type: 'GET',
+                        dataType: 'text', // Don't deserialize
+                        success: function(result) {
+                            // Just ping-pong it back to the server
+                            $.ajax({
+                                url: "${path}/" + name,
+                                type: 'POST',
+                                dataType: 'json',
+                                data: result,
+                                processData: false,
+                                contentType: 'application/json',
+                                complete: function() {
+                                    window.location = "/admin/${type}s/" + name;
+                                },
+                            });
+                        },
+                    });
+                }
+            });
+        });
+    }
+
+    // Populate "Copy from X" list
+    $.ajax({
+        url: '${path}',
+        type: 'GET',
+        dataType: 'json',
+        success: ${type}_process, });
 </script>
