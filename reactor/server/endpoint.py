@@ -27,6 +27,12 @@ class APIEndpoint(Endpoint):
             api_config.port = 8080
             changed = True
 
+        # Make sure we have a loadbalancer configured.
+        new_lb = "nginx"
+        if not(api_config.loadbalancer):
+            api_config.loadbalancer = new_lb
+            changed = True
+
         # Update the static IPs in the configuration.
         api_config.static_instances.sort()
         addresses = self.scale_manager.zk_servers
