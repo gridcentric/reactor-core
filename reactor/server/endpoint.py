@@ -41,12 +41,6 @@ class APIEndpoint(Endpoint):
             api_config.static_instances = addresses
             changed = True
 
-        # Update SSL information.
-        api_config = NginxEndpointConfig(section='loadbalancer:nginx', obj=config)
-        if not api_config.ssl:
-            api_config.ssl = True
-            changed = True
-
         # Read the configuration.
         if changed:
             # Save the config if it was changed.

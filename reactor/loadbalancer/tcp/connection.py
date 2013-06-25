@@ -321,7 +321,7 @@ class Connection(LoadBalancerConnection):
             return
 
         # Update the portmap (including exclusive info).
-        config = self._endpoint_config(config).exclusive
+        config = self._endpoint_config(config)
         self.portmap[listen] = [config.exclusive, []]
         for backend in ips:
             if not(backend.port):
