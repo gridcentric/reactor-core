@@ -743,6 +743,14 @@ class ScaleManager(object):
         return results
 
     @locked
+    def start_params(self, endpoint=None):
+        return {}
+
+    @locked
+    def cleanup_start_params(self, endpoint, start_params):
+        pass
+
+    @locked
     def update_metrics(self):
         """ 
         Collects the metrics from the loadbalancer, updates zookeeper and then collects
