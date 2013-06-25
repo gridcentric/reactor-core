@@ -11,7 +11,6 @@ import ldap
 import ldap.modlist as modlist
 
 from reactor.config import Config
-from reactor.config import Connection
 from reactor.loadbalancer.connection import LoadBalancerConnection
 from reactor.loadbalancer.netstat import connection_count
 

@@ -39,13 +39,13 @@ def calculate_weighted_averages(metrics):
     return totals
 
 def calculate_num_servers_uniform(total, bound):
-    """ 
+    """
     Determines the number of servers required to spread the 'total' load uniformly
     across them all so that each one has at most 'bound' amount of load.
     """
     if bound == 0:
         # A bound of 0 essentially indicates an inifinite number of servers.
-        # Return the maximum value possible. 
+        # Return the maximum value possible.
         return sys.maxint
     return int(math.ceil(total / bound))
 
@@ -139,7 +139,7 @@ class EndpointCriteria(object):
     def validate(criteria_str):
         m = re.match(EndpointCriteria.PATTERN, criteria_str)
         if not m:
-            raise Exception("Rules must match: %s" % EndpointCritera.PATTERN)
+            raise Exception("Rules must match: %s" % EndpointCriteria.PATTERN)
 
     def upper_bound(self):
         if len(self.values) < 2:

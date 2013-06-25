@@ -22,7 +22,7 @@ COLOR_MAP = { \
     DECOMMISSIONED_TYPE : "008800",
     }
 
-def query_state(client):
+def query_state(client, factor):
     # Just grab the list of managers.
     managers = client.list_managers_active()
     users = 0
@@ -176,7 +176,7 @@ def main():
     interval = 1.0
     factor = 10.0
 
-    opts, args = getopt.getopt(sys.argv[1:], 
+    opts, args = getopt.getopt(sys.argv[1:],
             "ha:p:df:i:", ["help","api_server=","password=","dryrun","factor=","interval="])
 
     for o, a in opts:
@@ -200,8 +200,8 @@ def main():
     else:
         # Open our gource process.
         gource = subprocess.Popen(\
-            ["gource", "-w", "--realtime", 
-             "--log-format", "custom", 
+            ["gource", "-w", "--realtime",
+             "--log-format", "custom",
              "--user-scale", "0.5",
              "--max-user-speed", "20",
              "--hide", "date",
@@ -209,7 +209,7 @@ def main():
              "--highlight-dirs",
              "--font-size", "14",
              "--file-idle-time", "0",
-             "-"], 
+             "-"],
             stdin=subprocess.PIPE)
         output = gource.stdin
 
@@ -219,7 +219,7 @@ def main():
     def update():
         while True:
             # Query state.
-            managers, endpoints, users = query_state(client)
+            managers, endpoints, users = query_state(client, factor)
 
             # Generate differential log.
             generate_log(output, managers, endpoints, users)

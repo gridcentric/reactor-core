@@ -375,7 +375,7 @@ class Connection(LoadBalancerConnection):
         # kill off servers that were once active and are
         # now not active.
         if kill_active:
-            self._scale_manager.unregister_ip(kill_active)
+            self.locks._scale_manager.unregister_ip(kill_active)
         if forget_active:
             for ip in forget_active:
                 self.locks.forget_ip(ip)
