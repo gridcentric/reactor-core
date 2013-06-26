@@ -12,7 +12,7 @@ import atexit
 from StringIO import StringIO
 from ConfigParser import SafeConfigParser
 
-from reactor.config import fromini
+from reactor.config import fromstr
 from reactor.apiclient import ReactorApiClient
 from reactor import log
 
@@ -160,9 +160,7 @@ def main():
                 new_conf += line
     
             api_client = get_api_client()
-            config = SafeConfigParser()
-            config.readfp(StringIO(new_conf))
-            config = fromini(config)
+            config = fromstr(new_conf)
             api_client.manage_endpoint(endpoint_name, config)
  
         elif command == "unmanage":
@@ -195,9 +193,7 @@ def main():
                 new_conf += line
     
             api_client = get_api_client()
-            config = SafeConfigParser()
-            config.readfp(StringIO(new_conf))
-            config = fromini(config)
+            config = fromstr(new_conf)
             api_client.update_manager(manager, config)
 
         elif command == "manager-show":
