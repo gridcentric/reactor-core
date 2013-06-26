@@ -23,6 +23,7 @@ server {
     ssl on;
     ssl_certificate ${ssl_certificate};
     ssl_certificate_key ${ssl_key};
+    error_page 497 https://$host:$server_port$request_uri;
 % endif
 
     location ${path} {
