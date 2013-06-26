@@ -209,10 +209,12 @@ class ScaleManager(object):
             cloud._endpoint_config(config=config)
         return config._spec()
 
-    def _endpoint_config_validate(self, values):
+    def _endpoint_config_validate(self, name, values):
         """ Validate a given endpoint configuration. """
         config = Config(values=values)
-        Endpoint.validate_config(config, self.clouds, self.loadbalancers)
+        endpoint = self.endpoints.get(name, None)
+        if endpoint:
+            endpoint.validate_config(config, self.clouds, self.loadbalancers)
         for lb in self.loadbalancers.values():
             lb._endpoint_config(config=config)._validate()
         return config._validate_errors()

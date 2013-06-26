@@ -78,7 +78,7 @@ class ServerApi(ReactorApi):
         return Response(body=json.dumps(self.manager._manager_config_spec()))
 
     def handle_update_endpoint(self, endpoint_name, endpoint_config):
-        errs = self.manager._endpoint_config_validate(endpoint_config)
+        errs = self.manager._endpoint_config_validate(endpoint_name, endpoint_config)
         if errs:
             return json.dumps(errs)
         else:

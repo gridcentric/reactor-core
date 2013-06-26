@@ -321,8 +321,7 @@ class Endpoint(object):
         EndpointConfig(obj=config)
         ScalingConfig(obj=config)
 
-    @staticmethod
-    def validate_config(config, clouds, loadbalancers):
+    def validate_config(self, config, clouds, loadbalancers):
         config = EndpointConfig(obj=config)
         scaling = ScalingConfig(obj=config)
         config._validate()

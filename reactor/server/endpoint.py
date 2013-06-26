@@ -27,6 +27,11 @@ class APIEndpoint(Endpoint):
             api_config.port = 8080
             changed = True
 
+        # Clear out the cloud configuration
+        if api_config.cloud:
+            api_config.cloud = None
+            changed = True
+
         # Make sure we have a loadbalancer configured.
         new_lb = "nginx"
         if not(api_config.loadbalancer):
@@ -60,6 +65,12 @@ class APIEndpoint(Endpoint):
         if state != State.running:
             # Always make sure that the latest action reflects our state.
             self.scale_manager.zk_conn.write(paths.endpoint_state("api"), State.running)
+
+    def validate_config(self, config, clouds, loadbalancers):
+        # Remove unneeded/unwanted config keys before validating
+        api_config = EndpointConfig(obj=config)
+        api_config.cloud = None
+        Endpoint.validate_config(self, api_config, clouds, loadbalancers)
 
     def update_config(self, config):
         Endpoint.update_config(self, self.api_config(config))
