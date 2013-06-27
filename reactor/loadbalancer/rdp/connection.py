@@ -302,7 +302,8 @@ class RdpEndpointConfig(TcpEndpointConfig):
 
     domain = Config.string(label="Active Directory Domain", order=0,
         validate=lambda self: self._check_credentials(),
-        description="The Windows domain.")
+        description="Fully-qualified name of the Active Directory domain for " +
+        "the VM machine accounts.")
 
     username = Config.string(label="Active Directory Username", order=1,
         description="An Administrator within the domain.")
@@ -311,7 +312,8 @@ class RdpEndpointConfig(TcpEndpointConfig):
         description="The Administrator password.")
 
     orgunit = Config.string(label="Active Directory Orginational Unit", order=3,
-        description="The orgunit for new machines.")
+        description="The orgunit for new machines. The master machine account " +
+        "must be in the same orgunit prior to live-imaging.")
 
     template = Config.string(label="Machine Name Template",
         default="windowsVM######", order=4,
@@ -321,7 +323,7 @@ class RdpEndpointConfig(TcpEndpointConfig):
 
     host = Config.string(label="Domain Controller", order=5,
         validate=lambda self: self._check_connection(),
-        description="The AD server to contact.")
+        description="The network address (hostname or IP) of the AD server to contact.")
 
     def _get_connection(self):
         if not(self.domain):

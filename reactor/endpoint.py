@@ -54,11 +54,11 @@ class EndpointConfig(Config):
 
     cloud = Config.select(label="Cloud Driver", order=2,
         options=cloud_options(),
-        description="The cloud type (e.g. osvms, osapi).")
+        description="The cloud platform used by this endpoint.")
 
     loadbalancer = Config.select(label="Loadbalancer Driver", order=2,
         options=loadbalancer_options(),
-        description="The loadbalancer type (e.g. nginx, tcp)")
+        description="The loadbalancer for this endpoint.")
 
     auth_hash = Config.string(label="Auth Hash Token", default=None, order=3,
         description="The authentication token for this endpoint.")
@@ -228,7 +228,7 @@ class Endpoint(object):
                 target_min = config_max
                 target_max = config_max
             else:
-                # b. Less instances are required than our minimum allowance                
+                # b. Less instances are required than our minimum allowance
                 target_min = config_min
                 target_max = config_min
 

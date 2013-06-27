@@ -135,7 +135,7 @@ class NginxLogWatcher(threading.Thread):
 
 class NginxManagerConfig(Config):
 
-    config_path = Config.string(label="Configuration Path", 
+    config_path = Config.string(label="Configuration Path",
         default="/etc/nginx/conf.d",
         description="The configuration directory for nginx.")
 
@@ -146,7 +146,7 @@ class NginxManagerConfig(Config):
 class NginxEndpointConfig(Config):
 
     sticky_sessions = Config.boolean(label="Use Sticky Sessions", default=False,
-        description="Whether or use nginx's sticky session feature.")
+        description="Enables nginx sticky sessions.")
 
     keepalive = Config.integer(label="Keepalive Connections", default=0,
         validate=lambda self: self.keepalive >= 0 or \
@@ -154,7 +154,7 @@ class NginxEndpointConfig(Config):
         description="Number of backend connections to keep alive.")
 
     ssl = Config.boolean(label="Use SSL", default=False,
-        description="Have nginx handle SSL.")
+        description="Configures nginx to handle SSL.")
 
     ssl_certificate = Config.string(label="SSL Certificate", default=None,
         description="An SSL certification in PEM format.")

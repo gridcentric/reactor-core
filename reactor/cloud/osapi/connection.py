@@ -27,24 +27,24 @@ class BaseOsEndpointConfig(Config):
         description="The user for authentication (OS_USERNAME).")
 
     password = Config.string(label="OpenStack Password",
-        default="admin", order=1,
+        default="admin", order=2,
         alternates=["apikey"],
         description="The api key or password (OS_PASSWORD).")
 
     tenant_name = Config.string("OpenStack Tenant/Project",
-        default="admin", order=1,
+        default="admin", order=3,
         alternates=["project"],
         description="The project or tenant (OS_TENANT_NAME).")
 
     region_name = Config.string(label="Region Name",
-        order=1,
+        order=4,
         description="The region (OS_REGION_NAME).")
 
     # Elements common to launching and booting.
     security_groups = Config.list(label="Security Groups",
-        order=3, description="Security groups for new instances.")
+        order=5, description="Security groups for new instances.")
 
-    availability_zone = Config.string(label="Availability Zone", order=3,
+    availability_zone = Config.string(label="Availability Zone", order=5,
         description="Availability zone for new instances.")
 
     def _novaclient(self):
@@ -94,7 +94,7 @@ class BaseOsConnection(CloudConnection):
         return addresses
 
     def _list_instances(self, config):
-        """ 
+        """
         Returns a  list of instances from the endpoint. This is implemented by the
         subclasses
         """
@@ -102,7 +102,7 @@ class BaseOsConnection(CloudConnection):
 
     def list_instances(self, config):
         """
-        Lists the instances related to a endpoint. The identifier is used to 
+        Lists the instances related to a endpoint. The identifier is used to
         identify the related instances in the respective clouds.
         """
         # Pull out the _info dictionary from the Server object.
@@ -197,7 +197,7 @@ class Connection(BaseOsConnection):
         return "OpenStack"
 
     def _list_instances(self, config):
-        """ 
+        """
         Returns a  list of instances from the endpoint.
         """
         config = self._endpoint_config(config)
@@ -210,7 +210,7 @@ class Connection(BaseOsConnection):
         return instances
 
     def _start_instance(self, config, params={}):
-        # TODO: We can pass in the reactor parameter here via 
+        # TODO: We can pass in the reactor parameter here via
         # CloudStart or some other standard support mechanism.
         config = self._endpoint_config(config)
         userdata = "reactor=%s" % params.get('reactor', '')
