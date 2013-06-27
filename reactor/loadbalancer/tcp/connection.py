@@ -17,7 +17,10 @@ def close_fds(except_fds=[]):
         maxfd = 1024
     for fd in range(0, maxfd):
         if not(fd in except_fds):
-            os.close(fd)
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
 def fork_and_exec(cmd, child_fds=[]):
     # Close all file descriptors, except
@@ -63,7 +66,7 @@ class Accept:
 
     def redirect(self, host, port):
         cmd = ["socat", "fd:%d" % self.sock.fileno(), "tcp-connect:%s:%d" % (host, port)]
-        return fork_and_exec(cmd, child_fds=self.sock.fileno())
+        return fork_and_exec(cmd, child_fds=[self.sock.fileno()])
 
 class ConnectionConsumer(threading.Thread):
     def __init__(self, locks, producer):
