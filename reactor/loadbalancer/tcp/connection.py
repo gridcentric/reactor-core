@@ -46,6 +46,9 @@ def fork_and_exec(cmd, child_fds=[]):
     # Close off all parent FDs.
     close_fds(except_fds=child_fds)
 
+    # Create process group.
+    os.setsid()
+
     # Fork again.
     pid = os.fork()
     if pid != 0:
