@@ -50,8 +50,8 @@ class ManagerConfig(Config):
             Config.error("Health_check must be positive."),
         description="Period for decomissioning and timing out instances.")
 
-    marks = Config.integer(label="Maximum Failed Health Checks", 
-        default=10, order=2,
+    marks = Config.integer(label="Maximum Failed Health Checks",
+        default=36, order=2,
         validate=lambda self: self.marks > 0 or \
             Config.error("Marks must be positive."),
         description="Timeout for unregistered and decomissioned VMs.")
