@@ -65,7 +65,7 @@ def locked(fn):
     """
     IMPORTANT: There is a potential deadlock if the manager is locked when setting / clearing
     a zookeeper watch. Our policy is that the manager cannot be locked when it makes a call
-    to one of the zookeeper client's watch functions. Note to check the full call chain to 
+    to one of the zookeeper client's watch functions. Note to check the full call chain to
     ensure that a higher level function is not setting the lock.
     """
     def wrapped_fn(self, *args, **kwargs):
@@ -424,7 +424,7 @@ class ScaleManager(object):
         # NOTE: We create all endpoints on this manager with the current
         # manager config. This means that all manager keys will be inherited
         # and you can set some sensible defaults either in the local manager
-        # configuration or in the global configuration. 
+        # configuration or in the global configuration.
         # This does mean however, that the ManagerConfig and EndpointConfig
         # should have disjoint sections for the most part.
         endpoint = Endpoint(endpoint_name, self)
@@ -754,10 +754,10 @@ class ScaleManager(object):
 
     @locked
     def update_metrics(self):
-        """ 
+        """
         Collects the metrics from the loadbalancer, updates zookeeper and then collects
         the metrics posted by other managers.
-        
+
         returns a tuple (metrics, active_connections) both of which are dictionaries. Metrics
         is indexed by the endpoint key and active connections is indexed by endpoint name.
         """
@@ -836,7 +836,7 @@ class ScaleManager(object):
 
     @locked
     def load_metrics(self, endpoint, endpoint_metrics={}):
-        """ 
+        """
         Load the particular metrics for a endpoint and return
         a tuple (metrics, active_connections) where metrics
         are the metrics to use for the endpoint and active_connections
