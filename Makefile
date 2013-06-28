@@ -17,7 +17,7 @@ INSTALL_DATA := install -m0644 -p
 PYTHON_VER ?= $(shell python -V 2>&1 | cut -d' ' -f2 | awk -F'.' '{print $$1 "." $$2};')
 PACKAGES_DIR ?= dist-packages
 
-default: dist packages
+default: dist packages cobaltclient
 .PHONY: default
 
 dist:
@@ -53,7 +53,7 @@ dist_clean:
 .PHONY: dist_clean
 
 clean: dist_clean
-	@rm -rf *.deb *.rpm
+	@rm -rf *.deb *.rpm extra/cobalt-novaclient*.*
 .PHONY: clean
 
 $(RPMBUILD):
@@ -115,5 +115,19 @@ server.rpm: $(RPMBUILD)
 	@find $(RPMBUILD) -name \*.rpm -exec mv {} . \;
 .PHONY: server.rpm
 
-packages: agent.deb agent.rpm server.deb server.rpm
+cobaltclient.rpm:
+	@rm -rf $(CURDIR)/extra/cobalt-novaclient*.rpm
+	@rm -rf $(CURDIR)/cobalt-novaclient*.rpm
+	@curl -L -O http://downloads.gridcentric.com/packages/cobaltclient/grizzly/rpm/binary/cobalt-novaclient-`curl -L http://downloads.gridcentric.com/packages/cobaltclient/grizzly/rpm/repodata/filelists.xml.gz 2>/dev/null | zcat | grep -o -E 'ver=".+\"' | cut -d ' ' -f 1 | head -n1 | sed -e 's/ver="//' -e 's/"$$//'`-py2.7.noarch.rpm 2>/dev/null
+	@mv cobalt-novaclient*.rpm $(CURDIR)/extra/
+.PHONY: cobaltclient.rpm
+
+cobaltclient.deb:
+	@rm -rf $(CURDIR)/extra/cobalt-novaclient*.deb
+	@rm -rf $(CURDIR)/cobalt-novaclient*.deb
+	@curl -L -O http://downloads.gridcentric.com/packages/cobaltclient/grizzly/deb//`curl -L http://downloads.gridcentric.com/packages/cobaltclient/grizzly/deb/dists/gridcentric/non-free/binary-amd64/Packages.gz 2>/dev/null | zcat | grep ^Filename | cut -d ' ' -f 2-` 2>/dev/null
+	@mv cobalt-novaclient*.deb $(CURDIR)/extra/
+.PHONY: cobaltclient.deb
+
+packages: agent.deb agent.rpm server.deb server.rpm cobaltclient.rpm cobaltclient.deb
 .PHONY: packages
