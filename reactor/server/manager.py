@@ -52,23 +52,12 @@ class ReactorScaleManager(ScaleManager):
 
         # Ensure it is being served.
         if not("api" in self.endpoints):
-            self.create_endpoint("api")
-
-    def create_endpoint(self, endpoint_name):
-        if endpoint_name == "api":
-            # Create the API endpoint.
-            if not(self.api_endpoint):
-                self.api_endpoint = APIEndpoint(self)
-
-            logging.info("API endpoint found.")
+            self.api_endpoint = APIEndpoint(self)
             self.add_endpoint(self.api_endpoint)
-        else:
-            # Create the standard endpoint.
-            super(ReactorScaleManager, self).create_endpoint(endpoint_name)
 
     def remove_endpoint(self, endpoint_name, unmanage=False):
         if endpoint_name == "api" and unmanage:
-            # Recreate, we always have an API endpoint.
-            self.create_endpoint(endpoint_name)
+            # Ignore
+            logging.error("Tried to remove API endpoint!")
         else:
             super(ReactorScaleManager, self).remove_endpoint(endpoint_name, unmanage=unmanage)
