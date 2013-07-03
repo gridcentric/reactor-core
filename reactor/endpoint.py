@@ -389,8 +389,7 @@ class Endpoint(object):
             self.scale_manager.add_endpoint(self)
 
         # Update the load balancer.
-        elif not old_url or \
-             old_static_addresses != new_static_addresses or \
+        elif old_static_addresses != new_static_addresses or \
              old_port != new_port or \
              old_weight != new_weight or \
              old_redirect != new_redirect:
