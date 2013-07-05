@@ -10,8 +10,6 @@ from reactor.loadbalancer.nginx import NginxEndpointConfig
 class APIEndpoint(Endpoint):
     def __init__(self, scale_manager):
         Endpoint.__init__(self, "api", scale_manager)
-        # Make sure that this service is running.
-        self.update_state(None)
 
     def api_config(self, config):
         # Whether we require rewriting.
