@@ -248,24 +248,29 @@ class Endpoint(object):
 
         instances = self.instances()
         num_instances = len(instances)
-        if not(metric_instances):
-            metric_instances = len(self.scale_manager.confirmed_ips(self.name))
         ramp_limit = self.scaling.ramp_limit
 
         if self.state == State.running:
-            (target_min, target_max) = \
-                self._determine_target_instances_range(metrics, metric_instances)
-
-            if (num_instances >= target_min and num_instances <= target_max) \
-                or (target_min > target_max):
-                # Either the number of instances we currently have is within the
-                # ideal range or we have no information to base changing the number
-                # of instances. In either case we just keep the instances the same.
-                target = num_instances
+            # If this is a config change update,
+            if reconfigure:
+                # Just make sure the number of instances is within range.
+                target = max(num_instances, self.scaling.min_instances)
+                target = min(target, self.scaling.max_instances)
+            # Else this is a health check, so make use of the passed metrics.
             else:
-                # we need to either scale up or scale down. Our target will be the
-                # midpoint in the target range.
-                target = (target_min + target_max) / 2
+                (target_min, target_max) = \
+                    self._determine_target_instances_range(metrics, metric_instances)
+
+                if (num_instances >= target_min and num_instances <= target_max) \
+                    or (target_min > target_max):
+                    # Either the number of instances we currently have is within the
+                    # ideal range or we have no information to base changing the number
+                    # of instances. In either case we just keep the instances the same.
+                    target = num_instances
+                else:
+                    # we need to either scale up or scale down. Our target will be the
+                    # midpoint in the target range.
+                    target = (target_min + target_max) / 2
 
         elif self.state == State.stopped:
             target = 0
@@ -405,6 +410,7 @@ class Endpoint(object):
             logging.info("Recommissioning instance %s for server %s (reason: %s)" %
                     (instance_id, self.name, reason))
             self.scale_manager.recommission_instance(self.name, instance_id)
+            num_instances -= 1
 
         # Update the load balancer.
         self.update_loadbalancer()
