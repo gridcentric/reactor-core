@@ -376,7 +376,7 @@ class Endpoint(object):
 
         # Remove all old instances from loadbalancer,
         # (Only necessary if we've changed the endpoint URL).
-        if old_url and old_url != new_url:
+        if old_url != new_url:
             self.scale_manager.remove_endpoint(self.name)
 
         # Reload the configuration.
@@ -390,7 +390,7 @@ class Endpoint(object):
         self.lb_conn = self.scale_manager._find_loadbalancer_connection(new_config.loadbalancer)
 
         # Do a referesh (to capture the new endpoint).
-        if old_url and old_url != new_url:
+        if old_url != new_url:
             self.scale_manager.add_endpoint(self)
 
         # Update the load balancer.

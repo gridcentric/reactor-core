@@ -6,7 +6,7 @@ from reactor.manager import ScaleManager
 from reactor.manager import locked
 import reactor.zookeeper.paths as paths
 
-from reactor.server.endpoint import APIEndpoint
+from reactor.server.endpoint import APIEndpointConfig
 import reactor.server.iptables as iptables
 import reactor.server.ips as ips
 from reactor.submodules import cloud_submodules, loadbalancer_submodules
@@ -16,9 +16,6 @@ class ReactorScaleManager(ScaleManager):
         # Grab the list of global IPs.
         names = ips.find_global()
         ScaleManager.__init__(self, zk_servers, names)
-
-        # The implicit API endpoint.
-        self.api_endpoint = None
 
     def start_params(self, endpoint=None):
         # Pass a parameter pointed back to this instance.
@@ -50,14 +47,7 @@ class ReactorScaleManager(ScaleManager):
         self.setup_iptables(self.zk_conn.watch_children(
             paths.manager_configs(), self.setup_iptables))
 
-        # Ensure it is being served.
+        # Make sure we have an API endpoint.
         if not("api" in self.endpoints):
-            self.api_endpoint = APIEndpoint(self)
-            self.add_endpoint(self.api_endpoint)
-
-    def remove_endpoint(self, endpoint_name, unmanage=False):
-        if endpoint_name == "api" and unmanage:
-            # Ignore
-            logging.error("Tried to remove API endpoint!")
-        else:
-            super(ReactorScaleManager, self).remove_endpoint(endpoint_name, unmanage=unmanage)
+            # Push the endpoint config
+            self.zk_conn.write(paths.endpoint("api"), APIEndpointConfig)
