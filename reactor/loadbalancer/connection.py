@@ -45,6 +45,13 @@ class Locks(object):
                     return ip
         return None
 
+    def find_locked_ip(self, data):
+        locked = self.list_ips() or []
+        for ip in locked:
+            if data == self.read_ip(ip):
+                return ip
+        return None
+
     def lock_ip(self, ip, data=''):
         return self._scale_manager.zk_conn.trylock(
                 paths.loadbalancer_ip(self._name, ip),
@@ -62,6 +69,11 @@ class Locks(object):
     def forget_ip(self, ip):
         return self._scale_manager.zk_conn.delete(
                 paths.loadbalancer_ip(self._name, ip))
+
+    def forget_all(self):
+        locked = self.list_ips() or []
+        for ip in locked:
+            self.forget_ip(ip)
 
 class LoadBalancerConnection(Connection):
 

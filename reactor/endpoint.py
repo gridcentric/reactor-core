@@ -102,17 +102,17 @@ class ScalingConfig(Config):
     def __init__(self, **kwargs):
         Config.__init__(self, "scaling", **kwargs)
 
-    min_instances = Config.integer(label="Minimum Instances", default=0, order=0,
-        validate=lambda self: (self.min_instances >= 0 or \
-            Config.error("Min instances must be non-negative.")) and \
+    min_instances = Config.integer(label="Minimum Instances", default=1, order=0,
+        validate=lambda self: (self.min_instances >= 1 or \
+            Config.error("Min instances must be at least one.")) and \
             (self.max_instances >= self.min_instances or \
             Config.error("Min instances (%d) must be less than Max instances (%d)" % \
                 (self.min_instances, self.max_instances))),
         description="Lower limit on dynamic instances.")
 
     max_instances = Config.integer(label="Maximum Instances", default=1, order=1,
-        validate=lambda self: (self.max_instances >= 0 or \
-            Config.error("Max instances must be non-negative.")) and \
+        validate=lambda self: (self.max_instances >= 1 or \
+            Config.error("Max instances must be at least one.")) and \
             (self.max_instances >= self.min_instances or \
             Config.error("Min instances (%d) must be less than Max instances (%d)" % \
                 (self.min_instances, self.max_instances))),
@@ -182,7 +182,6 @@ class Endpoint(object):
         self.logging = EndpointLog(
                 store_cb=lambda data: self.scale_manager.endpoint_log_save(self.name, data),
                 retrieve_cb=lambda: self.scale_manager.endpoint_log_load(self.name))
-        print self.logging.get()
 
         # Initialize (currently empty) configurations.
         self.config = EndpointConfig()
@@ -415,6 +414,7 @@ class Endpoint(object):
         old_port = self.config.port
         old_weight = self.config.weight
         old_redirect = self.config.redirect
+        old_lb = self.config.loadbalancer
 
         new_config = EndpointConfig(obj=config)
         new_scaling = ScalingConfig(obj=config)
@@ -424,6 +424,7 @@ class Endpoint(object):
         new_port = new_config.port
         new_weight = new_config.weight
         new_redirect = new_config.redirect
+        new_lb = new_config.loadbalancer
 
         # Drop all removed static addresses.
         for ip in old_static_addresses:
@@ -442,8 +443,10 @@ class Endpoint(object):
         # Reconnect to the cloud controller (always).
         self.cloud_conn = self.scale_manager._find_cloud_connection(new_config.cloud)
 
-        # Reconnect to the load balancer (always).
-        self.lb_conn = self.scale_manager._find_loadbalancer_connection(new_config.loadbalancer)
+        # Update loadbalancer.
+        if old_lb != new_lb:
+            # Get a new loadbalancer connection.
+            self.lb_conn = self.scale_manager._find_loadbalancer_connection(new_lb)
 
         # Do a referesh (to capture the new endpoint).
         if old_url != new_url:
