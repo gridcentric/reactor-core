@@ -21,6 +21,7 @@ from reactor.api import authorized_admin_only
 from reactor.server.manager import ReactorScaleManager
 import reactor.server.ips as ips
 import reactor.server.config as config
+from reactor.endpoint import EndpointLog
 
 class ServerApi(ReactorApi):
     def __init__(self, zk_servers):
@@ -62,6 +63,10 @@ class ServerApi(ReactorApi):
         self.config.add_view(self.admin, route_name='admin-object')
         self.config.add_view(context='pyramid.exceptions.NotFound',
                 view='pyramid.view.append_slash_notfound_view')
+
+        # Add endpoint logs
+        self.config.add_route('endpoint-log', '/endpoints/{endpoint_name}/log')
+        self.config.add_view(self.endpoint_log, route_name='endpoint-log')
 
         # Check the endpoint.
         self.check(zk_servers)
@@ -244,6 +249,26 @@ class ServerApi(ReactorApi):
         }
         body = template.render(**kwargs)
         return Response(body=body)
+
+    @connected
+    def endpoint_log(self, context, request):
+        """
+        Returns the endpoints' log
+        """
+        endpoint_name = request.matchdict['endpoint_name']
+        since = request.params.get('since', None)
+        if since:
+            try:
+                since = float(since)
+            except:
+                since = None
+
+        if request.method == "GET":
+            log = EndpointLog(
+                    retrieve_cb=lambda: self.manager.endpoint_log_load(endpoint_name))
+            return Response(body=json.dumps({'log': log.get(since=since)}))
+        else:
+            return Response(status=403)
 
     def start_manager(self, zk_servers):
         zk_servers.sort()

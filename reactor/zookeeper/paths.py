@@ -70,6 +70,10 @@ def endpoint_state(name):
 def endpoint_manager(name):
     return "%s/manager" % (endpoint(name))
 
+# Binary log data for this endpoint.
+def endpoint_log(name):
+    return "%s/log" % (endpoint(name))
+
 # The custom metrics for a particular host.
 def endpoint_ip_metrics(name, ip_address):
     return "%s/ip_metrics/%s" % (endpoint(name), ip_address)

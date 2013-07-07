@@ -5,6 +5,7 @@ import socket
 import sys
 import copy
 
+from reactor.binlog import BinaryLog, BinaryLogRecord
 from reactor.config import Config
 from reactor.submodules import cloud_options, loadbalancer_options
 import reactor.cloud.connection as cloud_connection
@@ -130,11 +131,58 @@ class ScalingConfig(Config):
     url = Config.string(label="Metrics URL", order=3,
         description="The source url for metrics.")
 
+class EndpointLog(BinaryLog):
+    # Log entry types.
+    ENDPOINT_STARTED        = BinaryLogRecord(lambda args: "Endpoint marked as Started")
+    ENDPOINT_STOPPED        = BinaryLogRecord(lambda args: "Endpoint marked as Stopped")
+    ENDPOINT_PAUSED         = BinaryLogRecord(lambda args: "Endpoint marked as Paused")
+    SCALE_UPDATE            = BinaryLogRecord(lambda args: "Target number of instances has changed: %d => %d" % (args[0], args[1]))
+    METRICS_CONFLICT        = BinaryLogRecord(lambda args: "Scaling rules conflict detected")
+    CONFIG_UPDATED          = BinaryLogRecord(lambda args: "Configuration reloaded")
+    RECOMMISSION_INSTANCE   = BinaryLogRecord(lambda args: "Recommissioning formerly decommissioned instance")
+    DECOMMISION_INSTANCE    = BinaryLogRecord(lambda args: "Decommissioning instance")
+    LAUNCH_INSTANCE         = BinaryLogRecord(lambda args: "Launching instance")
+    LAUNCH_FAULURE          = BinaryLogRecord(lambda args: "Failure launching instance")
+    DELETE_INSTANCE         = BinaryLogRecord(lambda args: "Deleting instance")
+
+    def __init__(self, store_cb=None, retrieve_cb=None):
+        # Note: if adding new log entry types, they must be added above
+        # as well as in the array below, and must be added to the end
+        # of the array, or else older binary logs may become unreadable.
+        record_types = [
+            EndpointLog.ENDPOINT_STARTED,
+            EndpointLog.ENDPOINT_STOPPED,
+            EndpointLog.ENDPOINT_PAUSED,
+            EndpointLog.SCALE_UPDATE,
+            EndpointLog.METRICS_CONFLICT,
+            EndpointLog.CONFIG_UPDATED,
+            EndpointLog.RECOMMISSION_INSTANCE,
+            EndpointLog.DECOMMISION_INSTANCE,
+            EndpointLog.LAUNCH_INSTANCE,
+            EndpointLog.LAUNCH_FAULURE,
+            EndpointLog.DELETE_INSTANCE
+        ]
+
+        # Zookeeper objects are limited to 1MB in size. Since we write
+        # the log out every time we log something (an unfortunate
+        # necessity until we put in some sort of caching mechanism)
+        # we limit the size of the log to 16kB, which we then double
+        # by converting to a hex string before storing. At the current
+        # log record size, this gives enough room for 1024 log entries.
+        BinaryLog.__init__(self, size=(16*1024), record_types=record_types,
+                store_cb=store_cb, retrieve_cb=retrieve_cb)
+
 class Endpoint(object):
 
     def __init__(self, name, scale_manager):
         self.name = name
         self.scale_manager = scale_manager
+
+        # Initialize endpoint-specific logging
+        self.logging = EndpointLog(
+                store_cb=lambda data: self.scale_manager.endpoint_log_save(self.name, data),
+                retrieve_cb=lambda: self.scale_manager.endpoint_log_load(self.name))
+        print self.logging.get()
 
         # Initialize (currently empty) configurations.
         self.config = EndpointConfig()
@@ -207,6 +255,7 @@ class Endpoint(object):
             if metrics != []:
                 # Only log the warning if there were values for the metrics provided. In other words
                 # only if the metrics could have made a difference.
+                self.logging.warn(self.logging.METRICS_CONFLICT)
                 logging.warn("The metrics defined for endpoint %s have resulted in a "
                              "conflicting result. (endpoint metrics: %s)"
                              % (self.name, str(self.scaling.rules)))
@@ -281,6 +330,7 @@ class Endpoint(object):
             return
 
         if target != num_instances:
+            self.logging.info(self.logging.SCALE_UPDATE, num_instances, target)
             logging.info("Target number of instances for endpoint %s determined to be %s (current: %s)"
                           % (self.name, target, num_instances))
 
@@ -316,6 +366,12 @@ class Endpoint(object):
 
     def update_state(self, state):
         self.state = state or State.default
+        if self.state == State.running:
+            self.logging.info(self.logging.ENDPOINT_STARTED)
+        elif self.state == State.paused:
+            self.logging.info(self.logging.ENDPOINT_PAUSED)
+        elif self.state == State.stopped:
+            self.logging.info(self.logging.ENDPOINT_STOPPED)
 
     @staticmethod
     def spec_config(config):
@@ -400,12 +456,15 @@ class Endpoint(object):
              old_redirect != new_redirect:
             self.update_loadbalancer()
 
+        self.logging.info(self.logging.CONFIG_UPDATED)
+
     def recommission_instances(self, num_instances, reason):
         """
         Recommission formerly decommissioned instances. Note: a reason
         should be given for why the instances are being recommissioned.
         """
         while num_instances > 0 and len(self.decommissioned_instances) > 0:
+            self.logging.info(self.logging.RECOMMISSION_INSTANCE)
             instance_id = self.decommissioned_instances.pop()
             logging.info("Recommissioning instance %s for server %s (reason: %s)" %
                     (instance_id, self.name, reason))
@@ -423,6 +482,7 @@ class Endpoint(object):
         # It might be good to wait a little bit for the servers to clear out
         # any requests they are currently serving.
         for instance in instances:
+            self.logging.info(self.logging.DECOMMISION_INSTANCE)
             instance_id = self.cloud_conn.id(self.config, instance)
             logging.info("Decommissioning instance %s for server %s (reason: %s)" %
                     (instance_id, self.name, reason))
@@ -443,6 +503,7 @@ class Endpoint(object):
         instance_name = self.cloud_conn.name(self.config, instance)
 
         # Delete the instance from the cloud.
+        self.logging.info(self.logging.DELETE_INSTANCE)
         logging.info("Deleting instance %s for server %s" % (instance_id, self.name))
         self.cloud_conn.delete_instance(self.config, instance_id)
         self.scale_manager.drop_decommissioned_instance(self.name, instance_id)
@@ -458,6 +519,7 @@ class Endpoint(object):
 
     def _launch_instance(self, reason):
         # Launch the instance.
+        self.logging.info(self.logging.LAUNCH_INSTANCE)
         logging.info(("Launching new instance for server %s " +
                      "(reason: %s)") %
                      (self.name, reason))
@@ -466,6 +528,7 @@ class Endpoint(object):
         try:
             self.cloud_conn.start_instance(self.config, params=start_params)
         except:
+            self.logging.error(self.logging.LAUNCH_FAULURE)
             logging.error("Error launching instance for server %s: %s" % \
                 (self.name, traceback.format_exc()))
             self.lb_conn.cleanup_start_params(self.config, start_params)

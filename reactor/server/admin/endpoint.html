@@ -73,6 +73,17 @@
 
 </form>
 
+<h3>Log</h3>
+<div style="height: 200px; position: relative; overflow: auto;">
+<table id="endpoint-log" class="table table-bordered">
+    <thead>
+        <tr><th>Time</th><th>Severity</th><th>Event</th></tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+</div>
+
 <h3>Live Metrics</h3>
 <div style="min-height: 200px; position: relative;">
 <div id="livemetrics" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"></div>
@@ -87,6 +98,9 @@
 
 <script src="/admin/assets/conf.js"></script>
 <script type="text/javascript">
+
+    // Graph/log update period, in ms.
+    var UPDATE_PERIOD = 1000;
 
     // Dynamically construct config UI based on spec we get back from the server.
     var context = beginMakeConfig("endpoint-conf-container",
@@ -155,6 +169,48 @@
         });
     }
 
+    function addLogRow(ent) {
+        var ts = new Date(ent[0] * 1000).toUTCString();
+        switch (ent[1]) {
+            case 'INFO':
+                var sev = "<span class=\"label label-info\">Info</span>";
+                break;
+            case 'WARN':
+                var sev = "<span class=\"label label-warning\">Warning</span>";
+                break;
+            case 'ERROR':
+                var sev = "<span class=\"label label-error\">Error</span>";
+                break;
+            default:
+                var sev = "<span class=\"label\">" + ent[1] + "</span>";
+        }
+        var tr = "<tr><td>" + ts + "</td><td>" + sev + "</td><td>" + ent[2] + "</td></tr>";
+        $('#endpoint-log tr:last').after(tr);
+    }
+
+    function loadLog(since) {
+        if (since == null)
+            since = 0.0;
+
+        $.ajax({
+            url: "/endpoints/${object}/log?since="+since,
+            type: 'GET',
+            dataType: 'json',
+            success: function(result) {
+                log = result["log"];
+                if (log.length > 0) {
+                    $.each(log, function(index, ent) {
+                        addLogRow(ent);
+                    });
+                    since = log[log.length-1][0];
+                }
+                setTimeout(function() {
+                    loadLog(since);
+                }, UPDATE_PERIOD);
+            },
+        });
+    }
+
     var scales = [ ' (n)', ' (u)', ' (m)', '', ' (K)', ' (M)', ' (G)' ];
     function normalize(data, timestamp, last) {
         var count       = data["count"];
@@ -212,9 +268,6 @@
         data["label"]     = data["name"] + scales[scale_idx];
     }
 
-    // Graph update period, in ms.
-    var UPDATE_PERIOD = 1000;
-
     // Number of timeslices to graph.
     var NUM_TIMESLICES = 60;
 
@@ -271,6 +324,7 @@
         "#pause" : { "action" : "PAUSE" }
     });
     loadDelete();
+    loadLog();
     setupGraph($("#livemetrics"), "endpoints/${object}/metrics",
                updateLiveMetrics, UPDATE_PERIOD);
     setupGraph($("#servers"), "endpoints/${object}/ips", updateServers,

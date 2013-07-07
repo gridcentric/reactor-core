@@ -7,6 +7,8 @@ import bisect
 import json
 import traceback
 import socket
+import binascii
+import array
 from StringIO import StringIO
 
 from reactor.config import Config
@@ -954,6 +956,19 @@ class ScaleManager(object):
 
         # Reset the buffer.
         self.log.truncate(0)
+
+    def endpoint_log_load(self, endpoint_name):
+        data = self.zk_conn.read(paths.endpoint_log(endpoint_name))
+        if data:
+            try:
+                data = array.array('b', binascii.unhexlify(data))
+            except:
+                data = None
+        return data
+
+    def endpoint_log_save(self, endpoint_name, data):
+        self.zk_conn.write(paths.endpoint_log(endpoint_name),
+                           binascii.hexlify(data))
 
     def run(self):
         # Note that we are running.
