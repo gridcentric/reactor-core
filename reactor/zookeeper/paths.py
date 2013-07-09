@@ -99,6 +99,13 @@ def confirmed_ips(name):
 def confirmed_ip(name, ip_address):
     return "%s/%s" % (confirmed_ips(name), ip_address)
 
+# The endpoint instances
+def endpoint_instances(name):
+    return "%s/instances" % (endpoint(name))
+
+def endpoint_instance(name, instance_id):
+    return "%s/%s" % (endpoint_instances(name), instance_id)
+
 # The instance ids that have been marked as having an issue relating to them.
 # Usually this issue will be related to connectivity issue.
 def marked_instances(name):

@@ -1,3 +1,4 @@
+import logging
 from reactor.config import Config
 
 from reactor.cloud.osapi.connection import BaseOsEndpointConfig
@@ -31,11 +32,12 @@ class Connection(BaseOsConnection):
         config = self._endpoint_config(config)
         server = config._novaclient().gridcentric.get(config.instance_id)
         if 'name' in params:
-            server.launch(name=params['name'],
-                          security_groups=config.security_groups,
-                          availability_zone=config.availability_zone,
-                          guest_params=params)
+            instance = server.launch(name=params['name'],
+                              security_groups=config.security_groups,
+                              availability_zone=config.availability_zone,
+                              guest_params=params)
         else:
-            server.launch(security_groups=config.security_groups,
-                          availability_zone=config.availability_zone,
-                          guest_params=params)
+            instance = server.launch(security_groups=config.security_groups,
+                              availability_zone=config.availability_zone,
+                              guest_params=params)
+        return instance[0].id

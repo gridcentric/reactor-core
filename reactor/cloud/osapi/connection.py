@@ -120,7 +120,7 @@ class BaseOsConnection(CloudConnection):
         Starts a new instance in the cloud using the endpoint.
         """
         try:
-            self._start_instance(config, params=params)
+            return self._start_instance(config, params=params)
         except HTTPException, e:
             traceback.print_exc()
             logging.error("Error starting instance: %s" % str(e))
@@ -214,7 +214,7 @@ class Connection(BaseOsConnection):
         # CloudStart or some other standard support mechanism.
         config = self._endpoint_config(config)
         userdata = "reactor=%s" % params.get('reactor', '')
-        config._novaclient().servers.create(
+        instance = config._novaclient().servers.create(
                                   config.instance_name,
                                   config.image_id,
                                   config.flavor_id,
@@ -222,3 +222,4 @@ class Connection(BaseOsConnection):
                                   key_name=config.key_name,
                                   availability_zone=config.availability_zone,
                                   userdata=userdata)
+        return instance[0].id

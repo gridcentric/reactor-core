@@ -526,19 +526,27 @@ class Endpoint(object):
         start_params = self.scale_manager.start_params(self)
         start_params.update(self.lb_conn.start_params(self.config))
         try:
-            self.cloud_conn.start_instance(self.config, params=start_params)
+            instance_id = self.cloud_conn.start_instance(self.config,
+                                                         params=start_params)
         except:
             self.logging.error(self.logging.LAUNCH_FAULURE)
             logging.error("Error launching instance for server %s: %s" % \
                 (self.name, traceback.format_exc()))
             self.lb_conn.cleanup_start_params(self.config, start_params)
             self.scale_manager.cleanup_start_params(self, start_params)
+        self.scale_manager.add_endpoint_instance(self.name, instance_id)
 
     def static_addresses(self):
         return self.config._static_ips()
 
     def instances(self, filter=True):
-        instances = self.cloud_conn.list_instances(self.config)
+        cloud_instances = self.cloud_conn.list_instances(self.config)
+        endpoint_instances = self.scale_manager.endpoint_instances(self.name)
+        instances = []
+        for instance in cloud_instances:
+            if self.cloud_conn.id(self.config, instance) in endpoint_instances:
+                instances.append(instance)
+
         if filter:
             # Filter out the decommissioned instances from the returned list.
             all_instances = instances
@@ -620,6 +628,8 @@ class Endpoint(object):
                     # We don't decomission it because we have never heard from it in the
                     # first place. So there's no sense in decomissioning it.
                     self._delete_instance(instance)
+                    self.scale_manager.delete_endpoint_instance(self.name, 
+                            self.cloud_conn.id(self.config, instance))
             else:
                 associated_confirmed_ips = associated_confirmed_ips.union(instance_confirmed_ips)
 

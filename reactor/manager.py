@@ -628,6 +628,22 @@ class ScaleManager(object):
 
         return (ips, redirects)
 
+    def endpoint_instances(self, endpoint_name):
+        """ Return a list of all endpoint instances. """
+        instances = self.zk_conn.list_children(paths.endpoint_instances(endpoint_name))
+        if instances == None:
+            instances = []
+        return instances
+
+    def add_endpoint_instance(self, endpoint_name, instance_id, data=''):
+        self.zk_conn.write(paths.endpoint_instance(endpoint_name, instance_id), data)
+
+    def get_endpoint_instance(self, endpoint_name, instance_id):
+        return self.zk_conn.read(paths.endpoint_instance(endpoint_name, instance_id))
+
+    def delete_endpoint_instance(self, endpoint_name, instance_id):
+        self.zk_conn.delete(paths.endpoint_instance(endpoint_name, instance_id))
+
     @locked
     def marked_instances(self, endpoint_name):
         """ Return a list of all the marked instances. """
