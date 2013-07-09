@@ -5,6 +5,7 @@ import sys
 import httplib
 import time
 import socket
+from urlparse import urlparse
 
 # We need to retrieve the reactor parameter passed to vmsagent. The latest
 # vmsagent passes the parameter via an environment variable. Older vmsagents
@@ -33,7 +34,23 @@ if reactor:
 
     while True:
         try:
-            conn = httplib.HTTPConnection(reactor)
+            url = urlparse(reactor)
+            # The reactor param could either be an ip or a full
+            # url. If it's just an ip, the scheme and netloc will be
+            # empty and the path will contain the ip. In this case, we
+            # patch up the urlparse resulting object with the infered
+            # scheme.
+            if url.scheme == '' and url.netloc == '':
+                url.scheme = 'http'
+                url.netloc = url.path
+
+            if url.scheme == 'https':
+                conn = httplib.HTTPSConnection(url.netloc)
+            elif url.scheme == 'http':
+                conn = httplib.HTTPConnection(url.netloc)
+            else:
+                raise ValueError("Unknown scheme %s in reactor param" % url.scheme)
+
             conn.request("POST", "/v1.0/register", "", {})
             resp = conn.getresponse()
             if resp.status == 200:
