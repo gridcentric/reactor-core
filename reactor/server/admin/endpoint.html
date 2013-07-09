@@ -84,16 +84,18 @@
 </table>
 </div>
 
-<h3>Live Metrics</h3>
-<div style="min-height: 200px; position: relative;">
-<div id="livemetrics" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"></div>
-</div>
-
 <h3>Servers</h3>
 <div style="min-height: 200px; position: relative;">
 <div id="servers" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"></div>
 </div>
 
+<h3>Live Metrics</h3>
+<div id="livemetrics"></div>
+
+<div id="graph-templates" style="display:none">
+<div class="metric-graph-template" style="min-height: 200px; position: relative;">
+<div class="metric-graph-inner" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"></div>
+</div>
 </div>
 
 <script src="/admin/assets/conf.js"></script>
@@ -271,31 +273,6 @@
     // Number of timeslices to graph.
     var NUM_TIMESLICES = 60;
 
-    function updateLiveMetrics(result, timestamp, data, metrics) {
-        $.each(result, function(metric, value) {
-            if( !metrics[metric] ) {
-                metrics[metric] = {
-                    "name" : metric,
-                    "data" : [] };
-                data.push(metrics[metric]);
-
-                // Initialize data
-                for ( var i = 0; i < NUM_TIMESLICES; i++ ) {
-                    ts = timestamp - ((NUM_TIMESLICES - i) * UPDATE_PERIOD);
-                    metrics[metric]["data"].push([ts , null]);
-                }
-            }
-
-            // Normalize the metrics.
-            normalize(metrics[metric], timestamp, value);
-
-            // Limit the size.
-            while( metrics[metric]["data"].length > NUM_TIMESLICES ) {
-                metrics[metric]["data"].shift();
-            }
-        });
-    }
-
     function updateServers(result, timestamp, data, metrics) {
         if( !metrics["count"] ) {
             metrics["count"] = { "label" : "count", "data" : [] };
@@ -316,6 +293,63 @@
         }
     }
 
+    function updateLiveMetrics(metric) {
+        function doUpdate(result, timestamp, data, metrics) {
+            value = result[metric];
+            if( !metrics[metric] ) {
+                metrics[metric] = {
+                    "name" : metric,
+                    "data" : [] };
+                data.push(metrics[metric]);
+
+                // Initialize data
+                for ( var i = 0; i < NUM_TIMESLICES; i++ ) {
+                    ts = timestamp - ((NUM_TIMESLICES - i) * UPDATE_PERIOD);
+                    metrics[metric]["data"].push([ts , null]);
+                }
+            }
+
+            // Normalize the metrics.
+            normalize(metrics[metric], timestamp, value);
+
+            // Limit the size.
+            while( metrics[metric]["data"].length > NUM_TIMESLICES ) {
+                metrics[metric]["data"].shift();
+            }
+        }
+
+        return doUpdate;
+    }
+
+    function setupMetricsGraphs(result) {
+        // For each metric,
+        $.each(result, function(metric, dontcare) {
+            // Create a div for the graph and append it
+            var outerDiv = $('#graph-templates .metric-graph-template').clone();
+            outerDiv.find(".metric-graph-inner").attr("id", "livemetrics_" + metric);
+            $("#livemetrics").append(outerDiv);
+
+            // Set up the graph for it
+            setupGraph($("#livemetrics_" + metric),
+                       "endpoints/${object}/metrics",
+                       updateLiveMetrics(metric),
+                       UPDATE_PERIOD);
+        });
+    }
+
+    function setupGraphs() {
+        // Set up the servers graph
+        setupGraph($("#servers"), "endpoints/${object}/ips", updateServers,
+               UPDATE_PERIOD);
+        // Get the metrics available for graphing
+        $.ajax({
+            url: "/v1.0/endpoints/${object}/metrics",
+            type: 'GET',
+            dataType: 'json',
+            success: setupMetricsGraphs,
+        });
+    }
+
     // Set everything up.
     loadState();
     setupActions({
@@ -325,10 +359,7 @@
     });
     loadDelete();
     loadLog();
-    setupGraph($("#livemetrics"), "endpoints/${object}/metrics",
-               updateLiveMetrics, UPDATE_PERIOD);
-    setupGraph($("#servers"), "endpoints/${object}/ips", updateServers,
-               UPDATE_PERIOD);
+    setupGraphs();
 </script>
 
 <%include file="/footer.html"/>
