@@ -1,7 +1,7 @@
 # The API endpoint config blob.
 APIEndpointConfig = '{              \n\
     "endpoint": {                   \n\
-        "url": "http://",           \n\
+        "url": "https://",          \n\
         "static_instances": [       \n\
             "localhost"             \n\
         ],                          \n\
