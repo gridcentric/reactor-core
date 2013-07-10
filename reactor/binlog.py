@@ -10,9 +10,9 @@ class BinaryLogRecord:
 #   f64 time
 #   u16 severity
 #   u16 record type
-#   u16 arg1
-#   u16 arg2
-STRUCT_FMT = 'dHHHH'
+#   u32 arg1
+#   u32 arg2
+STRUCT_FMT = '<dHHLL'
 STRUCT_SIZE = struct.calcsize(STRUCT_FMT)
 
 class BinaryLog:
