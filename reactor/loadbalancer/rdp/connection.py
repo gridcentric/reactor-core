@@ -59,7 +59,7 @@ COMPUTER_RECORD = {
     'objectclass' : ['top', 'person', 'organizationalPerson', 'user', 'computer'],
 }
 
-PASSWORD_ALPHABET = "abcdefghijklmnmoqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" + \
+PASSWORD_ALPHABET = "abcdefghijklmnmopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" + \
     "0123456789 `~!@#$%^&*()_-+={}[]\|:;\"'<>,.?/"
 
 def generate_password(length=18, alpha=PASSWORD_ALPHABET):
