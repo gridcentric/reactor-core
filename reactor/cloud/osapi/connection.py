@@ -81,9 +81,14 @@ class BaseOsConnection(CloudConnection):
     _ENDPOINT_CONFIG_CLASS = BaseOsEndpointConfig
 
     def id(self, config, instance):
+        # Could be a dict, or an object
+        if hasattr(instance, 'id'):
+            return instance.id
         return str(instance['id'])
 
     def name(self, config, instance):
+        if hasattr(instance, 'name'):
+            return instance.name
         return instance.get('name', None)
 
     def addresses(self, config, instance):
@@ -222,4 +227,4 @@ class Connection(BaseOsConnection):
                                   key_name=config.key_name,
                                   availability_zone=config.availability_zone,
                                   userdata=userdata)
-        return instance[0].id
+        return instance[0]

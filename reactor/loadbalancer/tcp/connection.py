@@ -363,6 +363,10 @@ class Connection(LoadBalancerConnection):
             del self.portmap[listen]
         self.tracked[url] = []
 
+        # If no backends, don't queue anything
+        if len(ips) == 0:
+            return
+
         # Update the portmap (including exclusive info).
         config = self._endpoint_config(config)
         self.portmap[listen] = [config.exclusive, config.reconnect, []]
@@ -398,6 +402,11 @@ class Connection(LoadBalancerConnection):
             for (ip, port, exclusive, reconnect) in connection_list:
 
                 active = active_connections.get((ip, port), 0)
+
+                # Cap at 1.0 if we are exclusive
+                if exclusive:
+                    active = min(active, 1)
+
                 records[ip] = { "active" : (1, active) }
 
                 if active:

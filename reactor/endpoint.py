@@ -337,28 +337,30 @@ class Endpoint(object):
         action_count = 0
 
         # Launch instances until we reach the min setting value.
-        # First, recommission instances that have been decommissioned.
-        if num_instances < target and len(self.decommissioned_instances) > 0:
-            self.recommission_instances(target - num_instances,
-                "bringing instance total up to target %s" % target)
-            instances = self.instances()
-            num_instances = len(instances)
+        if num_instances < target:
+            # First, recommission instances that have been decommissioned.
+            if len(self.decommissioned_instances) > 0:
+                self.recommission_instances(target - num_instances,
+                    "bringing instance total up to target %s" % target)
+                instances = self.instances()
+                num_instances = len(instances)
 
-        # Then, launch new instances.
-        while num_instances < target and action_count < ramp_limit:
-            self._launch_instance("bringing instance total up to target %s" % target)
-            num_instances += 1
-            action_count += 1
+            # Then, launch new instances.
+            while num_instances < target and action_count < ramp_limit:
+                self._launch_instance("bringing instance total up to target %s" % target)
+                num_instances += 1
+                action_count += 1
 
         # Delete instances until we reach the max setting value.
-        if target < num_instances:
+        elif target < num_instances:
             instances_to_delete = []
-            instances_sorted = sorted(instances,
-                key=lambda x: self._instance_is_active(x, active_ips))
-            while target < num_instances and action_count < ramp_limit:
-                instances_to_delete.append(instances_sorted.pop(0))
-                num_instances -= 1
-                action_count += 1
+            inactive_instances = \
+                filter(lambda x: not self._instance_is_active(x, active_ips),
+                        instances)
+            to_do = min(len(inactive_instances), ramp_limit, 
+                                        (num_instances - target))
+            for i in range(to_do):
+                instances_to_delete.append(inactive_instances.pop(0))
 
             self.decommission_instances(instances_to_delete,
                 "bringing instance total down to target %s" % target)
@@ -508,14 +510,11 @@ class Endpoint(object):
         # Delete the instance from the cloud.
         self.logging.info(self.logging.DELETE_INSTANCE)
         logging.info("Deleting instance %s for server %s" % (instance_id, self.name))
-        self.cloud_conn.delete_instance(self.config, instance_id)
+        self.scale_manager.delete_endpoint_instance(self.name, instance_name)
         self.scale_manager.drop_decommissioned_instance(self.name, instance_id)
-        try:
+        if instance_id in self.decommissioned_instances:
             self.decommissioned_instances.remove(instance_id)
-        except:
-            # An exception is thrown if we are unable to remove it. This is
-            # fine because we are trying to remove it anyway.
-            pass
+        self.cloud_conn.delete_instance(self.config, instance_id)
 
         # Cleanup any loadbalancer artifacts
         self.lb_conn.cleanup(self.config, instance_name)
@@ -529,7 +528,7 @@ class Endpoint(object):
         start_params = self.scale_manager.start_params(self)
         start_params.update(self.lb_conn.start_params(self.config))
         try:
-            instance_id = self.cloud_conn.start_instance(self.config,
+            instance = self.cloud_conn.start_instance(self.config,
                                                          params=start_params)
         except:
             self.logging.error(self.logging.LAUNCH_FAULURE)
@@ -537,7 +536,9 @@ class Endpoint(object):
                 (self.name, traceback.format_exc()))
             self.lb_conn.cleanup_start_params(self.config, start_params)
             self.scale_manager.cleanup_start_params(self, start_params)
-        self.scale_manager.add_endpoint_instance(self.name, instance_id)
+        self.scale_manager.add_endpoint_instance(self.name,
+                self.cloud_conn.id(self.config, instance),
+                self.cloud_conn.name(self.config, instance))
 
     def static_addresses(self):
         return self.config._static_ips()
@@ -559,6 +560,16 @@ class Endpoint(object):
                     in self.decommissioned_instances):
                     instances.append(instance)
         return instances
+
+    def orphaned_instances(self):
+        cloud_instances = self.cloud_conn.list_instances(self.config)
+        endpoint_instances = self.scale_manager.endpoint_instances(self.name)
+        instance_ids = []
+        for instance in cloud_instances:
+            instance_id = self.cloud_conn.id(self.config, instance)
+            if instance_id in endpoint_instances:
+                instance_ids.append(instance_id)
+        return list(set(endpoint_instances) - set(instance_ids))
 
     def addresses(self):
         try:
@@ -631,8 +642,6 @@ class Endpoint(object):
                     # We don't decomission it because we have never heard from it in the
                     # first place. So there's no sense in decomissioning it.
                     self._delete_instance(instance)
-                    self.scale_manager.delete_endpoint_instance(self.name, 
-                            self.cloud_conn.id(self.config, instance))
             else:
                 associated_confirmed_ips = associated_confirmed_ips.union(instance_confirmed_ips)
 
@@ -653,6 +662,14 @@ class Endpoint(object):
             for orphaned_address in orphaned_confirmed_ips:
                 self.scale_manager.drop_ip(self.name, orphaned_address)
             self.update_loadbalancer()
+
+        # Clean up any instances which don't exist any more.
+        for instance_id in self.orphaned_instances():
+            logging.info("Cleaning up disappeared instance %s" % instance_id)
+            instance_name = self.scale_manager.get_endpoint_instance(self.name, instance_id)
+            if instance_name:
+                self.lb_conn.cleanup(self.config, instance_name)
+            self.scale_manager.delete_endpoint_instance(self.name, instance_id)
 
         # See if there are any decommissioned instances that are now inactive.
         decommissioned_instance_ids = copy.copy(self.decommissioned_instances)
