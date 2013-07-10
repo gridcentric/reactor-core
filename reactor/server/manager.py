@@ -20,7 +20,9 @@ class ReactorScaleManager(ScaleManager):
     def start_params(self, endpoint=None):
         # Pass a parameter pointed back to this instance.
         params = super(ReactorScaleManager, self).start_params(endpoint=endpoint)
-        params["reactor"] = ips.find_global()[0]
+        if "api" in self.endpoints:
+            api = self.endpoints["api"]
+            params["reactor"] = api.url() + ips.find_global()[0]
 
         return params
 
@@ -31,8 +33,7 @@ class ReactorScaleManager(ScaleManager):
         for host in self.zk_servers:
             if not(host) in hosts:
                 hosts.append(host)
-        iptables.setup(hosts, extra_ports=[8080])
-
+        iptables.setup(hosts, extra_ports=[8080]) 
     def manager_register(self, config=None):
         manager_config = ManagerConfig(values=config)
         manager_config.loadbalancers = loadbalancer_submodules()
