@@ -65,7 +65,7 @@ def fork_and_exec(cmd, child_fds=[]):
         w_obj.flush()
 
         # Exit
-        os._exit()
+        os._exit(0)
 
     # Exec the given command.
     os.execvp(cmd[0], cmd)
