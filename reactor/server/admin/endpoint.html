@@ -74,7 +74,7 @@
 </form>
 
 <h3>Log</h3>
-<div style="height: 200px; position: relative; overflow: auto;">
+<div id="endpoint-log-div" style="height: 200px; position: relative; overflow: auto;">
 <table id="endpoint-log" class="table table-bordered">
     <thead>
         <tr><th>Time</th><th>Severity</th><th>Event</th></tr>
@@ -206,6 +206,7 @@
                     });
                     since = log[log.length-1][0];
                 }
+                $('#endpoint-log-div').scrollTop($('#endpoint-log-div')[0].scrollHeight);
                 setTimeout(function() {
                     loadLog(since);
                 }, UPDATE_PERIOD);
