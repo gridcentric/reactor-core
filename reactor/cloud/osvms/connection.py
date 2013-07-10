@@ -40,4 +40,4 @@ class Connection(BaseOsConnection):
             instance = server.launch(security_groups=config.security_groups,
                               availability_zone=config.availability_zone,
                               guest_params=params)
-        return instance[0].id
+        return instance[0]
