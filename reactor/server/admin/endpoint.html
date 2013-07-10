@@ -75,13 +75,27 @@
 
 <h3>Log</h3>
 <div id="endpoint-log-div" style="height: 200px; position: relative; overflow: auto;">
-<table id="endpoint-log" class="table table-bordered">
-    <thead>
-        <tr><th>Time</th><th>Severity</th><th>Event</th></tr>
-    </thead>
-    <tbody>
-    </tbody>
-</table>
+    <table id="endpoint-log" class="table table-bordered">
+        <thead>
+            <tr><th>Time</th><th>Severity</th><th>Event</th></tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+</div>
+
+<h3>Active Connections</h3>
+<div id="sessions-div" style="max-height: 200px; position: relative; overflow: auto;">
+    <table id="session-list" class="table table-bordered">
+        <thead>
+            <tr><th>Backend IP</th><th>Client IP</th><th></th></tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+</div>
+<div id="sessions-templates" style="display:none">
+    <button class="btn btn-small btn-danger drop-session">Drop</button>
 </div>
 
 <h3>Servers</h3>
@@ -93,9 +107,9 @@
 <div id="livemetrics"></div>
 
 <div id="graph-templates" style="display:none">
-<div class="metric-graph-template" style="min-height: 200px; position: relative;">
-<div class="metric-graph-inner" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"></div>
-</div>
+    <div class="metric-graph-template" style="min-height: 200px; position: relative;">
+        <div class="metric-graph-inner" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"></div>
+    </div>
 </div>
 
 <script src="/admin/assets/conf.js"></script>
@@ -210,6 +224,48 @@
                 setTimeout(function() {
                     loadLog(since);
                 }, UPDATE_PERIOD);
+            },
+        });
+    }
+
+    function addSessionRow(backend, client) {
+        var tr = $('<tr></tr>').attr({ class : "session-list-row" });
+        var td = $('<td></td');
+        td.clone().text(backend).appendTo(tr);
+        td.clone().text(client).appendTo(tr);
+        var button = $('#sessions-templates .drop-session').clone();
+        button.click(function(e) {
+            e.preventDefault();
+            $.ajax({
+                url: "/endpoints/${object}/sessions/" + backend + ":" + client,
+                type: 'DELETE',
+                dataType: 'json',
+                complete: function() {
+                    button.attr("disabled", true);
+                },
+                processData: false
+            });
+        });
+        td.clone().append(button).appendTo(tr);
+        $('#session-list tr:last').after(tr);
+    }
+
+    function loadSessions() {
+        $.ajax({
+            url: "/endpoints/${object}/sessions",
+            type: 'GET',
+            dataType: 'json',
+            success: function(result) {
+                sessions = result["sessions"];
+                $('.session-list-row').remove();
+                $.each(sessions, function( backend, clientlist ) {
+                    $.each(clientlist, function(index, client) {
+                        addSessionRow(backend, client);
+                    });
+                });
+                setTimeout(function() {
+                    loadSessions();
+                }, UPDATE_PERIOD * 10);
             },
         });
     }
@@ -360,6 +416,7 @@
     });
     loadDelete();
     loadLog();
+    loadSessions();
     setupGraphs();
 </script>
 

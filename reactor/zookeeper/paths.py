@@ -127,6 +127,19 @@ def decommissioned_instances(name):
 def decommissioned_instance(name, instance_id):
     return "%s/%s" % (decommissioned_instances(name), instance_id)
 
+# Sessions
+def endpoint_sessions(name):
+    return "%s/sessions" % (endpoint(name))
+
+def endpoint_session(name, session):
+    return "%s/%s" % (endpoint_sessions(name), session)
+
+def dropped_sessions(name):
+    return "%s/dropped_sessions" % (endpoint(name))
+
+def dropped_session(name, session):
+    return "%s/%s" % (dropped_sessions(name), session)
+
 #
 # The loadbalancer subtree.
 #

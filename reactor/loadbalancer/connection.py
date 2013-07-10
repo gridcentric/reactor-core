@@ -92,6 +92,11 @@ class LoadBalancerConnection(Connection):
     def metrics(self):
         # Returns { host : (weight, value) }
         return {}
+    def sessions(self):
+        # If supported, returns { host : [ client, client, ... ] }
+        return None
+    def drop_session(self, backend, client):
+        pass
     def start_params(self, config):
         return {}
     def cleanup_start_params(self, config, start_params):

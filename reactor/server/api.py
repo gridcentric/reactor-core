@@ -68,6 +68,12 @@ class ServerApi(ReactorApi):
         self.config.add_route('endpoint-log', '/endpoints/{endpoint_name}/log')
         self.config.add_view(self.endpoint_log, route_name='endpoint-log')
 
+        # Add endpoint sessions
+        self.config.add_route('endpoint-sessions', '/endpoints/{endpoint_name}/sessions')
+        self.config.add_route('endpoint-session', '/endpoints/{endpoint_name}/sessions/{session}')
+        self.config.add_view(self.endpoint_sessions, route_name='endpoint-sessions')
+        self.config.add_view(self.endpoint_sessions, route_name='endpoint-session')
+
         # Check the endpoint.
         self.check(zk_servers)
 
@@ -251,6 +257,7 @@ class ServerApi(ReactorApi):
         return Response(body=body)
 
     @connected
+    @authorized_admin_only
     def endpoint_log(self, context, request):
         """
         Returns the endpoints' log
@@ -267,6 +274,27 @@ class ServerApi(ReactorApi):
             log = EndpointLog(
                     retrieve_cb=lambda: self.manager.endpoint_log_load(endpoint_name))
             return Response(body=json.dumps({'log': log.get(since=since)}))
+        else:
+            return Response(status=403)
+
+    @connected
+    @authorized_admin_only
+    def endpoint_sessions(self, context, request):
+        """
+        Returns the endpoints' session list, or drops a session
+        """
+        endpoint_name = request.matchdict['endpoint_name']
+        session = request.matchdict.get('session', None)
+
+        if request.method == "GET":
+            sessions = self.manager.endpoint_sessions(endpoint_name)
+            return Response(body=json.dumps({'sessions': sessions}))
+        elif request.method == "DELETE" and session:
+            backend, client = session.split(':')
+            if not (backend and client):
+                return Response(status=404)
+            self.manager.drop_session(endpoint_name, backend, client)
+            return Response()
         else:
             return Response(status=403)
 

@@ -134,7 +134,7 @@ class ConnectionConsumer(threading.Thread):
             if ip:
                 self.cond.notifyAll()
                 child = connection.redirect(ip, ipmap[ip])
-                self.children[child] = connection
+                self.children[child] = [ip, connection]
                 return True
             else:
                 return False
@@ -153,7 +153,7 @@ class ConnectionConsumer(threading.Thread):
 
     def run(self):
         while self.execute:
-            connection = self.producer.next(timeout=1000)
+            connection = self.producer.next(timeout=1)
 
             # Service connection, if any.
             if connection:
@@ -187,6 +187,25 @@ class ConnectionConsumer(threading.Thread):
                 os.kill(child, signal.SIGQUIT)
             except:
                 pass
+
+    def sessions(self):
+        session_map = {}
+        for (ip, conn) in self.children.values():
+            (src_ip, src_port) = conn.src
+            ip_sessions = session_map.get(ip, [])
+            ip_sessions.append(src_ip)
+            session_map[ip] = ip_sessions
+        return session_map
+
+    def drop_session(self, backend, client):
+        for child in self.children.keys():
+            (ip, conn) = self.children[child]
+            (src_ip, src_port) = conn.src
+            if backend == ip and client == src_ip:
+                try:
+                    os.kill(child, signal.SIGQUIT)
+                except:
+                    pass
 
 class ConnectionProducer(threading.Thread):
     def __init__(self):
@@ -242,10 +261,8 @@ class ConnectionProducer(threading.Thread):
         # Pull the next connection.
         self.cond.acquire()
         try:
-            while self.execute and \
-                  len(self.pending) == 0:
-                self.cond.wait(timeout=timeout)
-            if self.execute:
+            self.cond.wait(timeout=timeout)
+            if self.execute and len(self.pending) > 0:
                 return self.pending.pop(0)
             else:
                 return None
@@ -446,3 +463,12 @@ class Connection(LoadBalancerConnection):
             self.consumer.flush()
 
         return records
+
+    def sessions(self):
+        if self.consumer:
+            return self.consumer.sessions()
+        return None
+
+    def drop_session(self, backend, client):
+        if self.consumer:
+            self.consumer.drop_session(backend, client)

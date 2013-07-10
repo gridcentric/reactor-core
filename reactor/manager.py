@@ -109,6 +109,8 @@ class ScaleManager(object):
         self.locks = {}           # Load balancer locks.
         self.clouds = {}          # Cloud connections.
 
+        self.manager_sessions = {} # Client sessions owned by this manager
+
         # Setup logging.
         self.log = self.setup_logging()
 
@@ -575,6 +577,9 @@ class ScaleManager(object):
         self.zk_conn.write(paths.confirmed_ip(endpoint_name, ip), "")
         self.zk_conn.write(paths.ip_address(ip), endpoint_name)
 
+    def ip_to_endpoint(self, ip):
+        return self.zk_conn.read(paths.ip_address(ip))
+
     @locked
     def update_ips(self, ips, add=True):
         if len(ips) == 0:
@@ -643,6 +648,52 @@ class ScaleManager(object):
 
     def delete_endpoint_instance(self, endpoint_name, instance_id):
         self.zk_conn.delete(paths.endpoint_instance(endpoint_name, instance_id))
+
+    def endpoint_sessions(self, endpoint_name):
+        """ Return a mapping of endpoint sessions. """
+        clients = self.zk_conn.list_children(paths.endpoint_sessions(endpoint_name))
+        if not clients:
+            return {}
+        session_map = {}
+        for client in clients:
+            backend = self.zk_conn.read(paths.endpoint_session(endpoint_name, client))
+            backend_sessions = session_map.get(backend, [])
+            backend_sessions.append(client)
+            session_map[backend] = backend_sessions
+        return session_map
+
+    def endpoint_dropped_sessions(self, endpoint_name):
+        """ Return a mapping of dropped endpoint sessions. """
+        clients = self.zk_conn.list_children(paths.dropped_sessions(endpoint_name))
+        if not clients:
+            return {}
+        session_map = {}
+        for client in clients:
+            backend = self.zk_conn.read(paths.dropped_session(endpoint_name, client))
+            backend_sessions = session_map.get(backend, [])
+            backend_sessions.append(client)
+            session_map[backend] = backend_sessions
+        return session_map
+
+    # An indication that a session has been opened
+    def session_opened(self, endpoint_name, backend, client):
+        self.zk_conn.write(paths.endpoint_session(endpoint_name, client), backend)
+
+    # An indication that a session has been closed
+    def session_closed(self, endpoint_name, client):
+        self.zk_conn.delete(paths.endpoint_session(endpoint_name, client))
+
+    # An indication that a session has been dropped
+    def session_dropped(self, endpoint_name, client):
+        self.zk_conn.delete(paths.dropped_session(endpoint_name, client))
+        self.session_closed(endpoint_name, client)
+
+    # Indicate to the endpoint that a session should be dropped
+    def drop_session(self, endpoint_name, backend, client):
+        if endpoint_name in self.endpoints:
+            self.zk_conn.write(paths.dropped_session(endpoint_name, client), backend)
+            return True
+        return False
 
     @locked
     def marked_instances(self, endpoint_name):
@@ -919,15 +970,76 @@ class ScaleManager(object):
         # Return the metrics.
         return metrics, list(set(metric_ips)), active_connections
 
+    def _collect_sessions(self):
+        all_sessions = {}
+        for lb in self.loadbalancers.values():
+            sessions = lb.sessions() or {}
+            # For each session,
+            for backend in sessions:
+                # Look up the endpoint
+                endpoint_name = self.ip_to_endpoint(backend)
+                # If no endpoint,
+                if not endpoint_name:
+                    # Log and continue
+                    logging.error("Found session without endpoint: %s" % backend)
+                    continue
+                # Add to the sesssions list
+                endpoint_sessions = all_sessions.get(endpoint_name, {})
+                backend_sessions = endpoint_sessions.get(backend, [])
+                for client in sessions[backend]:
+                    backend_sessions.append(client)
+                endpoint_sessions[backend] = backend_sessions
+                all_sessions[endpoint_name] = endpoint_sessions
+
+        return all_sessions
+
+    def update_sessions(self):
+        # Collect sessions
+        my_sessions = self._collect_sessions()
+        old_sessions = self.manager_sessions
+
+        # Write out our sessions
+        for endpoint in my_sessions:
+            for backend in my_sessions[endpoint]:
+                for client in my_sessions[endpoint][backend]:
+                    self.session_opened(endpoint, backend, client)
+
+        # Cull old sessions
+        for endpoint in old_sessions:
+            for backend in old_sessions[endpoint]:
+                for client in old_sessions[endpoint][backend]:
+                    if client not in my_sessions.get(endpoint, {}).get(backend, []):
+                        self.session_closed(endpoint, client)
+        self.manager_sessions = my_sessions
+
+        # Read sessions from all managers
+        all_sessions = {}
+        dropped_sessions = {}
+        for endpoint in self.endpoints:
+            all_sessions[endpoint] = self.endpoint_sessions(endpoint)
+            dropped_sessions[endpoint] = self.endpoint_dropped_sessions(endpoint)
+
+        return (all_sessions, dropped_sessions)
+
     @locked
     def do_health_check(self):
         # Save and load the current metrics.
         endpoint_metrics, active_connections = self.update_metrics()
+        all_sessions, dropped_sessions = self.update_sessions()
 
         # Does a health check on all the endpoints that are being managed.
         for endpoint in self.endpoints.values():
+            # Check ownership
+            owned = self.endpoint_owned(endpoint)
+
+            # Update endpoint sessions
+            endpoint_sessions = all_sessions[endpoint.name]
+            endpoint_dropped_sessions = dropped_sessions[endpoint.name]
+            endpoint.update_sessions(endpoint_sessions,
+                                     endpoint_dropped_sessions, owned)
+
             # Do not kick the endpoint if it is not currently owned by us.
-            if not(self.endpoint_owned(endpoint)):
+            if not(owned):
                 continue
 
             try:

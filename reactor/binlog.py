@@ -176,7 +176,10 @@ class BinaryLog:
             rectype = self.UNKNOWN_RECTYPE
 
         # Format severity string
-        sevstr = "%s" % self.SEVERITY_MAP[sev]
+        if sev < len(self.SEVERITY_MAP):
+            sevstr = "%s" % self.SEVERITY_MAP[sev]
+        else:
+            sevstr = "UNKNOWN"
 
         # Format entry string
         recstr = rectype.printfn((arg1, arg2))

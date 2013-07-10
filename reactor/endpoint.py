@@ -365,6 +365,14 @@ class Endpoint(object):
             self.decommission_instances(instances_to_delete,
                 "bringing instance total down to target %s" % target)
 
+    def update_sessions(self, sessions, dropped_sessions, authoritative):
+        # Drop any sessions indicated by manager
+        for backend in dropped_sessions:
+            for client in dropped_sessions[backend]:
+                self.lb_conn.drop_session(backend, client)
+                if authoritative:
+                    self.scale_manager.session_dropped(self.name, client)
+
     def update_state(self, state):
         self.state = state or State.default
         if self.state == State.running:
