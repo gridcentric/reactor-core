@@ -362,7 +362,7 @@ class Endpoint(object):
             inactive_instances = \
                 filter(lambda x: not self._instance_is_active(x, active_ips),
                         instances)
-            to_do = min(len(inactive_instances), ramp_limit, 
+            to_do = min(len(inactive_instances), ramp_limit,
                                         (num_instances - target))
             for i in range(to_do):
                 instances_to_delete.append(inactive_instances.pop(0))
@@ -612,7 +612,6 @@ class Endpoint(object):
         else:
             self.lb_conn.redirect(self.url(), [self.name], redirects[0],
                     config=self.config)
-
 
         self.lb_conn.save()
 

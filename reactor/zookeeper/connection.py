@@ -97,7 +97,7 @@ class ZookeeperConnection(object):
 
     @wrap_exceptions
     def write(self, path, contents, ephemeral=False, exclusive=False):
-        """ 
+        """
         Writes the contents to the path in zookeeper. It will create the path in
         zookeeper if it does not already exist.
 

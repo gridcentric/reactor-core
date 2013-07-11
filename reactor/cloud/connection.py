@@ -40,7 +40,7 @@ class CloudConnection(Connection):
 
     def list_instances(self, config):
         """
-        Lists the instances related to a endpoint. Note that this list should be 
+        Lists the instances related to a endpoint. Note that this list should be
         returned in order of oldest instance to youngest.
         """
         return []
