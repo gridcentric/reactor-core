@@ -142,8 +142,8 @@ class ConnectionConsumer(threading.Thread):
 
     def flush(self):
         # Attempt to flush all connections.
-        while self.producer.has_pending():
-            connection = self.producer.next()
+        while True:
+            connection = self.producer.next(block=False)
             if not(connection):
                 break
             if not(self.handle(connection)):
@@ -380,7 +380,6 @@ class Connection(LoadBalancerConnection):
     def save(self):
         self.producer.set(self.portmap.keys())
         self.consumer.set(self.portmap)
-        self.consumer.flush()
 
     def metrics(self):
         records = {}
@@ -437,7 +436,6 @@ class Connection(LoadBalancerConnection):
         if forget_active:
             for ip in forget_active:
                 self.locks.forget_ip(ip)
-            self.consumer.flush()
 
         return records
 
