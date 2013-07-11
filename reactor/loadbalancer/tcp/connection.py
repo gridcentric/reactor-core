@@ -4,6 +4,7 @@ import signal
 import re
 import time
 import threading
+import Queue
 import random
 import select
 
@@ -109,7 +110,6 @@ class ConnectionConsumer(threading.Thread):
             # Index by the destination port.
             port = connection.dst[1]
             if not(self.ports.has_key(port)):
-                self.cond.notifyAll()
                 connection.drop()
                 return True
 
@@ -132,7 +132,6 @@ class ConnectionConsumer(threading.Thread):
 
             # Either redirect or drop the connection.
             if ip:
-                self.cond.notifyAll()
                 child = connection.redirect(ip, ipmap[ip])
                 self.children[child] = [ip, connection]
                 return True
@@ -157,29 +156,18 @@ class ConnectionConsumer(threading.Thread):
 
             # Service connection, if any.
             if connection:
-                self.cond.acquire()
-                try:
-                    if self.handle(connection):
-                        # If we can handle this connection,
-                        # make sure that the queue is flushed.
-                        self.flush()
-                    else:
-                        # If we can't handle this connection right
-                        # now, we wait and will try it again on
-                        # the next round.
-                        self.producer.push(connection)
-                        self.cond.wait()
-                finally:
-                    self.cond.release()
+                if self.handle(connection):
+                    # If we can handle this connection,
+                    # make sure that the queue is flushed.
+                    self.flush()
+                else:
+                    # If we can't handle this connection right
+                    # now, we wait and will try it again on
+                    # the next round.
+                    self.producer.push(connection)
 
             # Reap dead children
-            for child in self.children.keys():
-                # Check if child is alive
-                try:
-                    os.kill(child, 0)
-                except:
-                    # Not alive - remove from children list
-                    del self.children[child]
+            self.reap_children()
 
         # Kill all children
         for child in self.children.keys():
@@ -187,6 +175,17 @@ class ConnectionConsumer(threading.Thread):
                 os.kill(child, signal.SIGQUIT)
             except:
                 pass
+
+    def reap_children(self):
+        self.cond.acquire()
+        for child in self.children.keys():
+            # Check if child is alive
+            try:
+                os.kill(child, 0)
+            except:
+                # Not alive - remove from children list
+                del self.children[child]
+        self.cond.release()
 
     def sessions(self):
         session_map = {}
@@ -198,6 +197,7 @@ class ConnectionConsumer(threading.Thread):
         return session_map
 
     def drop_session(self, backend, client):
+        self.cond.acquire()
         for child in self.children.keys():
             (ip, conn) = self.children[child]
             (src_ip, src_port) = conn.src
@@ -206,13 +206,14 @@ class ConnectionConsumer(threading.Thread):
                     os.kill(child, signal.SIGQUIT)
                 except:
                     pass
+        self.cond.release()
 
 class ConnectionProducer(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
         self.daemon = True
         self.execute = True
-        self.pending = []
+        self.pending = Queue.Queue()
         self.sockets = {}
         self.filemap = {}
         self.portmap = {}
@@ -220,9 +221,7 @@ class ConnectionProducer(threading.Thread):
         self.set()
 
     def stop(self):
-        self.cond.acquire()
         self.execute = False
-        self.cond.release()
 
     def set(self, ports=[]):
         # Set the appropriate ports.
@@ -257,37 +256,23 @@ class ConnectionProducer(threading.Thread):
         for socket in self.sockets.values():
             self.epoll.register(socket.fileno(), select.EPOLLIN)
 
-    def next(self, timeout=None):
+    def next(self, block=True, timeout=0):
         # Pull the next connection.
-        self.cond.acquire()
         try:
-            self.cond.wait(timeout=timeout)
-            if self.execute and len(self.pending) > 0:
-                return self.pending.pop(0)
-            else:
-                return None
-        finally:
-            self.cond.release()
+            return self.pending.get(block, timeout)
+        except Queue.Empty:
+            return None
 
     def push(self, connection):
         # Push back a connection.
-        self.cond.acquire()
-        try:
-            self.pending.insert(0, connection)
-            self.cond.notifyAll()
-        finally:
-            self.cond.release()
+        self.pending.put(connection)
 
     def has_pending(self):
         # Check for pending connections.
-        self.cond.acquire()
-        try:
-            return self.execute and len(self.pending) > 0
-        finally:
-            self.cond.release()
+        return self.execute and not self.pending.empty()
 
     def run(self):
-        while True:
+        while self.execute:
             # Poll for events.
             events = self.epoll.poll(1)
 
@@ -305,17 +290,9 @@ class ConnectionProducer(threading.Thread):
                 connection = Accept(sock)
 
                 # Push it into the queue.
-                self.pending.append(connection)
-                self.cond.notifyAll()
+                self.push(connection)
 
-            # Check if we should continue executing.
-            if not(self.execute):
-                self.cond.notifyAll()
-                self.cond.release()
-                break
-            else:
-                self.cond.release()
-                continue
+            self.cond.release()
 
 class TcpEndpointConfig(Config):
 
