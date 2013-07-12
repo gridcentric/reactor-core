@@ -27,7 +27,7 @@ setup(
         "netifaces",
         "python-ldap",
     ],
-    packages=find_packages(),
+    packages=find_packages(exclude=["reactor.testing"]),
     package_data={
         "reactor.loadbalancer.nginx" : ["nginx.template", "reactor.conf"],
         "reactor.loadbalancer.dnsmasq" : ["dnsmasq.template"],
