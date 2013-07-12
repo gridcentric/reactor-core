@@ -8,6 +8,7 @@ import copy
 from reactor.binlog import BinaryLog, BinaryLogRecord
 from reactor.config import Config
 from reactor.submodules import cloud_options, loadbalancer_options
+from reactor.utils import inet_ntoa, inet_aton
 import reactor.cloud.connection as cloud_connection
 import reactor.loadbalancer.connection as lb_connection
 import reactor.metrics.calculator as metric_calculator
@@ -144,6 +145,8 @@ class EndpointLog(BinaryLog):
     LAUNCH_INSTANCE         = BinaryLogRecord(lambda args: "Launching instance")
     LAUNCH_FAULURE          = BinaryLogRecord(lambda args: "Failure launching instance")
     DELETE_INSTANCE         = BinaryLogRecord(lambda args: "Deleting instance")
+    CONFIRM_IP              = BinaryLogRecord(lambda args: "Confirmed instance with IP %s" % (inet_ntoa(args[0])))
+    DROP_IP                 = BinaryLogRecord(lambda args: "Dropped instance with IP %s" % (inet_ntoa(args[0])))
 
     def __init__(self, store_cb=None, retrieve_cb=None):
         # Note: if adding new log entry types, they must be added above
@@ -160,7 +163,9 @@ class EndpointLog(BinaryLog):
             EndpointLog.DECOMMISION_INSTANCE,
             EndpointLog.LAUNCH_INSTANCE,
             EndpointLog.LAUNCH_FAULURE,
-            EndpointLog.DELETE_INSTANCE
+            EndpointLog.DELETE_INSTANCE,
+            EndpointLog.CONFIRM_IP,
+            EndpointLog.DROP_IP
         ]
 
         # Zookeeper objects are limited to 1MB in size. Since we write
@@ -691,3 +696,10 @@ class Endpoint(object):
                                                     'decommissioned'):
                         instance = self.instance_by_id(instances, inactive_instance_id)
                         self._delete_instance(instance)
+
+    # The following two methods are for advisory purposes only.
+    def ip_confirmed(self, ip):
+        self.logging.info(self.logging.CONFIRM_IP, inet_aton(ip))
+
+    def ip_dropped(self, ip):
+        self.logging.info(self.logging.DROP_IP, inet_aton(ip))

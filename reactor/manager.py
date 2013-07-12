@@ -570,12 +570,14 @@ class ScaleManager(object):
         self.zk_conn.delete(paths.ip_address(ip))
         for lock in self.locks.values():
             lock.forget_ip(ip)
+        self.endpoints[endpoint_name].ip_dropped(ip)
 
     @locked
     def confirm_ip(self, endpoint_name, ip):
         logging.info("Adding endpoint %s IP %s" % (endpoint_name, ip))
         self.zk_conn.write(paths.confirmed_ip(endpoint_name, ip), "")
         self.zk_conn.write(paths.ip_address(ip), endpoint_name)
+        self.endpoints[endpoint_name].ip_confirmed(ip)
 
     def ip_to_endpoint(self, ip):
         return self.zk_conn.read(paths.ip_address(ip))
