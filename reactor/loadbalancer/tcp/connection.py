@@ -105,6 +105,7 @@ class ConnectionConsumer(threading.Thread):
 
     def stop(self):
         self.execute = False
+        self.wakeup()
 
     def handle(self, connection):
         self.cond.acquire()
@@ -152,6 +153,18 @@ class ConnectionConsumer(threading.Thread):
                 self.producer.push(connection)
                 break
 
+    def wait(self):
+        # Wait for a signal that more backends are
+        # available
+        self.cond.acquire()
+        self.cond.wait()
+        self.cond.release()
+
+    def wakeup(self):
+        self.cond.acquire()
+        self.cond.notify()
+        self.cond.release()
+
     def run(self):
         while self.execute:
             connection = self.producer.next(timeout=1)
@@ -167,6 +180,7 @@ class ConnectionConsumer(threading.Thread):
                     # now, we wait and will try it again on
                     # the next round.
                     self.producer.push(connection)
+                    self.wait()
 
             # Reap dead children
             self.reap_children()
@@ -382,6 +396,7 @@ class Connection(LoadBalancerConnection):
     def save(self):
         self.producer.set(self.portmap.keys())
         self.consumer.set(self.portmap)
+        self.consumer.wakeup()
 
     def metrics(self):
         records = {}
@@ -438,6 +453,7 @@ class Connection(LoadBalancerConnection):
         if forget_active:
             for ip in forget_active:
                 self.locks.forget_ip(ip)
+            self.consumer.wakeup()
 
         return records
 
