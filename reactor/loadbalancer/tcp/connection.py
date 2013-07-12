@@ -35,11 +35,10 @@ def fork_and_exec(cmd, child_fds=[]):
     # Fork
     pid = os.fork()
     if pid != 0:
-        # Close the child FDs.
-        for fd in child_fds:
-            os.close(fd)
-
         # Close writing end of the pipe.
+        os.close(w)
+        
+        # Get a file object for the read end.
         r_obj = os.fdopen(r, "r")
 
         # Wait for the child to exit.
@@ -52,7 +51,7 @@ def fork_and_exec(cmd, child_fds=[]):
                 return child
 
     # Close off all parent FDs.
-    close_fds(except_fds=child_fds + [r, w])
+    close_fds(except_fds=child_fds + [w])
 
     # Create process group.
     os.setsid()
@@ -67,6 +66,9 @@ def fork_and_exec(cmd, child_fds=[]):
 
         # Exit
         os._exit(0)
+
+    # Close the write end of the pipe
+    os.close(w)
 
     # Exec the given command.
     os.execvp(cmd[0], cmd)
