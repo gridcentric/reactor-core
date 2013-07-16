@@ -17,7 +17,9 @@ INSTALL_DATA := install -m0644 -p
 PYTHON_VER ?= $(shell python -V 2>&1 | cut -d' ' -f2 | awk -F'.' '{print $$1 "." $$2};')
 PACKAGES_DIR ?= dist-packages
 
-default: dist packages cobaltclient
+PYTEST_FLAGS ?=
+
+default: test dist packages cobaltclient
 .PHONY: default
 
 dist:
@@ -27,6 +29,10 @@ dist:
 install: dist
 	@VERSION=$(PACKAGE_VERSION) python$(PYTHON_VER) setup.py install --prefix=$(DESTDIR)
 .PHONY: install
+
+test:
+	reactor/testing/py.test $(PYTEST_FLAGS)
+.PHONY: test
 
 dist_install: dist_clean
 	@VERSION=$(PACKAGE_VERSION) python$(PYTHON_VER) setup.py bdist -p bdist
@@ -53,7 +59,7 @@ dist_clean:
 .PHONY: dist_clean
 
 clean: dist_clean
-	@rm -rf *.deb *.rpm extra/cobalt-novaclient*.*
+	@rm -rf *.deb *.rpm extra/cobalt-novaclient*.* __pycache__
 .PHONY: clean
 
 $(RPMBUILD):

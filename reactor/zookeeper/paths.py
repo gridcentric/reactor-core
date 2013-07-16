@@ -2,19 +2,29 @@
 This defines the various paths used in zookeeper
 """
 
+def update_root(new_root):
+    global ROOT, AUTH_HASH, MANAGERS, ENDPOINTS, LOADBALANCERS, \
+        NEW_IPS, DROP_IPS, IP_ADDRESSES
+    ROOT = new_root
+    AUTH_HASH = "%s/auth" % (ROOT)
+    MANAGERS = "%s/managers" % (ROOT)
+    ENDPOINTS = "%s/endpoint" % (ROOT)
+    LOADBALANCERS = "%s/loadbalancers" % (ROOT)
+    NEW_IPS = "%s/new_ips" % (ROOT)
+    DROP_IPS = "%s/drop_ips" % (ROOT)
+    IP_ADDRESSES = "%s/ip_addresses" % (ROOT)
+
 # The root path that all other paths hang off from.
 ROOT = "/reactor"
+update_root(ROOT)
 
 # The path to the authorization hash used by the API to validate requests.
-AUTH_HASH = "%s/auth" % (ROOT)
 def auth_hash():
     return AUTH_HASH
 
 #
 # Manager information.
 #
-MANAGERS = "%s/managers" % (ROOT)
-
 def manager_ips():
     return "%s/ips" % MANAGERS
 
@@ -53,8 +63,6 @@ def manager_active_connections(name):
 #
 # Endpoint information.
 #
-ENDPOINTS = "%s/endpoint" % (ROOT)
-
 def endpoints():
     return ENDPOINTS
 
@@ -143,7 +151,6 @@ def dropped_session(name, session):
 #
 # The loadbalancer subtree.
 #
-LOADBALANCERS = "%s/loadbalancers" % (ROOT)
 
 def loadbalancer_ips(name):
     return "%s/%s" % (LOADBALANCERS, name)
@@ -155,9 +162,6 @@ def loadbalancer_ip(name, ip):
 #
 # New IPs currently not associated with any endpoint are logged here.
 #
-NEW_IPS = "%s/new_ips" % (ROOT)
-DROP_IPS = "%s/drop_ips" % (ROOT)
-
 def new_ips():
     return NEW_IPS
 
@@ -175,8 +179,6 @@ def drop_ip(ip_address):
 #
 # IP Address mappings.
 #
-IP_ADDRESSES = "%s/ip_addresses" % (ROOT)
-
 def ip_addresses():
     return IP_ADDRESSES
 
