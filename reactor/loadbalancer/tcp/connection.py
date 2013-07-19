@@ -76,16 +76,31 @@ def fork_and_exec(cmd, child_fds=[]):
 class Accept:
     def __init__(self, sock):
         (client, address) = sock.accept()
-        self.sock = client
-        self.src  = address
-        self.dst  = sock.getsockname()
+        # Ensure that the underlying socket is closed.
+        # It's probably crazy pills -- but I saw weird
+        # issues with the socket object. This way we only
+        # keep around the file descriptor nothing more.
+        self.fd = os.dup(client.fileno())
+        client._sock.close()
+        self.src = address
+        self.dst = sock.getsockname()
 
     def drop(self):
-        self.sock.close()
+        if self.fd is not None:
+            os.close(self.fd)
+            self.fd = None
 
     def redirect(self, host, port):
-        cmd = ["socat", "fd:%d" % self.sock.fileno(), "tcp-connect:%s:%d" % (host, port)]
-        return fork_and_exec(cmd, child_fds=[self.sock.fileno()])
+        if self.fd is not None:
+            cmd = [
+                "socat",
+                "fd:%d" % self.fd,
+                "tcp-connect:%s:%d" % (host, port)
+            ]
+            child = fork_and_exec(cmd, child_fds=[self.fd])
+            os.close(self.fd)
+            self.fd = None
+            return child
 
 class ConnectionConsumer(threading.Thread):
     def __init__(self, locks, producer):
@@ -203,12 +218,18 @@ class ConnectionConsumer(threading.Thread):
                 del self.children[child]
         self.cond.release()
 
+    def _as_client(self, src_ip, src_port):
+        return "%s:%d" % (src_ip, src_port)
+
     def sessions(self):
         session_map = {}
         for (ip, conn) in self.children.values():
             (src_ip, src_port) = conn.src
+            # We store clients as ip:port pairs.
+            # This matters for below, where we must match
+            # in order to drop the session.
             ip_sessions = session_map.get(ip, [])
-            ip_sessions.append(src_ip)
+            ip_sessions.append(self._as_client(src_ip, src_port))
             session_map[ip] = ip_sessions
         return session_map
 
@@ -217,7 +238,7 @@ class ConnectionConsumer(threading.Thread):
         for child in self.children.keys():
             (ip, conn) = self.children[child]
             (src_ip, src_port) = conn.src
-            if backend == ip and client == src_ip:
+            if client == self._as_client(src_ip, src_port) and backend == ip:
                 try:
                     os.kill(child, signal.SIGTERM)
                 except:
@@ -273,8 +294,8 @@ class ConnectionProducer(threading.Thread):
             self.epoll.register(socket.fileno(), select.EPOLLIN)
 
     def next(self, block=True, timeout=0):
-        # Pull the next connection.
         try:
+            # Pull the next connection.
             return self.pending.get(block, timeout)
         except Queue.Empty:
             return None
@@ -289,8 +310,18 @@ class ConnectionProducer(threading.Thread):
 
     def run(self):
         while self.execute:
-            # Poll for events.
-            events = self.epoll.poll(1)
+            try:
+                # Poll for events.
+                events = self.epoll.poll(1)
+            except IOError:
+                # Whoops -- could just be an interrupted system call.
+                # (To be specific, I see this error when attaching via
+                # strace to the process). We just build the descriptor
+                # and let it go again..
+                self.cond.acquire()
+                self._update_epoll()
+                self.cond.release()
+                continue
 
             # Scan the events and accept.
             self.cond.acquire()
@@ -356,7 +387,8 @@ class Connection(LoadBalancerConnection):
             self.consumer.flush()
             self.producer.stop()
             self.consumer.stop()
-        self.locks.forget_all()
+        if self.locks:
+            self.locks.forget_all()
 
     def redirect(self, url, names, other, config=None):
         pass
