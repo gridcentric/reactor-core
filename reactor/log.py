@@ -8,7 +8,6 @@ import sys
 
 def configure(level, logfile=None):
 
-    hanlder = None
     if logfile != None:
         handler = logging.handlers.WatchedFileHandler(logfile)
     else:
