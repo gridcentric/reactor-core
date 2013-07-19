@@ -104,16 +104,16 @@ class ScalingConfig(Config):
         Config.__init__(self, "scaling", **kwargs)
 
     min_instances = Config.integer(label="Minimum Instances", default=1, order=0,
-        validate=lambda self: (self.min_instances >= 1 or \
-            Config.error("Min instances must be at least one.")) and \
+        validate=lambda self: (self.min_instances >= 0 or \
+            Config.error("Min instances must be zero or greater.")) and \
             (self.max_instances >= self.min_instances or \
             Config.error("Min instances (%d) must be less than Max instances (%d)" % \
                 (self.min_instances, self.max_instances))),
         description="Lower limit on dynamic instances.")
 
     max_instances = Config.integer(label="Maximum Instances", default=1, order=1,
-        validate=lambda self: (self.max_instances >= 1 or \
-            Config.error("Max instances must be at least one.")) and \
+        validate=lambda self: (self.max_instances >= 0 or \
+            Config.error("Max instances must be zero or greater.")) and \
             (self.max_instances >= self.min_instances or \
             Config.error("Min instances (%d) must be less than Max instances (%d)" % \
                 (self.min_instances, self.max_instances))),
