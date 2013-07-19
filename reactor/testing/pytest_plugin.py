@@ -16,13 +16,14 @@ def hashrequest(request):
 
 @pytest.fixture
 def scale_manager(request):
-    m = manager.ScaleManager([harness.LOCAL_ZK_ADDRESS], names=['127.0.0.1'])
+    client = ReactorClient([harness.LOCAL_ZK_ADDRESS])
+    m = manager.ScaleManager(client, names=['127.0.0.1'])
     context[hashrequest(request)] = m
     m.serve()
 
     def stop_manager():
         m.clean_stop()
-        m.zk_conn.close()
+        client._disconnect()
 
     request.addfinalizer(stop_manager)
     return m

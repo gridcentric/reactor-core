@@ -11,19 +11,19 @@
 
 LOGFILE=/var/log/reactor.log
 PIDFILE=/var/run/reactor.pid
-EXEC=reactor-server
+EXEC=reactor
 
 # Source function library.
 . /etc/rc.d/init.d/functions
 
 case "$1" in
 start)
-    daemon --pidfile $PIDFILE $EXEC --log $LOGFILE --pidfile $PIDFILE
-    echo "reactor-server"
+    daemon --pidfile $PIDFILE $EXEC --gui --cluster --log $LOGFILE --pidfile $PIDFILE runapi
+    echo "reactor"
 ;;
 stop)
     killproc -p $PIDFILE $EXEC
-    echo "reactor-server"
+    echo "reactor"
 ;;
 status)
     status -p $PIDFILE $EXEC

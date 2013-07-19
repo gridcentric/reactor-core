@@ -31,19 +31,20 @@ setup(
     package_data={
         "reactor.loadbalancer.nginx" : ["nginx.template", "reactor.conf"],
         "reactor.loadbalancer.dnsmasq" : ["dnsmasq.template"],
-        "reactor.server" : ["admin/*.html",
-                            "admin/include/*.html",
-                            "admin/assets/*.js",
-                            "admin/assets/*.png",
-                            "admin/assets/*.css",
-                            "admin/assets/lib/*.js",
-                            "admin/assets/lib/bootstrap/*/*"]
+        "reactor" : [
+            "admin/*.html",
+            "admin/include/*.html",
+            "admin/assets/*.js",
+            "admin/assets/*.png",
+            "admin/assets/*.css",
+            "admin/assets/lib/*.js",
+            "admin/assets/lib/bootstrap/*/*"
+        ]
     },
     include_package_data=True,
     entry_points={
         'console_scripts': [
-            'reactor = reactor.cli:main',
-            'reactor-server = reactor.cli:server',
+            'reactor = reactor.cli:main'
         ]
     },
     classifiers=[

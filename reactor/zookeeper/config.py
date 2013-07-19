@@ -2,7 +2,7 @@ import re
 import subprocess
 import os
 
-import reactor.server.ips as ips
+import reactor.ips as ips
 
 ZOOKEEPER_CONF_DIRS = [
     "/etc/zookeeper/conf",

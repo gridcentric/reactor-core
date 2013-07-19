@@ -14,10 +14,10 @@ def instance_sequencer():
         yield current
 
 def ip_to_int(ip):
-    return struct.unpack("!I", inet_aton(ip))[0]
+    return unpack("!I", inet_aton(ip))[0]
 
 def int_to_ip(ip_int):
-    return inet_ntoa(struct.pack("!I", ip_int))
+    return inet_ntoa(pack("!I", ip_int))
 
 def ip_range_generator(base, count):
     base_ip = ip_to_int(base)

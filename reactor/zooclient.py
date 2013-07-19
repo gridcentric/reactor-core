@@ -1,4 +1,6 @@
+import binascii
 import json
+import array
 
 from reactor.endpoint import EndpointConfig
 from reactor.zookeeper.connection import ZookeeperConnection
@@ -8,13 +10,31 @@ import reactor.zookeeper.paths as paths
 class ReactorClient(object):
 
     def __init__(self, zk_servers):
-        self.zk_conn = ZookeeperConnection(zk_servers)
+        self.zk_conn = None
+        self.zk_servers = zk_servers
+        self._connect()
 
     def __del__(self):
-        self.close()
+        self._disconnect()
 
-    def close(self):
-        self.zk_conn.close()
+    def _connect(self, zk_servers=None):
+        if zk_servers is None:
+            zk_servers = self.zk_servers
+        else:
+            self.zk_servers = zk_servers
+        self.zk_conn = ZookeeperConnection(zk_servers)
+
+    def _disconnect(self):
+        if self.zk_conn:
+            self.zk_conn.close()
+            self.zk_conn = None
+
+    def _connected(self):
+        return self.zk_conn != None
+
+    def _reconnect(self, zk_servers=None):
+        self._disconnect()
+        self._connect(zk_servers=zk_servers)
 
     def list_managed_endpoints(self):
         return self.zk_conn.list_children(paths.endpoints())
@@ -115,7 +135,20 @@ class ReactorClient(object):
 
         return ip_addresses
 
-    def record_new_ip_address(self, ip_address):
+    def endpoint_log_load(self, endpoint_name):
+        data = self.zk_conn.read(paths.endpoint_log(endpoint_name))
+        if data:
+            try:
+                data = array.array('b', binascii.unhexlify(data))
+            except:
+                data = None
+        return data
+
+    def endpoint_log_save(self, endpoint_name, data):
+        self.zk_conn.write(paths.endpoint_log(endpoint_name),
+                           binascii.hexlify(data))
+
+    def ip_address_record(self, ip_address):
         self.zk_conn.delete(paths.new_ip(ip_address))
         self.zk_conn.write(paths.new_ip(ip_address), "")
 
@@ -136,3 +169,36 @@ class ReactorClient(object):
             self.zk_conn.write(paths.auth_hash(), auth_hash)
         else:
             self.zk_conn.delete(paths.auth_hash())
+
+    def session_list(self, endpoint_name):
+        """ Return a mapping of endpoint sessions. """
+        clients = self.zk_conn.list_children(paths.sessions(endpoint_name))
+        if not clients:
+            return []
+        return clients
+
+    def session_backend(self, endpoint_name, client):
+        return self.zk_conn.read(paths.session(endpoint_name, client))
+
+    # An indication that a session has been opened.
+    def session_opened(self, endpoint_name, client, backend):
+        self.zk_conn.write(paths.session(endpoint_name, client), backend,
+                           ephemeral=True)
+
+    # An indication that a session has been closed.
+    def session_closed(self, endpoint_name, client):
+        self.zk_conn.delete(paths.session(endpoint_name, client))
+
+    # An indication that a session has been dropped.
+    def session_dropped(self, endpoint_name, client):
+        self.zk_conn.delete(paths.session(endpoint_name, client))
+        self.session_closed(endpoint_name, client)
+
+    # Indicate to the endpoint that a session should be dropped.
+    def session_drop(self, endpoint_name, client):
+        backend = self.session_backend(endpoint_name, client)
+        if backend:
+            self.zk_conn.write(paths.session_dropped(endpoint_name, client), backend)
+
+    def sessions_dropped(self, endpoint_name):
+        return self.zk_conn.list_children(paths.sessions_dropped(endpoint_name))

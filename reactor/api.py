@@ -10,7 +10,9 @@ from pyramid.authentication import AuthTktAuthenticationPolicy
 from pyramid.authorization import ACLAuthorizationPolicy
 
 from reactor.endpoint import EndpointConfig
+from reactor.endpoint import EndpointLog
 from reactor.endpoint import State
+
 from reactor.manager import ManagerConfig
 from reactor.zooclient import ReactorClient
 from reactor.zookeeper.connection import ZookeeperException
@@ -111,9 +113,8 @@ class ReactorApi(object):
 
     AUTH_SALT = 'gridcentricreactor'
 
-    def __init__(self, zk_servers):
-        self.zk_servers = zk_servers
-        self.client = None
+    def __init__(self, client):
+        self.client = client
         self.config = Configurator()
 
         # Set up auth-ticket authentication.
@@ -177,6 +178,21 @@ class ReactorApi(object):
         self._add('endpoint-state-action-implicit', ['1.0', '1.1'],
                   'endpoint/state', self.handle_state_action)
 
+        self._add('endpoint-log', ['1.1'],
+                  'endpoints/{endpoint_name}/log', self.handle_log_action)
+        self._add('endpoint-log-implicit', ['1.1'],
+                  'endpoint/log', self.handle_log_action)
+
+        self._add('session-list', ['1.1'],
+                  'endpoints/{endpoint_name}/sessions', self.list_sessions)
+        self._add('session-list-implicit', ['1.1'],
+                  'endpoint/sessions', self.list_sessions)
+
+        self._add('session-action', ['1.1'],
+                  'endpoints/{endpoint_name}/sessions/{session}', self.handle_session_action)
+        self._add('session-action-implicit', ['1.1'],
+                  'endpoint/sessions/{session}', self.handle_session_action)
+
     def _add(self, name, versions, path, fn):
         for version in versions:
             route_name = "%s:%s" % (version, name)
@@ -184,19 +200,12 @@ class ReactorApi(object):
             self.config.add_route(route_name, url_path)
             self.config.add_view(fn, route_name=route_name)
 
-    def reconnect(self, zk_servers):
-        self.disconnect()
-        self.zk_servers = zk_servers
-        self.client = ReactorClient(zk_servers)
-
     def disconnect(self):
-        if self.client:
-            self.client.close()
-        self.client = None
+        self.client._disconnect()
 
     def ensure_connected(self):
-        if not(self.client):
-            self.reconnect(self.zk_servers)
+        if not(self.client._connected()):
+            self.client._connect()
 
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
@@ -348,9 +357,6 @@ class ReactorApi(object):
         else:
             return Response(status=403)
 
-    def handle_update_manager(self, manager, manager_config):
-        self.client.update_manager_config(manager, manager_config)
-
     @connected
     @authorized_admin_only
     def handle_manager_action(self, context, request):
@@ -375,14 +381,13 @@ class ReactorApi(object):
             manager_config = json.loads(request.body)
             logging.info("Updating manager %s" % manager)
 
-            # This is handling separately, as the server subclass
-            # may do some intelligent validation of the config.
-            # However, in the general case the API server alone
-            # cannot validate the configuration.
-            error = self.handle_update_manager(manager, manager_config)
-            if error:
-                return Response(status=400, body=error)
+            config = ManagerConfig(values=manager_config)
+            config._validate()
+            errs = config._validate_errors()
+            if errs:
+                return Response(status=400, body=json.dumps(errs))
             else:
+                self.client.update_update(manager, manager_config)
                 return Response()
 
         elif request.method == "DELETE":
@@ -409,9 +414,6 @@ class ReactorApi(object):
                 {'configured': configured, 'active': active}))
         else:
             return Response(status=403)
-
-    def handle_update_endpoint(self, endpoint_name, endpoint_config):
-        self.client.update_endpoint(endpoint_name, endpoint_config)
 
     @connected
     @authorized_admin_only
@@ -441,11 +443,13 @@ class ReactorApi(object):
             endpoint_config = json.loads(request.body)
             logging.info("Managing or updating endpoint %s" % endpoint_name)
 
-            # As per before in handle_update_manager().
-            error = self.handle_update_endpoint(endpoint_name, endpoint_config)
-            if error:
-                return Response(status=400, body=error)
+            config = EndpointConfig(values=endpoint_config)
+            config._validate()
+            errs = config._validate_errors()
+            if errs:
+                return Response(status=400, body=json.dumps(errs))
             else:
+                self.client.update_endpoint(endpoint_name, endpoint_config)
                 return Response()
 
         else:
@@ -554,7 +558,7 @@ class ReactorApi(object):
             ip_address = request.matchdict.get('endpoint_ip', None)
             if ip_address:
                 logging.info("New IP address %s has been recieved." % (ip_address))
-                self.client.record_new_ip_address(ip_address)
+                self.client.ip_address_record(ip_address)
             return Response()
         else:
             return Response(status=403)
@@ -567,7 +571,7 @@ class ReactorApi(object):
         if request.method == "POST" or request.method == "PUT":
             ip_address = self._extract_remote_ip(context, request)
             logging.info("New IP address %s has been recieved." % (ip_address))
-            self.client.record_new_ip_address(ip_address)
+            self.client.ip_address_record(ip_address)
             return Response()
         else:
             return Response(status=403)
@@ -586,3 +590,88 @@ class ReactorApi(object):
             return Response()
         else:
             return Response(status=403)
+
+    @connected
+    @authorized_admin_only
+    def handle_log_action(self, context, request):
+        """
+        Returns the endpoints' log.
+        """
+        endpoint_name = request.matchdict['endpoint_name']
+        since = request.params.get('since', None)
+        if since:
+            try:
+                since = float(since)
+            except:
+                since = None
+
+        if request.method == "GET":
+            log = EndpointLog(
+                    retrieve_cb=lambda: self.client.endpoint_log_load(endpoint_name))
+            return Response(body=json.dumps(log.get(since=since)))
+        else:
+            return Response(status=403)
+
+    @connected
+    @authorized_admin_only
+    def list_sessions(self, context, request):
+        """
+        Returns the endpoints' session list.
+        """
+        endpoint_name = request.matchdict['endpoint_name']
+
+        if request.method == "GET":
+            sessions = {}
+            for session in self.client.session_list(endpoint_name):
+                sessions[session] = self.client.session_backend(endpoint_name, session)
+            return Response(body=json.dumps(sessions))
+        else:
+            return Response(status=403)
+
+    @connected
+    @authorized_admin_only
+    def handle_session_action(self, context, request):
+        """
+        Returns the endpoints' session list, or drops a session
+        """
+        endpoint_name = request.matchdict['endpoint_name']
+        session = request.matchdict['session']
+
+        if request.method == "GET":
+            sessions = self.client.session_backend(endpoint_name, session)
+            return Response(body=json.dumps({'sessions': sessions}))
+        elif request.method == "DELETE":
+            config = self.client.endpoint_config(endpoint_name)
+            if config != None:
+                self.client.session_drop(endpoint_name, session)
+            else:
+                return Response(status=404, body="%s not found" % endpoint_name)
+            return Response()
+        else:
+            return Response(status=403)
+
+class ReactorApiExtension(object):
+    """
+    This class can be used to wrap an API instance in order to
+    provide additional functionality. It works as follows:
+
+    * A class inherits from ReactorApiExtension.
+    * You instantiate the class with an API object.
+    * You then treat the ReactorApiExtension as the api.
+
+    This was done because we wanted to be able to provide arbitrary
+    API extensions (API interface, clustering, etc.) without having
+    to specify a strict ordering as they are independent features.
+
+    Sort of like Mixins, but without having to create a new class
+    definition to support the combination.
+    """
+
+    def __init__(self, api):
+        self.api = api
+
+        # Bind all base attributes from the API class.
+        # After this point, you can freely add new stuff.
+        for attr in dir(api):
+            if not attr.startswith('__') and not hasattr(self, attr):
+                setattr(self, attr, getattr(api, attr))

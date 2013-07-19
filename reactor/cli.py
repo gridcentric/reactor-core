@@ -4,7 +4,6 @@ import logging
 import signal
 import sys
 import traceback
-import threading
 import json
 import gc
 import atexit
@@ -13,7 +12,7 @@ from StringIO import StringIO
 from ConfigParser import SafeConfigParser
 
 from reactor.config import fromstr
-from reactor.apiclient import ReactorApiClient
+import reactor.zookeeper.config as zk_config
 from reactor import log
 
 # Resolve internal threading bug, that spams log output.
@@ -35,7 +34,7 @@ def sig_usr2_handler(signum, frame):
 
 signal.signal(signal.SIGUSR2, sig_usr2_handler)
 
-def main_usage():
+def usage():
     print "usage: %s < --help | [options] command >" % sys.argv[0]
     print ""
     print "Optional arguments:"
@@ -52,6 +51,12 @@ def main_usage():
     print "   --debug                 Enables debugging log and full stack trace errors."
     print ""
     print "   --log=                  Log to a file instead of stdout."
+    print ""
+    print "   --pidfile=              Write the current pid to the given file."
+    print ""
+    print "   --gui                   Enable the GUI extension."
+    print ""
+    print "   --cluster               Enable the cluster extension."
     print ""
     print "Commands:"
     print "    version                Get the server API version."
@@ -76,7 +81,10 @@ def main_usage():
     print "    set-metrics <endpoint> Set custom endpoint metrics. The metrics are read"
     print "                           as JSON { \"name\" : [weight, value] } from stdin."
     print ""
-    print "    managers-configured    List all the configured managers."
+    print "    sessions <endpoint>        List all the sessions."
+    print "    kill <endpoint> <session>  Kill the given session."
+    print ""
+    print "    managers               List all the configured managers."
     print "    managers-active        List all the active managers."
     print ""
     print "    manager-update [ip]    Set the configuration for the given manager."
@@ -87,217 +95,6 @@ def main_usage():
     print ""
     print "    runserver [names...]   Run the scale manager server."
     print "    runapi                 Runs the API server."
-    print ""
-
-def main():
-    api_server = "http://localhost:8080"
-    zk_servers = []
-    password = None
-    debug = False
-    logfile = None
-
-    opts, args = getopt.getopt(sys.argv[1:], "",
-        [
-            "help",
-            "api_server=",
-            "password=",
-            "zookeeper=",
-            "debug",
-            "log=",
-        ])
-
-    for o, a in opts:
-        if o in ('--help',):
-            main_usage()
-            sys.exit(0)
-        elif o in ('--api',):
-            api_server = a
-        elif o in ('--password',):
-            password = a
-        elif o in ('--zookeeper',):
-            zk_servers.append(a)
-        elif o in ('--debug',):
-            debug = True
-        elif o in ('--log',):
-            logfile = a
-    
-    if len(zk_servers) == 0:
-        zk_servers = ["localhost"]
-
-    loglevel = logging.INFO
-    if debug:
-        loglevel = logging.DEBUG
-
-    def get_arg(n):
-        if len(args) < n+1:
-            main_usage()
-            sys.exit(1)
-        return args[n]
-    def get_args():
-        return args[1:]
-
-    command = get_arg(0)
-    
-    def get_api_client():
-        return ReactorApiClient(api_server, password)
-    
-    try:
-        if command == "version":
-            api_client = get_api_client()
-            print api_client.version()
-    
-        elif command == "list":
-            api_client = get_api_client()
-            endpoints = api_client.list_managed_endpoints()
-            if endpoints:
-                for endpoint in endpoints: 
-                    print endpoint
-    
-        elif command == "manage":
-            endpoint_name = get_arg(1)
-            new_conf = ""
-            for line in sys.stdin.readlines():
-                new_conf += line
-    
-            api_client = get_api_client()
-            config = fromstr(new_conf)
-            api_client.manage_endpoint(endpoint_name, config)
- 
-        elif command == "unmanage":
-            endpoint_name = get_arg(1)
-            api_client = get_api_client()
-            api_client.unmanage_endpoint(endpoint_name)
-    
-        elif command == "show":
-            endpoint_name = get_arg(1)
-            api_client = get_api_client()
-            config = api_client.get_endpoint_config(endpoint_name)
-            print json.dumps(config, indent=2)
-
-        elif command == "managers-configured":
-            api_client = get_api_client()
-            managers = api_client.list_managers_configured()
-            for manager in managers:
-                print manager
-    
-        elif command == "managers-active":
-            api_client = get_api_client()
-            managers = api_client.list_managers_active()
-            for (ip, key) in managers.items():
-                print ip, key
-    
-        elif command == "manager-update":
-            manager = get_arg(1)
-            new_conf = ""
-            for line in sys.stdin.readlines():
-                new_conf += line
-    
-            api_client = get_api_client()
-            config = fromstr(new_conf)
-            api_client.update_manager(manager, config)
-
-        elif command == "manager-show":
-            manager = get_arg(1)
-            api_client = get_api_client()
-            config = api_client.get_manager_config(manager)
-            print json.dumps(config, indent=2)
-
-        elif command == "manager-forget":
-            manager = get_arg(1)
-            api_client = get_api_client()
-            api_client.remove_manager_config(manager)
-    
-        elif command == "ips":
-            endpoint_name = get_arg(1)
-            api_client = get_api_client()
-            ip_addresses = api_client.list_endpoint_ips(endpoint_name)
-            for ip in ip_addresses:
-                print ip
-    
-        elif command == "register":
-            ip = get_arg(1)
-            api_client = get_api_client()
-            api_client.register_endpoint_ip(ip)
-
-        elif command == "drop":
-            ip = get_arg(1)
-            api_client = get_api_client()
-            api_client.drop_endpoint_ip(ip)
-
-        elif command == "state":
-            api_client = get_api_client()
-            endpoint_name = get_arg(1)
-            state = api_client.get_endpoint_state(endpoint_name)
-            print json.dumps(state, indent=2)
-    
-        elif command == "start" or command == "stop" or command == "pause": 
-            api_client = get_api_client()
-            endpoint_name = get_arg(1)
-            api_client.endpoint_action(endpoint_name, command)
-    
-        elif command == "get-metrics":
-            endpoint_name = get_arg(1)
-            api_client = get_api_client()
-            metrics = api_client.get_endpoint_metrics(endpoint_name)
-            print metrics
-    
-        elif command == "set-metrics":
-            new_metrics = ""
-            for line in sys.stdin.readlines():
-                new_metrics += line
-    
-            endpoint_name = get_arg(1)
-            api_client = get_api_client()
-            api_client.set_endpoint_metrics(endpoint_name, json.loads(new_metrics))
-    
-        elif command == "passwd":
-            if len(args) > 1:
-                new_password = get_arg(1)
-            else:
-                new_password = None
-    
-            api_client = get_api_client()
-            api_client.update_api_key(new_password)
-    
-        elif command == "runserver":
-    
-            from reactor.manager import ScaleManager
-    
-            log.configure(loglevel, logfile)
-            manager = ScaleManager(zk_servers, get_args())
-            manager.run()
-    
-        elif command == "runapi":
-    
-            from paste.httpserver import serve
-            from reactor.api import ReactorApi
-    
-            log.configure(loglevel, logfile)
-            api = ReactorApi(zk_servers)
-            serve(api.get_wsgi_app(), host='0.0.0.0')
-   
-        else:
-            main_usage()
-            sys.exit(1)
-    
-    except Exception, e:
-        if debug:
-            traceback.print_exc()
-        else:
-            sys.stderr.write("%s\n" %(e))
-            sys.exit(1)
-
-def server_usage():
-    print "usage: %s < -h|--help | [options] command >" % sys.argv[0]
-    print ""
-    print "Optional arguments:"
-    print "   --help                  Display this help message."
-    print ""
-    print "   --debug                 Enables debugging log and full stack trace errors."
-    print ""
-    print "   --log=                  Log to a file instead of stdout."
-    print ""
-    print "   --pidfile=              Write the current pid to thte given file."
     print ""
 
 def daemonize(pidfile):
@@ -348,51 +145,268 @@ def daemonize(pidfile):
     f.write("%s\n" % pid)
     f.close()
 
-def server():
+def main():
+    api_server = "http://localhost:8080"
+    zk_servers = []
+    password = None
     debug = False
     logfile = None
     pidfile = None
+    gui = False
+    cluster = False
 
     opts, args = getopt.getopt(sys.argv[1:], "",
         [
             "help",
+            "api_server=",
+            "password=",
+            "zookeeper=",
             "debug",
+            "gui",
+            "pidfile=",
             "log=",
-            "pidfile="
+            "cluster",
         ])
 
     for o, a in opts:
         if o in ('--help',):
-            server_usage()
+            usage()
             sys.exit(0)
+        elif o in ('--api',):
+            api_server = a
+        elif o in ('--password',):
+            password = a
+        elif o in ('--zookeeper',):
+            zk_servers.append(a)
         elif o in ('--debug',):
             debug = True
         elif o in ('--log',):
             logfile = a
         elif o in ('--pidfile',):
             pidfile = a
+        elif o in ('--gui',):
+            gui = True
+        elif o in ('--cluster',):
+            cluster = True
 
-    if pidfile:
-        daemonize(pidfile)
+    if len(zk_servers) == 0:
+        try:
+            # Try to read the saved configuration.
+            zk_servers = zk_config.read_config()
+        except:
+            zk_servers = []
 
-    from paste.httpserver import serve
-    import reactor.server.config as config
-    from reactor.server.api import ServerApi
-
-    loglevel = logging.INFO
-    if debug:
-        loglevel = logging.DEBUG
-    log.configure(loglevel, logfile)
-
-    try:
-        # Try to read the saved configuration.
-        zk_servers = config.read_config()
-    except:
-        zk_servers = []
     if len(zk_servers) == 0:
         # Otherwise, use localhost.
         zk_servers = ["localhost"]
 
-    # Start the full server app.
-    app = ServerApi(zk_servers)
-    serve(app.get_wsgi_app(), host='0.0.0.0')
+    loglevel = logging.INFO
+    if debug:
+        loglevel = logging.DEBUG
+
+    def get_arg(n):
+        if len(args) < n+1:
+            usage()
+            sys.exit(1)
+        return args[n]
+    def get_args():
+        return args[1:]
+    def ready():
+        log.configure(loglevel, logfile)
+        if pidfile:
+            daemonize(pidfile)
+
+    command = get_arg(0)
+
+    def get_api_client():
+        from reactor.apiclient import ReactorApiClient
+        return ReactorApiClient(api_server, password)
+
+    def get_api():
+        from reactor.zooclient import ReactorClient
+        from reactor.api import ReactorApi
+        client = ReactorClient(zk_servers)
+        api = ReactorApi(client)
+        if gui:
+            from reactor.gui import ReactorGui
+            api = ReactorGui(api)
+        if cluster:
+            from reactor.cluster import ClusterApi
+            api = ClusterApi(api)
+        return api
+
+    try:
+        if command == "version":
+            api_client = get_api_client()
+            print api_client.version()
+
+        elif command == "list":
+            api_client = get_api_client()
+            endpoints = api_client.endpoint_list()
+            if endpoints:
+                for endpoint in endpoints:
+                    print endpoint
+
+        elif command == "manage":
+            endpoint_name = get_arg(1)
+            new_conf = ""
+            for line in sys.stdin.readlines():
+                new_conf += line
+
+            api_client = get_api_client()
+            config = fromstr(new_conf)
+            api_client.endpoint_manage(endpoint_name, config)
+
+        elif command == "unmanage":
+            endpoint_name = get_arg(1)
+            api_client = get_api_client()
+            api_client.endpoint_unmanage(endpoint_name)
+
+        elif command == "show":
+            endpoint_name = get_arg(1)
+            api_client = get_api_client()
+            config = api_client.endpoint_config(endpoint_name)
+            print json.dumps(config, indent=2)
+
+        elif command == "managers":
+            api_client = get_api_client()
+            managers = api_client.manager_list()
+            for manager in managers:
+                print manager
+
+        elif command == "managers-active":
+            api_client = get_api_client()
+            managers = api_client.manager_list(active=True)
+            for (ip, key) in managers.items():
+                print ip, key
+
+        elif command == "manager-update":
+            manager = get_arg(1)
+            new_conf = ""
+            for line in sys.stdin.readlines():
+                new_conf += line
+
+            api_client = get_api_client()
+            config = fromstr(new_conf)
+            api_client.manager_update(manager, config)
+
+        elif command == "manager-show":
+            manager = get_arg(1)
+            api_client = get_api_client()
+            config = api_client.manager_config(manager)
+            print json.dumps(config, indent=2)
+
+        elif command == "manager-forget":
+            manager = get_arg(1)
+            api_client = get_api_client()
+            api_client.manager_reset(manager)
+
+        elif command == "ips":
+            endpoint_name = get_arg(1)
+            api_client = get_api_client()
+            ip_addresses = api_client.endpoint_ip_addresses(endpoint_name)
+            for ip in ip_addresses:
+                print ip
+
+        elif command == "register":
+            ip = get_arg(1)
+            api_client = get_api_client()
+            api_client.register_ip(ip)
+
+        elif command == "drop":
+            ip = get_arg(1)
+            api_client = get_api_client()
+            api_client.drop_ip(ip)
+
+        elif command == "state":
+            api_client = get_api_client()
+            endpoint_name = get_arg(1)
+            state = api_client.endpoint_state(endpoint_name)
+            print json.dumps(state, indent=2)
+
+        elif command == "start" or command == "stop" or command == "pause":
+            api_client = get_api_client()
+            endpoint_name = get_arg(1)
+            api_client.endpoint_action(endpoint_name, command)
+
+        elif command == "get-metrics":
+            endpoint_name = get_arg(1)
+            api_client = get_api_client()
+            metrics = api_client.endpoint_metrics(endpoint_name)
+            print metrics
+
+        elif command == "set-metrics":
+            new_metrics = ""
+            for line in sys.stdin.readlines():
+                new_metrics += line
+
+            endpoint_name = get_arg(1)
+            api_client = get_api_client()
+            api_client.endpoint_metrics_set(endpoint_name, json.loads(new_metrics))
+
+        elif command == "log":
+            endpoint_name = get_arg(1)
+            api_client = get_api_client()
+            entries = api_client.endpoint_log(endpoint_name)
+            for (ts, level, message) in entries:
+                print ts, level, message
+
+        elif command == "sessions":
+            endpoint_name = get_arg(1)
+            api_client = get_api_client()
+            sessions = api_client.session_list(endpoint_name)
+            for client, backend in sessions.items():
+                print client, backend
+
+        elif command == "kill":
+            endpoint_name = get_arg(1)
+            session = get_arg(2)
+            api_client = get_api_client()
+            api_client.session_kill(endpoint_name, session)
+
+        elif command == "passwd":
+            if len(args) > 1:
+                new_password = get_arg(1)
+            else:
+                new_password = None
+
+            api_client = get_api_client()
+            api_client.api_key_set(new_password)
+
+        elif command == "runserver":
+
+            if cluster:
+                from reactor.cluster import ClusterScaleManager
+                from reactor.zooclient import ReactorClient
+                client = ReactorClient(zk_servers)
+                manager = ClusterScaleManager(client, get_args())
+            else:
+                from reactor.manager import ScaleManager
+                from reactor.zooclient import ReactorClient
+                client = ReactorClient(zk_servers)
+                manager = ScaleManager(client, get_args())
+
+            ready()
+            manager.run()
+
+        elif command == "runapi":
+
+            log.configure(loglevel, logfile)
+
+            api = get_api()
+            app = api.get_wsgi_app()
+
+            from paste.httpserver import serve
+            ready()
+            serve(app, host='0.0.0.0')
+
+        else:
+            usage()
+            sys.exit(1)
+
+    except Exception, e:
+        if debug:
+            traceback.print_exc()
+        else:
+            sys.stderr.write("%s\n" %(e))
+            sys.exit(1)

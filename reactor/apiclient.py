@@ -133,7 +133,31 @@ class ReactorApiClient(httplib2.Http):
                                     endpoint_name, 'POST',
                                     body=metrics)
 
-    def register_endpoint_ip(self, ip):
+    def endpoint_log(self, endpoint_name):
+        """
+        Return the full endpoint log.
+        """
+        resp, body = self._authenticated_request('/v1.1/endpoints/%s/log' %
+                                                 endpoint_name, 'GET')
+        return body
+
+    def session_list(self, endpoint_name):
+        """
+        Return a list of active sessions.
+        """
+        resp, body = self._authenticated_request('/v1.1/endpoints/%s/sessions' %
+                                                 endpoint_name, 'GET')
+        return body
+
+    def session_kill(self, endpoint_name, session):
+        """
+        Drop a specific session.
+        """
+        resp, body = self._authenticated_request('/v1.1/endpoints/%s/sessions/%s' %
+                                                 (endpoint_name, session), 'DELETE')
+        return body
+
+    def register_ip(self, ip):
         """
         Register the given IP.
         """

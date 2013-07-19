@@ -5,10 +5,12 @@ import socket
 import sys
 import copy
 
-from reactor.binlog import BinaryLog, BinaryLogRecord
 from reactor.config import Config
-from reactor.submodules import cloud_options, loadbalancer_options
+from reactor.submodules import cloud_submodules, cloud_options
+from reactor.submodules import loadbalancer_submodules, loadbalancer_options
+from reactor.binlog import BinaryLog, BinaryLogRecord
 from reactor.utils import inet_ntoa, inet_aton
+
 import reactor.cloud.connection as cloud_connection
 import reactor.loadbalancer.connection as lb_connection
 import reactor.metrics.calculator as metric_calculator
@@ -98,6 +100,35 @@ class EndpointConfig(Config):
                     raise
         return ip_addresses
 
+    def _spec(self):
+        ScalingConfig(obj=self)
+        for name in loadbalancer_submodules():
+            lb_connection.get_connection(name)._endpoint_config(config=self)
+        for name in cloud_submodules():
+            cloud_connection.get_connection(name)._endpoint_config(config=self)
+        return Config._spec(self)
+
+    def _validate(self):
+        # NOTE: We do the validation here without a proper manager config.
+        # it is quite possible that the available manager does not support
+        # those clouds and / or load balancers, or that it is configured in
+        # such a way that it may fail elsewhere. Unfortunately, there isn't
+        # much we can really do at this point without making the architecture
+        # overly complex.
+        Config._validate(self)
+        ScalingConfig(obj=self)._validate()
+        if self.loadbalancer:
+            print self.loadbalancer
+            if not self.loadbalancer in loadbalancer_submodules():
+                self._add_error('loadbalancer', 'Unknown loadbalancer.')
+            else:
+                lb_connection.get_connection(self.loadbalancer)._endpoint_config(config=self)._validate()
+        if self.cloud:
+            if not self.cloud in cloud_submodules():
+                self._add_error('cloud', 'Unknown cloud.')
+            else:
+                cloud_connection.get_connection(self.cloud)._endpoint_config(config=self)._validate()
+
 class ScalingConfig(Config):
 
     def __init__(self, **kwargs):
@@ -185,8 +216,8 @@ class Endpoint(object):
 
         # Initialize endpoint-specific logging.
         self.logging = EndpointLog(
-                store_cb=lambda data: self.scale_manager.endpoint_log_save(self.name, data),
-                retrieve_cb=lambda: self.scale_manager.endpoint_log_load(self.name))
+                store_cb=lambda data: self.scale_manager.client.endpoint_log_save(self.name, data),
+                retrieve_cb=lambda: self.scale_manager.client.endpoint_log_load(self.name))
 
         # Initialize (currently empty) configurations.
         self.config = EndpointConfig()
@@ -370,11 +401,11 @@ class Endpoint(object):
             self.decommission_instances(instances_to_delete,
                 "bringing instance total down to target %s" % target)
 
-    def update_sessions(self, sessions, dropped_sessions, authoritative):
-        # Drop any sessions indicated by manager
-        for backend in dropped_sessions:
-            for client in dropped_sessions[backend]:
-                self.lb_conn.drop_session(backend, client)
+    def update_sessions(self, dropped_sessions, authoritative):
+        for client in dropped_sessions:
+            backend = self.scale_manager.session_backend(self.name, client)
+            if backend:
+                self.lb_conn.drop_session(client, backend)
                 if authoritative:
                     self.scale_manager.session_dropped(self.name, client)
 
@@ -386,15 +417,6 @@ class Endpoint(object):
             self.logging.info(self.logging.ENDPOINT_PAUSED)
         elif self.state == State.stopped:
             self.logging.info(self.logging.ENDPOINT_STOPPED)
-
-    @staticmethod
-    def spec_config(config):
-        # Just interpret the configurations appropriately.
-        # NOTE: This will have the side-effect of building
-        # the specification for the endpoint and scaling rules
-        # into this configuration object (hence spec_config).
-        EndpointConfig(obj=config)
-        ScalingConfig(obj=config)
 
     def validate_config(self, config, clouds, loadbalancers):
         config = EndpointConfig(obj=config)
@@ -550,6 +572,8 @@ class Endpoint(object):
                 (self.name, traceback.format_exc()))
             self.lb_conn.cleanup_start_params(self.config, start_params)
             self.scale_manager.cleanup_start_params(self, start_params)
+            return
+
         self.scale_manager.add_endpoint_instance(self.name,
                 self.cloud_conn.id(self.config, instance),
                 self.cloud_conn.name(self.config, instance))

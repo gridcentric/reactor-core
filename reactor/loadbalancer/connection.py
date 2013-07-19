@@ -34,7 +34,7 @@ class Locks(object):
         self._scale_manager = scale_manager
 
     def list_ips(self):
-        return self._scale_manager.zk_conn.list_children(
+        return self._scale_manager.client.zk_conn.list_children(
                 paths.loadbalancer_ips(self._name))
 
     def find_unused_ip(self, ips, data=''):
@@ -53,21 +53,21 @@ class Locks(object):
         return None
 
     def lock_ip(self, ip, data=''):
-        return self._scale_manager.zk_conn.trylock(
+        return self._scale_manager.client.zk_conn.trylock(
                 paths.loadbalancer_ip(self._name, ip),
                 default_value=data)
 
     def update_ip(self, ip, data=''):
-        return self._scale_manager.zk_conn.write(
+        return self._scale_manager.client.zk_conn.write(
                 paths.loadbalancer_ip(self._name, ip),
                 data)
 
     def read_ip(self, ip):
-        return self._scale_manager.zk_conn.read(
+        return self._scale_manager.client.zk_conn.read(
                 paths.loadbalancer_ip(self._name, ip))
 
     def forget_ip(self, ip):
-        return self._scale_manager.zk_conn.delete(
+        return self._scale_manager.client.zk_conn.delete(
                 paths.loadbalancer_ip(self._name, ip))
 
     def forget_all(self):

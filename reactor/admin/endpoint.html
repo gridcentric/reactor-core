@@ -88,7 +88,11 @@
 <div id="sessions-div" style="max-height: 200px; position: relative; overflow: auto;">
     <table id="session-list" class="table table-bordered">
         <thead>
-            <tr><th>Backend IP</th><th>Client IP</th><th></th></tr>
+            <tr>
+                <th>Client IP</th>
+                <th>Backend IP</th>
+                <th></th>
+            </tr>
         </thead>
         <tbody>
         </tbody>
@@ -209,11 +213,10 @@
             since = 0.0;
 
         $.ajax({
-            url: "/endpoints/${object}/log?since="+since,
+            url: "/v1.1/endpoints/${object}/log?since="+since,
             type: 'GET',
             dataType: 'json',
-            success: function(result) {
-                log = result["log"];
+            success: function(log) {
                 if (log.length > 0) {
                     $.each(log, function(index, ent) {
                         addLogRow(ent);
@@ -230,14 +233,14 @@
 
     function addSessionRow(backend, client) {
         var tr = $('<tr></tr>').attr({ class : "session-list-row" });
-        var td = $('<td></td');
-        td.clone().text(backend).appendTo(tr);
+        var td = $('<td></td>');
         td.clone().text(client).appendTo(tr);
+        td.clone().text(backend).appendTo(tr);
         var button = $('#sessions-templates .drop-session').clone();
         button.click(function(e) {
             e.preventDefault();
             $.ajax({
-                url: "/endpoints/${object}/sessions/" + backend + ":" + client,
+                url: "/v1.1/endpoints/${object}/sessions/" + client,
                 type: 'DELETE',
                 dataType: 'json',
                 complete: function() {
@@ -252,16 +255,13 @@
 
     function loadSessions() {
         $.ajax({
-            url: "/endpoints/${object}/sessions",
+            url: "/v1.1/endpoints/${object}/sessions",
             type: 'GET',
             dataType: 'json',
-            success: function(result) {
-                sessions = result["sessions"];
+            success: function(sessions) {
                 $('.session-list-row').remove();
-                $.each(sessions, function( backend, clientlist ) {
-                    $.each(clientlist, function(index, client) {
-                        addSessionRow(backend, client);
-                    });
+                $.each(sessions, function(client, backend) {
+                    addSessionRow(client, backend);
                 });
                 setTimeout(function() {
                     loadSessions();

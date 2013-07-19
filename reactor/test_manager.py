@@ -36,7 +36,7 @@ class TestManager(object):
         ip = '172.16.0.100' # Candidate IP.
         instance = harness.start_instance(scale_manager, mock_endpoint, ip=ip)
 
-        with harness.ZkEvent(scale_manager.zk_conn, paths.new_ips(), expt_value=[ip]):
+        with harness.ZkEvent(scale_manager.client.zk_conn, paths.new_ips(), expt_value=[ip]):
             # 'Register' by writing ip into zk, (as the external API call would).
             reactor_zkclient.record_new_ip_address(ip)
 
