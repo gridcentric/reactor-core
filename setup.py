@@ -31,7 +31,6 @@ setup(
     package_data={
         "reactor.loadbalancer.nginx" : ["nginx.template", "reactor.conf"],
         "reactor.loadbalancer.dnsmasq" : ["dnsmasq.template"],
-        "reactor.demo" : ["reactor.png"],
         "reactor.server" : ["admin/*.html",
                             "admin/include/*.html",
                             "admin/assets/*.js",
@@ -45,7 +44,6 @@ setup(
         'console_scripts': [
             'reactor = reactor.cli:main',
             'reactor-server = reactor.cli:server',
-            'reactor-demo = reactor.demo:main'
         ]
     },
     classifiers=[
