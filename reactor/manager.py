@@ -807,7 +807,7 @@ class ScaleManager(object):
                     continue
 
                 for key in metrics:
-                    (oldweight, oldvalue) = results[host][key]
+                    (oldweight, oldvalue) = results[host].get(key, (0,0))
                     (newweight, newvalue) = metrics[key]
                     weight = (oldweight + newweight)
                     value  = ((oldvalue * oldweight) + (newvalue * newweight)) / weight
