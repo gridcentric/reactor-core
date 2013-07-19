@@ -219,7 +219,7 @@ class ConnectionConsumer(threading.Thread):
             (src_ip, src_port) = conn.src
             if backend == ip and client == src_ip:
                 try:
-                    os.kill(child, signal.SIGQUIT)
+                    os.kill(child, signal.SIGTERM)
                 except:
                     pass
         self.cond.release()
