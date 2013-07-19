@@ -299,10 +299,6 @@ class Connection:
         else:
             self._config = config
 
-    def description(self):
-        """ Return a human-readable description of this connection class """
-        return self._name
-
     def _manager_config(self, config=None, values=None):
         """ Return the manager config associated with this connection. """
         if config is None:

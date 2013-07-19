@@ -23,6 +23,8 @@ def get_connection(name, config=None):
 
 class CloudConnection(Connection):
 
+    """ No cloud """
+
     def __init__(self, name, config=None):
         Connection.__init__(self, object_class="cloud", name=name, config=config)
 

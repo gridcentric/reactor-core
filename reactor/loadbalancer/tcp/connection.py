@@ -351,6 +351,7 @@ class TcpEndpointConfig(Config):
                     + " the VM is returned to the pool.")
 
 class Connection(LoadBalancerConnection):
+    """ Raw TCP """
 
     _ENDPOINT_CONFIG_CLASS = TcpEndpointConfig
 
@@ -368,9 +369,6 @@ class Connection(LoadBalancerConnection):
         self.producer.start()
         self.consumer = ConnectionConsumer(self.locks, self.producer)
         self.consumer.start()
-
-    def description(self):
-        return "Raw TCP"
 
     def __del__(self):
         self.clear()

@@ -13,12 +13,9 @@ class OsVmsEndpointConfig(BaseOsEndpointConfig):
         description="The live-image to use.")
 
 class Connection(BaseOsConnection):
-    """ Connects to a nova cloud that has the Gridcentric VMS extension enabled. """
+    """ OpenStack + VMS """
 
     _ENDPOINT_CONFIG_CLASS = OsVmsEndpointConfig
-
-    def description(self):
-        return "OpenStack + VMS"
 
     def _list_instances(self, config):
         """ 

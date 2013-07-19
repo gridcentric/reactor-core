@@ -16,6 +16,7 @@ class DnsmasqManagerConfig(Config):
         description="The directory in which to generate site configurations.")
 
 class Connection(LoadBalancerConnection):
+    """ DNS-based (dnsmasq) """
 
     _MANAGER_CONFIG_CLASS = DnsmasqManagerConfig
 
@@ -32,9 +33,6 @@ class Connection(LoadBalancerConnection):
             template_file = os.path.join(os.path.dirname(__file__), 'dnsmasq', 'dnsmasq.template')
         self.template = Template(filename=template_file)
         self.ipmappings = {}
-
-    def description(self):
-        return "DNS-based (dnsmasq)"
 
     def _determine_dnsmasq_pid(self):
         if os.path.exists("/var/run/dnsmasq/dnsmasq.pid"):

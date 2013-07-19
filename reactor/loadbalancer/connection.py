@@ -77,6 +77,8 @@ class Locks(object):
 
 class LoadBalancerConnection(Connection):
 
+    """ No loadbalancer """
+
     def __init__(self, name, config=None, locks=None):
         self.locks = locks
         Connection.__init__(self, object_class="loadbalancer", name=name, config=config)

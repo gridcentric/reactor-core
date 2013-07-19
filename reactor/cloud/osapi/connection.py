@@ -195,11 +195,9 @@ class OsApiEndpointConfig(BaseOsEndpointConfig):
             return True
 
 class Connection(BaseOsConnection):
+    """ OpenStack """
 
     _ENDPOINT_CONFIG_CLASS = OsApiEndpointConfig
-
-    def description(self):
-        return "OpenStack"
 
     def _list_instances(self, config):
         """

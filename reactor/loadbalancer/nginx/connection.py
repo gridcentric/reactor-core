@@ -163,6 +163,7 @@ class NginxEndpointConfig(Config):
         description="An SSL key (not password protected).")
 
 class Connection(LoadBalancerConnection):
+    """ HTTP-based (nginx) """
 
     _MANAGER_CONFIG_CLASS = NginxManagerConfig
     _ENDPOINT_CONFIG_CLASS = NginxEndpointConfig
@@ -174,9 +175,6 @@ class Connection(LoadBalancerConnection):
         self.template = Template(filename=template_file)
         self.log_reader = NginxLogWatcher("/var/log/nginx/access.log")
         self.log_reader.start()
-
-    def description(self):
-        return "HTTP-based (nginx)"
 
     def __del__(self):
         self.log_reader.stop()
