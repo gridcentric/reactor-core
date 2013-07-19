@@ -234,7 +234,7 @@ class ConnectionConsumer(threading.Thread):
             session_map[ip] = ip_sessions
         return session_map
 
-    def drop_session(self, backend, client):
+    def drop_session(self, client, backend):
         self.cond.acquire()
         for child in self.children.keys():
             (ip, conn) = self.children[child]
@@ -493,6 +493,6 @@ class Connection(LoadBalancerConnection):
             return self.consumer.sessions()
         return None
 
-    def drop_session(self, backend, client):
+    def drop_session(self, client, backend):
         if self.consumer:
-            self.consumer.drop_session(backend, client)
+            self.consumer.drop_session(client, backend)

@@ -231,10 +231,10 @@ class ReactorApi(object):
         if endpoint_name == None:
             endpoint_ip = request.matchdict.get('endpoint_ip', None)
             if endpoint_ip != None:
-                endpoint_name = self.client.get_ip_address_endpoint(endpoint_ip)
+                endpoint_name = self.client.ip_address_endpoint(endpoint_ip)
 
         if endpoint_name != None:
-            config = self.client.get_endpoint_config(endpoint_name)
+            config = self.client.endpoint_config(endpoint_name)
             if not(config):
                 return False
 
@@ -268,7 +268,7 @@ class ReactorApi(object):
         # that this header has been placed by a trusted middleman.
         if forwarded_for and \
             (ip_address == "127.0.0.1" or \
-             ip_address in self.client.get_managers_active(full=False)):
+             ip_address in self.client.managers_active(full=False)):
             ip_address = forwarded_for
 
         return ip_address
@@ -281,7 +281,7 @@ class ReactorApi(object):
                 # we will update the request to confine it to the endpoint with
                 # this address.
                 request_ip = self._extract_remote_ip(context, request)
-                endpoint_name = self.client.get_ip_address_endpoint(request_ip)
+                endpoint_name = self.client.ip_address_endpoint(request_ip)
                 if endpoint_name != None:
                     # Authorize this request and set the endpoint_name.
                     request.matchdict['endpoint_name'] = endpoint_name
@@ -339,7 +339,7 @@ class ReactorApi(object):
         if request.method == "POST" or request.method == "PUT":
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
-            self.client.set_auth_hash(self._create_admin_auth_token(auth_key))
+            self.client.auth_hash_set(self._create_admin_auth_token(auth_key))
             return Response()
         else:
             return Response(status=403)
@@ -370,9 +370,9 @@ class ReactorApi(object):
 
         if request.method == "GET":
             logging.info("Retrieving manager %s configuration" % manager)
-            config = self.client.get_manager_config(manager)
+            config = self.client.manager_config(manager)
             if config != None:
-                config['uuid'] = self.client.get_manager_key(manager)
+                config['uuid'] = self.client.manager_key(manager)
                 return Response(body=json.dumps(config))
             else:
                 return Response(status=404, body="%s not found" % manager)
@@ -387,13 +387,13 @@ class ReactorApi(object):
             if errs:
                 return Response(status=400, body=json.dumps(errs))
             else:
-                self.client.update_update(manager, manager_config)
+                self.client.manager_update(manager, manager_config)
                 return Response()
 
         elif request.method == "DELETE":
-            config = self.client.get_manager_config(manager)
+            config = self.client.manager_config(manager)
             if config != None:
-                self.client.remove_manager_config(manager)
+                self.client.manager_reset(manager)
                 return Response()
             else:
                 return Response(status=404, body="%s not found" % manager)
@@ -408,8 +408,8 @@ class ReactorApi(object):
         Returns a list of managers currently running.
         """
         if request.method == 'GET':
-            configured = self.client.list_managers_configured()
-            active = self.client.get_managers_active(full=True)
+            configured = self.client.managers_list()
+            active = self.client.managers_active(full=True)
             return Response(body=json.dumps(\
                 {'configured': configured, 'active': active}))
         else:
@@ -428,7 +428,7 @@ class ReactorApi(object):
 
         if request.method == "GET":
             logging.info("Retrieving endpoint %s configuration" % endpoint_name)
-            config = self.client.get_endpoint_config(endpoint_name)
+            config = self.client.endpoint_config(endpoint_name)
             if config != None:
                 return Response(body=json.dumps(config))
             else:
@@ -436,7 +436,7 @@ class ReactorApi(object):
 
         elif request.method == "DELETE":
             logging.info("Unmanaging endpoint %s" % (endpoint_name))
-            self.client.unmanage_endpoint(endpoint_name)
+            self.client.endpoint_unmanage(endpoint_name)
             return Response()
 
         elif request.method == "POST" or request.method == "PUT":
@@ -449,7 +449,7 @@ class ReactorApi(object):
             if errs:
                 return Response(status=400, body=json.dumps(errs))
             else:
-                self.client.update_endpoint(endpoint_name, endpoint_config)
+                self.client.endpoint_update(endpoint_name, endpoint_config)
                 return Response()
 
         else:
@@ -468,12 +468,12 @@ class ReactorApi(object):
 
         if request.method == "GET":
             logging.info("Retrieving state for endpoint %s" % endpoint_name)
-            config = self.client.get_endpoint_config(endpoint_name)
+            config = self.client.endpoint_config(endpoint_name)
 
             if config != None:
-                state = self.client.get_endpoint_state(endpoint_name) or State.default
-                active = self.client.get_endpoint_active(endpoint_name)
-                manager = self.client.get_endpoint_manager(endpoint_name)
+                state = self.client.endpoint_state(endpoint_name) or State.default
+                active = self.client.endpoint_active(endpoint_name)
+                manager = self.client.endpoint_manager(endpoint_name)
 
                 value = {
                     'state': state,
@@ -487,12 +487,12 @@ class ReactorApi(object):
         elif request.method == "POST" or request.method == "PUT":
             logging.info("Posting state for endpoint %s" % endpoint_name)
             state_action = json.loads(request.body)
-            config = self.client.get_endpoint_config(endpoint_name)
+            config = self.client.endpoint_config(endpoint_name)
 
             if config != None:
-                current_state = self.client.get_endpoint_state(endpoint_name)
+                current_state = self.client.endpoint_state(endpoint_name)
                 new_state = State.from_action(current_state, state_action.get('action', ''))
-                self.client.set_endpoint_state(endpoint_name, new_state)
+                self.client.endpoint_state_set(endpoint_name, new_state)
                 return Response()
             else:
                 return Response(status=404, body="%s not found" % endpoint_name)
@@ -513,13 +513,13 @@ class ReactorApi(object):
 
         if request.method == "GET":
             logging.info("Retrieving metrics for endpoint %s" % endpoint_name)
-            metrics = self.client.get_endpoint_metrics(endpoint_name)
+            metrics = self.client.endpoint_metrics(endpoint_name)
             return Response(body=json.dumps(metrics or {}))
 
         elif request.method == "POST" or request.method == "PUT":
             metrics = json.loads(request.body)
             logging.info("Updating metrics for endpoint %s" % endpoint_name)
-            self.client.set_endpoint_metrics(endpoint_name, metrics, endpoint_ip)
+            self.client.endpoint_metrics_set(endpoint_name, metrics, endpoint_ip)
             return Response()
 
         else:
@@ -532,7 +532,7 @@ class ReactorApi(object):
 
         if request.method == "GET":
             return Response(body=json.dumps(\
-                {'ip_addresses': self.client.get_endpoint_ip_addresses(endpoint_name)}))
+                {'ip_addresses': self.client.endpoint_ip_addresses(endpoint_name)}))
         else:
             return Response(status=403)
 
@@ -543,7 +543,7 @@ class ReactorApi(object):
         Returns a list of endpoints currently being managed.
         """
         if request.method == "GET":
-            endpoints = self.client.list_managed_endpoints()
+            endpoints = self.client.endpoint_list()
             return Response(body=json.dumps({'endpoints':endpoints}))
         else:
             return Response(status=403)
@@ -586,7 +586,7 @@ class ReactorApi(object):
             ip_address = request.matchdict.get('endpoint_ip', None)
             if ip_address:
                 logging.info("Unregister requested for IP address %s." % (ip_address))
-                self.client.drop_ip_address(ip_address)
+                self.client.ip_address_drop(ip_address)
             return Response()
         else:
             return Response(status=403)

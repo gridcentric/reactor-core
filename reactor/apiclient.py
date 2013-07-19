@@ -24,14 +24,14 @@ class ReactorApiClient(httplib2.Http):
         resp, body = self._authenticated_request('/', 'GET')
         return body.get('version', None)
 
-    def list_managed_endpoints(self):
+    def endpoint_list(self):
         """
         Returns a list of all the endpoints currently being managed by the reactor.
         """
         resp, body = self._authenticated_request('/v1.1/endpoints', 'GET')
         return body.get('endpoints', [])
 
-    def manage_endpoint(self, endpoint_name, config):
+    def endpoint_manage(self, endpoint_name, config):
         """
         Manage the endpoint using the given configuration.
         """
@@ -39,14 +39,14 @@ class ReactorApiClient(httplib2.Http):
                                     endpoint_name, 'POST',
                                     body=config)
 
-    def unmanage_endpoint(self, endpoint_name):
+    def endpoint_unmanage(self, endpoint_name):
         """
         Unmanage the endpoint.
         """
         self._authenticated_request('/v1.1/endpoints/%s' %
                                     endpoint_name, 'DELETE')
 
-    def get_endpoint_config(self, endpoint_name):
+    def endpoint_config(self, endpoint_name):
         """
         Return the endpoint's configuration.
         """
@@ -54,21 +54,17 @@ class ReactorApiClient(httplib2.Http):
                                                  endpoint_name, 'GET')
         return body
 
-    def list_managers_configured(self):
+    def manager_list(self, active=False):
         """
-        Returns a list of all configured managers.
-        """
-        resp, body = self._authenticated_request('/v1.1/managers', 'GET')
-        return body.get('configured', [])
-
-    def list_managers_active(self):
-        """
-        Returns a list of all active managers.
+        Returns a list of all managers.
         """
         resp, body = self._authenticated_request('/v1.1/managers', 'GET')
-        return body.get('active', [])
+        if active:
+            return body.get('active', [])
+        else:
+            return body.get('configured', [])
 
-    def update_manager(self, manager, config):
+    def manager_update(self, manager, config):
         """
         Update the manager with the given configuration.
         """
@@ -76,7 +72,7 @@ class ReactorApiClient(httplib2.Http):
                                     manager, 'POST',
                                     body=config)
 
-    def get_manager_config(self, manager):
+    def manager_config(self, manager):
         """
         Return the manager's configuration.
         """
@@ -84,14 +80,14 @@ class ReactorApiClient(httplib2.Http):
                                                  manager, 'GET')
         return body
 
-    def remove_manager_config(self, manager):
+    def manager_reset(self, manager):
         """
         Remove the given manager's configuration.
         """
         resp, body = self._authenticated_request('/v1.1/managers/%s' %
                                                  manager, 'DELETE')
 
-    def list_endpoint_ips(self, endpoint_name):
+    def endpoint_ip_addresses(self, endpoint_name):
         """
         Returns a list of the ip addresses (both dynamically confirmed and
         manually configured) for this endpoint.
@@ -109,7 +105,7 @@ class ReactorApiClient(httplib2.Http):
                                                  body={"action": action})
         return body
 
-    def get_endpoint_state(self, endpoint_name):
+    def endpoint_state(self, endpoint_name):
         """
         Return available live endpoint info.
         """
@@ -117,7 +113,7 @@ class ReactorApiClient(httplib2.Http):
                                                  endpoint_name, 'GET')
         return body
 
-    def get_endpoint_metrics(self, endpoint_name):
+    def endpoint_metrics(self, endpoint_name):
         """
         Set the custom endpoint metrics.
         """
@@ -125,7 +121,7 @@ class ReactorApiClient(httplib2.Http):
                                                  endpoint_name, 'GET')
         return body
 
-    def set_endpoint_metrics(self, endpoint_name, metrics):
+    def endpoint_metrics_set(self, endpoint_name, metrics):
         """
         Set the custom endpoint metrics.
         """
@@ -164,14 +160,14 @@ class ReactorApiClient(httplib2.Http):
         self._authenticated_request('/v1.1/register/%s' %
                                     ip, 'POST')
 
-    def drop_endpoint_ip(self, ip):
+    def drop_ip(self, ip):
         """
         Unregister the given IP.
         """
         self._authenticated_request('/v1.1/unregister/%s' %
                                     ip, 'POST')
 
-    def update_api_key(self, api_key):
+    def api_key_set(self, api_key):
         """
         Changes the API key in the system.
         """
