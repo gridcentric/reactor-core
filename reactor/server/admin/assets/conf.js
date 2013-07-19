@@ -556,8 +556,12 @@ function generateSingleConfig(root, config_name, config)
     switch (config["type"]) {
     case "list":
         input_elt = $("#conf-input-list").clone().appendTo(slot);
-        if (config["present"])
+        if (config["present"]) {
+            if (typeof config["value"] == "string") {
+                config["value"] = config["value"].split(",")
+            }
             input_elt.html(config["value"].join("\n"));
+        }
         config["skip-init"]["value"] = true;
         break;
     case "string":
@@ -582,6 +586,9 @@ function generateSingleConfig(root, config_name, config)
     case "multiselect":
         span_elt = $("#conf-input-multiselect").clone().appendTo(slot);
         input_elt = span_elt.find("select");
+        if (typeof config["value"] == "string") {
+            config["value"] = config["value"].split(",")
+        }
         $.each(config["options"], function(i, item) {
             label = item[0];
             value = item[1];
