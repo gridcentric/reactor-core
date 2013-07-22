@@ -73,7 +73,8 @@ def fork_and_exec(cmd, child_fds=[]):
     # Exec the given command.
     os.execvp(cmd[0], cmd)
 
-class Accept:
+class Accept(object):
+
     def __init__(self, sock):
         (client, address) = sock.accept()
         # Ensure that the underlying socket is closed.

@@ -107,7 +107,7 @@ def connected(request_handler):
             return response
     return fn
 
-class ReactorApi:
+class ReactorApi(object):
 
     AUTH_SALT = 'gridcentricreactor'
 

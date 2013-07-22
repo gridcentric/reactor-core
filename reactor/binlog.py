@@ -1,8 +1,9 @@
 import struct
 import time
 
-# Implements a binary logging class
-class BinaryLogRecord:
+class BinaryLogRecord(object):
+    """ Implements a binary logging class. """
+
     def __init__(self, printfn=lambda args: "No information (%d, %d)" % (args[0], args[1])):
         self.printfn = printfn
 
@@ -15,7 +16,8 @@ class BinaryLogRecord:
 STRUCT_FMT = '<dHHLL'
 STRUCT_SIZE = struct.calcsize(STRUCT_FMT)
 
-class BinaryLog:
+class BinaryLog(object):
+
     # Severeties
     INFO, WARN, ERROR = range(3)
     SEVERITY_MAP = {

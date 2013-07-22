@@ -183,7 +183,7 @@ class Endpoint(object):
         self.name = name
         self.scale_manager = scale_manager
 
-        # Initialize endpoint-specific logging
+        # Initialize endpoint-specific logging.
         self.logging = EndpointLog(
                 store_cb=lambda data: self.scale_manager.endpoint_log_save(self.name, data),
                 retrieve_cb=lambda: self.scale_manager.endpoint_log_load(self.name))
@@ -540,6 +540,7 @@ class Endpoint(object):
                      (self.name, reason))
         start_params = self.scale_manager.start_params(self)
         start_params.update(self.lb_conn.start_params(self.config))
+
         try:
             instance = self.cloud_conn.start_instance(self.config,
                                                          params=start_params)

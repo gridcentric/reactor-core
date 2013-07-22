@@ -283,7 +283,7 @@ def fromstr(obj):
                 obj = fromini(config)
     return obj
 
-class Connection:
+class Connection(object):
 
     _MANAGER_CONFIG_CLASS = Config
     _ENDPOINT_CONFIG_CLASS = Config
