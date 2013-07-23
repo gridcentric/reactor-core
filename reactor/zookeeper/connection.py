@@ -10,10 +10,12 @@ ZOO_EVENT_NODE_DELETED = 2
 ZOO_EVENT_NODE_DATA_CHANGED = 3
 ZOO_EVENT_NODE_CHILDREN_CHANGED = 4
 
+ZOO_CONNECT_WAIT_TIME = 60.0
+
 # Save the exception for use in other modules.
 ZookeeperException = zookeeper.ZooKeeperException
 
-def connect(servers):
+def connect(servers, timeout=ZOO_CONNECT_WAIT_TIME):
     cond = threading.Condition()
     connected = [False]
 
@@ -29,15 +31,24 @@ def connect(servers):
                 # of the way variables are bound in the local scope for functions.
                 connected[0] = True
                 cond.notify()
+            elif state < 0:
+                # We've received an error state, bonk out
+                cond.notify()
         finally:
             cond.release()
 
-    cond.acquire()
+    if not(servers) or not(isinstance(servers, (list, tuple))):
+        raise zookeeper.BadArgumentsException("servers must be a list or tuple")
+
+    # We default to port 2181 if no port is provided as part of the host specification.
+    server_list = ",".join(map(lambda x: (x.find(":") > 0 and x) or "%s:2181" % x, servers))
+
     try:
-        # We default to port 2181 if no port is provided as part of the host specification.
-        server_list = ",".join(map(lambda x: (x.find(":") > 0 and x) or "%s:2181" % x, servers))
+        cond.acquire()
         handle = zookeeper.init(server_list, connect_watcher, 10000)
-        cond.wait(60.0)
+        cond.wait(timeout)
+    except Exception as e:
+        raise ZookeeperException("Exception while connecting to zookeeper: %s" % e.message)
     finally:
         # Save whether we were successful or not.
         is_connected = connected[0]
@@ -70,7 +81,8 @@ class ZookeeperConnection(object):
     def __init__(self, servers, acl=ZOO_OPEN_ACL_UNSAFE):
         self.cond = threading.Condition()
         self.acl = acl
-        self.watches = {}
+        self.content_watches = {}
+        self.child_watches = {}
         self.silence()
         self.handle = connect(servers)
 
@@ -81,9 +93,10 @@ class ZookeeperConnection(object):
         self.cond.acquire()
         # Forget current watches, otherwise it's easy for
         # circular references to keep this object around.
-        self.watches = {}
+        self.content_watches = {}
+        self.child_watches = {}
         try:
-            if self.handle:
+            if hasattr(self, 'handle') and self.handle:
                 zookeeper.close(self.handle)
                 self.handle = None
         except:
@@ -95,23 +108,12 @@ class ZookeeperConnection(object):
     def silence(self):
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_ERROR)
 
-    @wrap_exceptions
-    def write(self, path, contents, ephemeral=False, exclusive=False):
-        """
-        Writes the contents to the path in zookeeper. It will create the path in
-        zookeeper if it does not already exist.
-
-        This method will return True if the value is written, False otherwise.
-        (The value will not be written if the exclusive is True and the node
-        already exists.)
-        """
-        partial_path = ''
-
+    def _write(self, path, contents, ephemeral, exclusive):
         # We start from the second element because we do not want to inclued
         # the initial empty string before the first "/" because all paths begin
         # with "/". We also don't want to include the final node because that
         # is dealt with later.
-
+        partial_path = ''
         for path_part in path.split("/")[1:-1]:
             partial_path = partial_path + "/" + path_part
             if not(zookeeper.exists(self.handle, partial_path)):
@@ -141,16 +143,31 @@ class ZookeeperConnection(object):
             return True
         else:
             flags = (ephemeral and zookeeper.EPHEMERAL or 0)
+            zookeeper.create(self.handle, path, contents, [self.acl], flags)
+            return True
+
+    @wrap_exceptions
+    def write(self, path, contents, ephemeral=False, exclusive=False):
+        """
+        Writes the contents to the path in zookeeper. It will create the path in
+        zookeeper if it does not already exist.
+
+        This method will return True if the value is written, False otherwise.
+        (The value will not be written if the exclusive is True and the node
+        already exists.)
+        """
+
+        if not(path) or not(contents):
+            raise zookeeper.BadArgumentsException("Invalid path/contents: %s/%s" % (path, contents))
+
+        while True:
             try:
-                zookeeper.create(self.handle, path, contents, [self.acl], flags)
-                return True
+                # Perform the write
+                return self._write(path, contents, ephemeral, exclusive)
             except zookeeper.NodeExistsException:
-                if not(exclusive):
-                    # Woah, something happened between the top and here.
-                    # We just restart and retry the whole routine.
-                    self.write(path, contents, ephemeral=ephemeral)
-                    return True
-                else:
+                # If we're writing to an exclusive path, then the caller lost
+                # to another thread/writer. Else, retry.
+                if exclusive:
                     return False
 
     @wrap_exceptions
@@ -158,9 +175,15 @@ class ZookeeperConnection(object):
         """
         Returns the conents in the path. default is returned if the path does not exists.
         """
+        if not path:
+            raise zookeeper.BadArgumentsException("Invalid path: %s" % (path))
+
         value = default
         if zookeeper.exists(self.handle, path):
-            value, timeinfo = zookeeper.get(self.handle, path)
+            try:
+                value, timeinfo = zookeeper.get(self.handle, path)
+            except zookeeper.NoNodeException:
+                pass
 
         return value
 
@@ -170,26 +193,35 @@ class ZookeeperConnection(object):
         Returns a list of all the children nodes in the path. None is returned if the path does
         not exist.
         """
+        if not path:
+            raise zookeeper.BadArgumentsException("Invalid path: %s" % (path))
+
         if zookeeper.exists(self.handle, path):
-            value = zookeeper.get_children(self.handle, path)
-            return value
+            try:
+                value = zookeeper.get_children(self.handle, path)
+                return value
+            except zookeeper.NoNodeException:
+                pass
+        return []
 
     @wrap_exceptions
     def delete(self, path):
         """
         Delete the path.
         """
-        if zookeeper.exists(self.handle, path):
-            path_children = zookeeper.get_children(self.handle, path)
-            for child in path_children:
-                try:
-                    self.delete(path + "/" + child)
-                except zookeeper.NoNodeException:
-                    pass
+        if not path:
+            raise zookeeper.BadArgumentsException("Invalid path: %s" % (path))
+
+        path_children = self.list_children(path)
+        for child in path_children:
             try:
-                zookeeper.delete(self.handle, path)
+                self.delete(path + "/" + child)
             except zookeeper.NoNodeException:
                 pass
+        try:
+            zookeeper.delete(self.handle, path)
+        except zookeeper.NoNodeException:
+            pass
 
     @wrap_exceptions
     def trylock(self, path, default_value=""):
@@ -201,31 +233,37 @@ class ZookeeperConnection(object):
 
     @wrap_exceptions
     def watch_contents(self, path, fn, default_value="", clean=False):
+        if not (path and fn):
+            raise zookeeper.BadArgumentsException("Invalid path/fn: %s/%s" % (path, fn))
+
         if not zookeeper.exists(self.handle, path):
             self.write(path, default_value)
 
         self.cond.acquire()
         try:
             if clean:
-                self.watches[path] = []
-            if not(fn in self.watches.get(path, [])):
-                self.watches[path] = self.watches.get(path, []) + [fn]
+                self.content_watches[path] = []
+            if not(fn in self.content_watches.get(path, [])):
+                self.content_watches[path] = self.content_watches.get(path, []) + [fn]
             value, timeinfo = zookeeper.get(self.handle, path, self.zookeeper_watch)
         finally:
             self.cond.release()
         return value
 
     @wrap_exceptions
-    def watch_children(self, path, fn, default_value="", clean=False):
+    def watch_children(self, path, fn, clean=False):
+        if not (path and fn):
+            raise zookeeper.BadArgumentsException("Invalid path/fn: %s/%s" % (path, fn))
+
         self.cond.acquire()
         if not zookeeper.exists(self.handle, path):
-            self.write(path, default_value)
+            self.write(path, " ")
 
         try:
             if clean:
-                self.watches[path] = []
-            if not(fn in self.watches.get(path, [])):
-                self.watches[path] = self.watches.get(path, []) + [fn]
+                self.child_watches[path] = []
+            if not(fn in self.child_watches.get(path, [])):
+                self.child_watches[path] = self.child_watches.get(path, []) + [fn]
             rval = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
         finally:
             self.cond.release()
@@ -235,40 +273,57 @@ class ZookeeperConnection(object):
     def zookeeper_watch(self, zh, event, state, path):
         self.cond.acquire()
         try:
-            fns = self.watches.get(path, None)
-            if fns:
-                result = None
-                if event == ZOO_EVENT_NODE_CHILDREN_CHANGED:
+            result = None
+            if event == ZOO_EVENT_NODE_CHILDREN_CHANGED:
+                fns = self.child_watches.get(path, None)
+                if fns:
                     result = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
-                elif event == ZOO_EVENT_NODE_DATA_CHANGED:
+            elif event == ZOO_EVENT_NODE_DATA_CHANGED:
+                fns = self.content_watches.get(path, None)
+                if fns:
                     result, _ = zookeeper.get(self.handle, path, self.zookeeper_watch)
-                if result != None:
-                    for fn in fns:
-                        # Don't allow an individual watch firing an exception to
-                        # prevent all other watches from being fired. Just log an
-                        # error message and moved on to the next callback.
-                        try:
-                            fn(result)
-                        except:
-                            logging.exception("Error executing watch for %s." % path)
+            else:
+                return
+
+            if result != None and fns != None:
+                for fn in fns:
+                    # Don't allow an individual watch firing an exception to
+                    # prevent all other watches from being fired. Just log an
+                    # error message and moved on to the next callback.
+                    try:
+                        fn(result)
+                    except:
+                        logging.exception("Error executing watch for %s." % path)
         finally:
             self.cond.release()
 
     @wrap_exceptions
     def clear_watch_path(self, path):
+        if not path:
+            raise zookeeper.BadArgumentsException("Invalid path: %s" % (path))
+
         self.cond.acquire()
         try:
-            if path in self.watches:
-                del self.watches[path]
+            if path in self.content_watches:
+                del self.content_watches[path]
+            if path in self.child_watches:
+                del self.child_watches[path]
         finally:
             self.cond.release()
 
     @wrap_exceptions
     def clear_watch_fn(self, fn):
+        if not fn:
+            raise zookeeper.BadArgumentsException("Invalid fn: %s" % (fn))
+
         self.cond.acquire()
         try:
-            for path in self.watches:
-                fns = self.watches[path]
+            for path in self.content_watches:
+                fns = self.content_watches[path]
+                if fn in fns:
+                    fns.remove(fn)
+            for path in self.child_watches:
+                fns = self.child_watches[path]
                 if fn in fns:
                     fns.remove(fn)
         finally:
