@@ -44,12 +44,12 @@ def list_rules(table="INPUT"):
     for rule in rules:
         m = re.match("([^ ]+)\s+([^ ]+)\s+([^ ]+)\s+([^ ]+)\s+([^ ]+)\s+(.+)", rule)
         if m:
-            target      = m.group(1)
-            prot        = m.group(2)
-            opt         = m.group(3)
-            source      = m.group(4)
+            target = m.group(1)
+            prot = m.group(2)
+            opt = m.group(3)
+            source = m.group(4)
             destination = m.group(5)
-            filters     = m.group(6).split()
+            filters = m.group(6).split()
 
             found.append(IpTableRule(target, prot, opt, source, destination, filters))
 

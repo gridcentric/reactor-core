@@ -18,9 +18,10 @@ PYTHON_VER ?= $(shell python -V 2>&1 | cut -d' ' -f2 | awk -F'.' '{print $$1 "."
 PACKAGES_DIR ?= dist-packages
 PYTEST_RESULT ?= pytest.xml
 PYTEST_FLAGS ?= --junitxml=$(PYTEST_RESULT)
+PYLINT_RESULT ?= pylint.txt
 
-all: test dist packages
-.PHONY: default
+all: pylint test dist packages
+.PHONY: all
 
 dist:
 	@VERSION=$(PACKAGE_VERSION) python$(PYTHON_VER) setup.py sdist
@@ -29,6 +30,12 @@ dist:
 install: dist
 	@VERSION=$(PACKAGE_VERSION) python$(PYTHON_VER) setup.py install --prefix=$(DESTDIR)
 .PHONY: install
+
+pylint: $(PYLINT_RESULT)
+.PHONY: pylint
+
+$(PYLINT_RESULT): $(shell find reactor -name \*.py)
+	@pylint --ignore=tests --rcfile=pylintrc reactor | tee $@
 
 test:
 	@./py.test $(PYTEST_FLAGS) reactor

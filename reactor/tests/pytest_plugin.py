@@ -32,23 +32,23 @@ submodules.loadbalancer_submodules = loadbalancer_submodules
 @pytest.fixture
 def zookeeper(request):
     from . import mock_zookeeper
-    return mock_zookeeper.Connection()
+    return mock_zookeeper.ZookeeperConnection()
 
 @pytest.fixture
 def cloud(request):
-    from . import mock_cloud
-    return mock_cloud.Connection()
+    from mock_cloud import connection
+    return connection.Connection()
 
 @pytest.fixture
 def loadbalancer(request):
-    from . import mock_loadbalancer
-    return mock_loadbalancer.Connection()
+    from mock_loadbalancer import connection
+    return connection.Connection()
 
 @pytest.fixture
 def client(request):
     from . import mock_zookeeper
     from reactor.zooclient import ReactorClient
-    return ReactorClient(zk_class=mock_zookeeper.Connection)
+    return ReactorClient(zk_class=mock_zookeeper.ZookeeperConnection)
 
 @pytest.fixture
 def scale_manager(request):

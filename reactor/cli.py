@@ -8,9 +8,6 @@ import json
 import gc
 import atexit
 
-from StringIO import StringIO
-from ConfigParser import SafeConfigParser
-
 from reactor.config import fromstr
 import reactor.zookeeper.config as zk_config
 from reactor import log
@@ -30,6 +27,8 @@ def print_threads():
         traceback.print_stack(stack)
 
 def sig_usr2_handler(signum, frame):
+    signum # unused
+    frame # unused
     print_threads()
 
 signal.signal(signal.SIGUSR2, sig_usr2_handler)

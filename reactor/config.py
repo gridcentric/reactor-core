@@ -67,7 +67,14 @@ class Config(object):
                 def setx(self, value):
                     if spec.normalize:
                         value = spec.normalize(value)
-                    self._set(k, spec.type, spec.label, value, spec.default, spec.options, spec.order, spec.description)
+                    self._set(k,
+                              typ=spec.type,
+                              label=spec.label,
+                              value=value,
+                              default=spec.default,
+                              options=spec.options,
+                              order=spec.order,
+                              description=spec.description)
                 def delx(self):
                     setx(self, spec.default)
                 return (getx, setx, delx)
@@ -94,7 +101,7 @@ class Config(object):
                 self._obj[self._section][self._alternates[k]] = self._obj[self._section][k]
                 del self._obj[self._section][k]
 
-        for k,v in defaults.items():
+        for k, v in defaults.items():
             if len(self._get_obj(k)) == 0:
                 # Populate the default value.
                 setattr(self, k, v)
@@ -144,8 +151,8 @@ class Config(object):
 
     def _update(self, obj):
         obj = fromstr(obj)
-        for name,section in obj.items():
-            for k,v in section.items():
+        for name, section in obj.items():
+            for k, v in section.items():
                 # Set the value always.
                 if k in self._alternates:
                     k = self._alternates[k]
@@ -158,16 +165,15 @@ class Config(object):
     def _values(self):
         """ The set of all configuration values. """
         rval = {}
-        for name,section in self._obj.items():
+        for name, section in self._obj.items():
             rval[name] = {}
-            for k,v in section.items():
+            for k, v in section.items():
                 if v.get("value") and v.get("default") != v.get("value"):
                     rval[name][k] = v.get("value")
         return rval
 
     def _validate(self):
-        errors = {}
-        for k,fn in self._validation.items():
+        for k, fn in self._validation.items():
             if fn:
                 try:
                     fn(self)
@@ -182,8 +188,8 @@ class Config(object):
     def _validate_errors(self):
         """ The set of all validation errors (organized as values). """
         result = {}
-        for name,section in self._obj.items():
-            for k,v in section.items():
+        for name, section in self._obj.items():
+            for k, v in section.items():
                 errmsg = v.get("error")
                 if errmsg:
                     if not result.has_key(name):
@@ -213,26 +219,71 @@ class Config(object):
         raise Exception(reason)
 
     @staticmethod
-    def integer(label=None, default=0, order=1, validate=None, description="No description.", alternates=None):
-        return ConfigSpec("integer", label, default, None, int, validate, order, description, alternates)
+    def integer(label=None,
+                default=0,
+                order=1,
+                validate=None,
+                description="No description.",
+                alternates=None):
+        return ConfigSpec(typ="integer",
+                          label=label,
+                          default=default,
+                          options=None,
+                          normalize=int,
+                          validate=validate,
+                          order=order,
+                          description=description,
+                          alternates=alternates)
 
     @staticmethod
-    def string(label=None, default='', order=1, validate=None, description="No description.", alternates=None):
-        return ConfigSpec("string", label, default, None, lambda s: s and str(s) or None, validate,
-                order, description, alternates)
+    def string(label=None,
+               default='',
+               order=1,
+               validate=None,
+               description="No description.",
+               alternates=None):
+        return ConfigSpec(typ="string",
+                          label=label,
+                          default=default,
+                          options=None,
+                          normalize=lambda s: s and str(s) or None,
+                          validate=validate,
+                          order=order,
+                          description=description,
+                          alternates=alternates)
 
     @staticmethod
-    def boolean(label=None, default=False, order=1, validate=None, description="No description.", alternates=None):
+    def boolean(label=None,
+                default=False,
+                order=1,
+                validate=None,
+                description="No description.",
+                alternates=None):
         def normalize(value):
             if type(value) == str or type(value) == unicode:
                 return value.lower() == "true"
             elif type(value) == bool:
                 return value
             return False
-        return ConfigSpec("boolean", label, default, None, normalize, validate, order, description, alternates)
+        return ConfigSpec(typ="boolean",
+                          label=label,
+                          default=default,
+                          options=None,
+                          normalize=normalize,
+                          validate=validate,
+                          order=order,
+                          description=description,
+                          alternates=alternates)
 
     @staticmethod
-    def list(label=None, default=[], order=1, validate=None, description="No description.", alternates=None):
+    def list(label=None,
+             default=None,
+             order=1,
+             validate=None,
+             description="No description.",
+             alternates=None):
+        if default is None:
+            default = []
         def normalize(value):
             if type(value) == str or type(value) == unicode:
                 value = value.strip()
@@ -241,15 +292,45 @@ class Config(object):
             elif type(value) == list:
                 return value
             return []
-        return ConfigSpec("list", label, default, None, normalize, validate, order, description, alternates)
+        return ConfigSpec(typ="list",
+                          label=label,
+                          default=default,
+                          options=None,
+                          normalize=normalize,
+                          validate=validate,
+                          order=order,
+                          description=description,
+                          alternates=alternates)
 
     @staticmethod
-    def select(label=None, default='', options=[], order=1, validate=None, description="No description.", alternates=None):
-        return ConfigSpec("select", label, default, options, lambda s: s and str(s) or None, validate,
-                order, description, alternates)
+    def select(label=None,
+               default='',
+               options=None,
+               order=1, validate=None, description="No description.", alternates=None):
+        if options is None:
+            options = []
+        return ConfigSpec(typ="select",
+                          label=label,
+                          default=default,
+                          options=options,
+                          normalize=lambda s: s and str(s) or None,
+                          validate=validate,
+                          order=order,
+                          description=description,
+                          alternates=alternates)
 
     @staticmethod
-    def multiselect(label=None, default=[], options=[], order=1, validate=None, description="No description.", alternates=None):
+    def multiselect(label=None,
+                    default=None,
+                    options=None,
+                    order=1,
+                    validate=None,
+                    description="No description.",
+                    alternates=None):
+        if default is None:
+            default = []
+        if options is None:
+            options = []
         def normalize(value):
             if type(value) == str or type(value) == unicode:
                 value = value.strip()
@@ -258,7 +339,15 @@ class Config(object):
             elif type(value) == list:
                 return value
             return []
-        return ConfigSpec("multiselect", label, default, options, normalize, validate, order, description, alternates)
+        return ConfigSpec(typ="multiselect",
+                          label=label,
+                          default=default,
+                          options=options,
+                          normalize=normalize,
+                          validate=validate,
+                          order=order,
+                          description=description,
+                          alternates=alternates)
 
 def fromini(ini):
     """ Create a JSON object from a ini-style config. """
@@ -274,7 +363,7 @@ def fromstr(obj):
     if type(obj) == str:
         try:
             obj = json.loads(obj)
-        except:
+        except ValueError:
             if len(obj) == 0:
                 obj = {}
             else:

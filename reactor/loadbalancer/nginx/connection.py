@@ -249,7 +249,9 @@ class Connection(LoadBalancerConnection):
 
     def change(self, url, names, ips, redirect=False, config=None):
         # We use a simple hash of the URL as the file name for the configuration file.
-        uniq_id = hashlib.md5(url).hexdigest()
+        hash_fn = hashlib.new('md5')
+        hash_fn.update(url)
+        uniq_id = hash_fn.hexdigest()
         conf_filename = "%s.conf" % uniq_id
 
         # Check for a removal.

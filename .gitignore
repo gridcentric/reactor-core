@@ -1,5 +1,6 @@
 syntax: glob
 pytest.xml
+pylint.txt
 build/
 dist/
 *.egg-info

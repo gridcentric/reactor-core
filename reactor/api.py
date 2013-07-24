@@ -296,7 +296,9 @@ class ReactorApi(object):
         if auth_key:
             # NOTE: We use a fixed salt and force sha1 for the admin token.
             # This fixed salt matches the authentication policy used above.
-            return hashlib.sha1("%s%s" % (self.AUTH_SALT, auth_key)).hexdigest()
+            hash_fn = hashlib.new('sha1')
+            hash_fn.update("%s%s" % (self.AUTH_SALT, auth_key))
+            return hash_fn.hexdigest()
         else:
             return None
 

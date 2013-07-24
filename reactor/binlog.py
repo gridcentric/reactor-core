@@ -27,7 +27,8 @@ class BinaryLog(object):
     }
 
     # Unknown Record type
-    UNKNOWN_RECTYPE = BinaryLogRecord(lambda args: "Unknown log entry (args %d, %d)" % (args[0], args[1]))
+    UNKNOWN_RECTYPE = BinaryLogRecord(\
+        lambda args: "Unknown log entry (args %d, %d)" % (args[0], args[1]))
 
     def __init__(self, size, record_types=None,
                  store_cb=None, retrieve_cb=None):
@@ -76,9 +77,10 @@ class BinaryLog(object):
     def __find_pointer(self):
         max_ts = 0
         max_ts_ent = 0
-        # Look for the latest non-null entry
+
+        # Look for the latest non-null entry.
         for i in range(self.num_entries):
-            (ts, sev, code, arg1, arg2) = self.__extract_entry(i)
+            (ts, _, _, _, _) = self.__extract_entry(i)
             if ts > max_ts:
                 max_ts = ts
                 max_ts_ent = i

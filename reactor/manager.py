@@ -288,7 +288,11 @@ class ScaleManager(object):
         # Generate keys.
         while len(self.manager_keys) < key_num:
             # Generate a random hash key to associate with this manager.
-            self.manager_keys.append(hashlib.md5(str(uuid.uuid4())).hexdigest())
+            hash_fn = hashlib.new('md5')
+            hash_fn.update(str(uuid.uuid4()))
+            new_key = hash_fn.hexdigest()
+            self.manager_keys.append(new_key)
+
         while len(self.manager_keys) > key_num:
             # Drop keys while we're too high.
             del self.manager_keys[len(self.manager_keys) - 1]

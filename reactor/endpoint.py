@@ -16,7 +16,9 @@ import reactor.loadbalancer.connection as lb_connection
 import reactor.metrics.calculator as metric_calculator
 
 def compute_key(url):
-    return hashlib.md5(url).hexdigest()
+    hash_fn = hashlib.new('md5')
+    hash_fn.update(url)
+    return hash_fn.hexdigest()
 
 class State:
     running = "RUNNING"
