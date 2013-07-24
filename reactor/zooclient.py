@@ -9,9 +9,10 @@ import reactor.zookeeper.paths as paths
 
 class ReactorClient(object):
 
-    def __init__(self, zk_servers):
+    def __init__(self, zk_servers=["localhost"], zk_class=ZookeeperConnection):
         self.zk_conn = None
         self.zk_servers = zk_servers
+        self.zk_class = zk_class
         self._connect()
 
     def __del__(self):
@@ -22,7 +23,7 @@ class ReactorClient(object):
             zk_servers = self.zk_servers
         else:
             self.zk_servers = zk_servers
-        self.zk_conn = ZookeeperConnection(zk_servers)
+        self.zk_conn = self.zk_class(zk_servers)
 
     def _disconnect(self):
         if self.zk_conn:

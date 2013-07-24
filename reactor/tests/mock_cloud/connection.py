@@ -27,10 +27,10 @@ def ip_range_generator(base, count):
         yield int_to_ip(current)
         current += 1
 
-class MockCloudConnection(CloudConnection):
-    def __init__(self, config=None):
-        name = "mock_cloud"
-        CloudConnection.__init__(self, name, config=config)
+class Connection(CloudConnection):
+
+    def __init__(self, *args, **kwargs):
+        CloudConnection.__init__(self, *args, **kwargs)
         self.instances = {} # map(instance.id => MockInstance)
         self.ip_generator = ip_range_generator('172.16.0.1', 255)
 

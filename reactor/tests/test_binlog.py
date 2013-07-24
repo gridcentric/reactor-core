@@ -1,5 +1,5 @@
 import sys
-import unittest2 as unittest
+import unittest
 import mock
 
 import reactor.binlog as binlog
@@ -10,7 +10,7 @@ TEST_ENTRY1 = binlog.BinaryLogRecord(lambda args: "T1 %d %d" % (args[0], args[1]
 TEST_ENTRY2 = binlog.BinaryLogRecord(lambda args: "T2 %d %d" % (args[0], args[1]))
 
 # Some stubb classes
-class FakeStore:
+class FakeStore(object):
     def __init__(self):
         self.data = None
     def store_cb(self, _data):
@@ -19,14 +19,15 @@ class FakeStore:
         return self.data
 
 class BinLogTests(unittest.TestCase):
-    def test_ConstructorWithSizeTooSmall(self):
+
+    def test_constructor_with_size_too_small(self):
         # Check that we raise an exception when passed
         # an inappropriate log size
         entsize = binlog.ENTRY_SIZE
         with self.assertRaises(ValueError):
             log = binlog.BinaryLog(entsize-1)
 
-    def test_ConstructorWithoutRecordTypes(self):
+    def test_constructor_without_record_types(self):
         entsize = binlog.ENTRY_SIZE
         log = binlog.BinaryLog(entsize)
         entries = log.get()
@@ -36,7 +37,7 @@ class BinLogTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             log.info(TEST_ENTRY1, 1, -1)
 
-    def test_ConstructorWithRecordTypes(self):
+    def test_constructor_with_record_types(self):
         record_types = [ TEST_ENTRY1 ]
         entsize = binlog.ENTRY_SIZE
         log = binlog.BinaryLog(entsize, record_types=record_types)
@@ -51,7 +52,7 @@ class BinLogTests(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
 
-    def test_ConstructorWithCallbacks(self):
+    def test_constructor_with_callbacks(self):
         record_types = [ TEST_ENTRY1 ]
         entsize = binlog.ENTRY_SIZE
         store = FakeStore()
@@ -79,7 +80,7 @@ class BinLogTests(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
 
-    def test_AddRecordType(self):
+    def test_add_record_type(self):
         entsize = binlog.ENTRY_SIZE
         log = binlog.BinaryLog(entsize)
         # Make an entry
@@ -105,7 +106,7 @@ class BinLogTests(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertIn([FAKE_TIMESTAMP+1, "INFO", "T2 1 -1"], entries)
 
-    def test_AddRecordTypes(self):
+    def test_add_record_types(self):
         entsize = binlog.ENTRY_SIZE
         log = binlog.BinaryLog(entsize)
         # Make an entry
@@ -133,7 +134,7 @@ class BinLogTests(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertIn([FAKE_TIMESTAMP+1, "INFO", "T2 1 -1"], entries)
 
-    def test_LogWrapsProperly(self):
+    def test_log_wraps_properly(self):
         record_types = [ TEST_ENTRY1, TEST_ENTRY2 ]
         entsize = binlog.ENTRY_SIZE
         log = binlog.BinaryLog(entsize, record_types=record_types)
@@ -154,7 +155,7 @@ class BinLogTests(unittest.TestCase):
         # Make sure the log doesn't contain the old entry
         self.assertNotIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
 
-    def test_LogReloads(self):
+    def test_log_reloads(self):
         record_types = [ TEST_ENTRY1 ]
         entsize = binlog.ENTRY_SIZE
         store = FakeStore()
@@ -182,7 +183,7 @@ class BinLogTests(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
 
-    def test_SeverityLevels(self):
+    def test_severity_levels(self):
         record_types = [ TEST_ENTRY1 ]
         entsize = binlog.ENTRY_SIZE
         log = binlog.BinaryLog(entsize, record_types=record_types)

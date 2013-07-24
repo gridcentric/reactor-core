@@ -1,4 +1,5 @@
 syntax: glob
+pytest.xml
 build/
 dist/
 *.egg-info

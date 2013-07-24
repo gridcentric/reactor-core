@@ -16,10 +16,10 @@ INSTALL_BIN := install -m0755 -p
 INSTALL_DATA := install -m0644 -p
 PYTHON_VER ?= $(shell python -V 2>&1 | cut -d' ' -f2 | awk -F'.' '{print $$1 "." $$2};')
 PACKAGES_DIR ?= dist-packages
+PYTEST_RESULT ?= pytest.xml
+PYTEST_FLAGS ?= --junitxml=$(PYTEST_RESULT)
 
-PYTEST_FLAGS ?=
-
-default: test dist packages cobaltclient
+all: test dist packages
 .PHONY: default
 
 dist:
@@ -31,7 +31,7 @@ install: dist
 .PHONY: install
 
 test:
-	reactor/testing/py.test $(PYTEST_FLAGS)
+	@./py.test $(PYTEST_FLAGS) reactor
 .PHONY: test
 
 dist_install: dist_clean
@@ -55,11 +55,12 @@ endif
 dist_clean:
 	@rm -rf dist build reactor.egg-info
 	@rm -rf debbuild rpmbuild
-	@find . -name \*.pyc -exec rm -f {} \;
+	@find . -name \*.pyc -exec rm -f {} \; 2>/dev/null || true
+	@find . -name __pycache__ -exec rm -rf {} \; 2>/dev/null || true
 .PHONY: dist_clean
 
 clean: dist_clean
-	@rm -rf *.deb *.rpm extra/cobalt-novaclient*.* __pycache__
+	@rm -rf *.deb *.rpm extra/cobalt-novaclient*.*
 .PHONY: clean
 
 $(RPMBUILD):

@@ -27,6 +27,9 @@ setup(
         "netifaces",
         "python-ldap",
     ],
+    test_require=[
+        "mock",
+    ],
     packages=find_packages(exclude=["reactor.testing"]),
     package_data={
         "reactor.loadbalancer.nginx" : ["nginx.template", "reactor.conf"],
@@ -38,13 +41,13 @@ setup(
             "admin/assets/*.png",
             "admin/assets/*.css",
             "admin/assets/lib/*.js",
-            "admin/assets/lib/bootstrap/*/*"
+            "admin/assets/lib/bootstrap/*/*",
         ]
     },
     include_package_data=True,
     entry_points={
         'console_scripts': [
-            'reactor = reactor.cli:main'
+            'reactor = reactor.cli:main',
         ]
     },
     classifiers=[
