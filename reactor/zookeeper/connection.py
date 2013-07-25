@@ -156,7 +156,6 @@ class ZookeeperConnection(object):
         (The value will not be written if the exclusive is True and the node
         already exists.)
         """
-
         if not(path) or contents is None:
             raise zookeeper.BadArgumentsException("Invalid path/contents: %s/%s" % (path, contents))
 
