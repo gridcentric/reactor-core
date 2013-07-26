@@ -52,12 +52,6 @@ class ManagerConfig(Config):
             Config.error("Health_check must be positive."),
         description="Period for decomissioning and timing out instances.")
 
-    marks = Config.integer(label="Maximum Failed Health Checks",
-        default=36, order=2,
-        validate=lambda self: self.marks > 0 or \
-            Config.error("Marks must be positive."),
-        description="Timeout for unregistered and decomissioned VMs.")
-
     keys = Config.integer(label="Keys per Manager", default=64, order=2,
         validate=lambda self: self.keys >= 0 or \
             Config.error("Keys must be non-negative."),
@@ -105,7 +99,6 @@ class ScaleManager(object):
         self.uuid    = str(uuid.uuid4()) # Manager uuid (generated).
 
         self.health_check = 5  # Health check interval.
-        self.marks        = 10 # Mark interval.
 
         self.endpoints = {}        # Endpoint map (name -> endpoint)
         self.key_to_endpoints = {} # Endpoint map (key() -> [names...])
@@ -184,7 +177,7 @@ class ScaleManager(object):
         if self.endpoint_owned(endpoint):
             self.client.zk_conn.write(paths.endpoint_manager(endpoint.name), self.uuid, ephemeral=True)
             if not(managed):
-                self.start_endpoint(endpoint)
+                 endpoint.manage()
 
     @locked
     def manager_remove(self, endpoint):
@@ -201,7 +194,7 @@ class ScaleManager(object):
 
         for endpoint_name in endpoints:
             if endpoint_name not in self.endpoints:
-                self.create_endpoint(endpoint_name)
+                self.add_endpoint(endpoint_name)
 
         known_endpoint_names = self.endpoints.keys()
         for endpoint_name in known_endpoint_names:
@@ -211,7 +204,7 @@ class ScaleManager(object):
     def update_config(self, config):
         self.manager_register(config=config)
         for endpoint in self.endpoints.values():
-            endpoint.update_loadbalancer()
+            self.update_loadbalancer(endpoint)
 
     def _configure(self, config=None):
         """
@@ -269,11 +262,12 @@ class ScaleManager(object):
                 try:
                     # Register our IP.
                     ip = socket.gethostbyname(name)
-                    self.client.zk_conn.write(paths.manager_ip(ip), self.uuid, ephemeral=True)
-                    logging.info("Registered IP '%s'." % ip)
-                    self.registered_ips.append(ip)
                 except socket.error:
-                    logging.error("Skipping registration of '%s'." % name)
+                    # Use the name as the IP.
+                    ip = name
+                self.client.zk_conn.write(paths.manager_ip(ip), self.uuid, ephemeral=True)
+                logging.info("Registered IP '%s'." % ip)
+                self.registered_ips.append(ip)
 
             # Register configured IPs if available.
             if configured_ips:
@@ -298,8 +292,8 @@ class ScaleManager(object):
             del self.manager_keys[len(self.manager_keys) - 1]
 
         # Write out our associated hash keys as an ephemeral node.
-        key_string = ",".join(self.manager_keys)
-        self.client.zk_conn.write(paths.manager_keys(self.uuid), key_string, ephemeral=True)
+        key_blob = json.dumps(self.manager_keys)
+        self.client.zk_conn.write(paths.manager_keys(self.uuid), key_blob, ephemeral=True)
         logging.info("Generated %d keys." % len(self.manager_keys))
 
     @locked
@@ -351,20 +345,25 @@ class ScaleManager(object):
 
         # Configure and load connections.
         manager_config = self._configure(config)
-        self._register_manager_ips(manager_config.ips)
         self._determine_manager_keys(manager_config.keys)
+        self._register_manager_ips(manager_config.ips)
         self._select_endpoints()
 
-        # Initialize health check variables
-        self.marks = manager_config.marks
+        # Initialize health check variables.
         self.health_check = manager_config.health_check
 
     @locked
     def manager_change(self, managers):
         for manager in managers:
             if manager not in self.managers:
-                # Read the key and update all mappings.
-                keys = self.client.zk_conn.read(paths.manager_keys(manager)).split(",")
+                # Read the key and sanity check.
+                key_blob = self.client.zk_conn.read(paths.manager_keys(manager))
+                if key_blob is None:
+                    logging.error("Manager %s has no keys... bad state?")
+                    continue
+
+                # Update all mappings.
+                keys = json.loads(key_blob)
                 logging.info("Found manager %s with %d keys." % (manager, len(keys)))
                 self.managers[manager] = keys
                 for key in keys:
@@ -387,25 +386,12 @@ class ScaleManager(object):
         # Recompute all endpoint owners and update loadbalancers.
         for endpoint in self.endpoints.values():
             self.manager_select(endpoint)
-            endpoint.update_loadbalancer()
+            self.update_loadbalancer(endpoint)
 
         # Reload all managers IPs.
         self.manager_ips = \
             map(lambda x: lb_connection.BackendIP(x),
                 self.client.zk_conn.list_children(paths.manager_ips()))
-
-    def create_endpoint(self, endpoint_name):
-        logging.info("New endpoint %s found to be managed." % endpoint_name)
-
-        # Create the object.
-        # NOTE: We create all endpoints on this manager with the current
-        # manager config. This means that all manager keys will be inherited
-        # and you can set some sensible defaults either in the local manager
-        # configuration or in the global configuration.
-        # This does mean however, that the ManagerConfig and EndpointConfig
-        # should have disjoint sections for the most part.
-        endpoint = Endpoint(endpoint_name, self)
-        self.add_endpoint(endpoint)
 
     @locked
     def _add_endpoint(self, endpoint):
@@ -418,9 +404,8 @@ class ScaleManager(object):
         if not(endpoint.name in self.key_to_endpoints[endpoint_key]):
             self.key_to_endpoints[endpoint_key].append(endpoint.name)
 
-    def add_endpoint(self, endpoint):
-
-        self._add_endpoint(endpoint)
+    def add_endpoint(self, endpoint_name):
+        logging.info("New endpoint %s found to be managed." % endpoint_name)
 
         def local_lock(fn):
             def wrapped_fn(*args, **kwargs):
@@ -435,16 +420,19 @@ class ScaleManager(object):
 
         @local_lock
         def update_state(value):
+            # NOTE: Updating the state doensn't actually
+            # have any immediate impact on the laodbalancer, etc.
+            # If we do own this endpoint, then at the next round
+            # we may see it start to launch instances, etc.
             endpoint.update_state(value)
-            if self.endpoint_owned(endpoint):
-                endpoint.update()
 
         @local_lock
         def update_config(config):
             config = EndpointConfig(values=config)
-            endpoint.update_config(config)
-            if self.endpoint_owned(endpoint):
-                endpoint.update()
+            # Call update_loadbalancer only if the config
+            # has changed sufficiently to warrant the update.
+            if endpoint.update_config(config, scale_manager=self):
+                self.update_loadbalancer(endpoint)
 
         @local_lock
         def update_confirmed(ips):
@@ -452,56 +440,42 @@ class ScaleManager(object):
                 self.confirmed[endpoint.name] = ips
             elif endpoint.name in self.confirmed:
                 del self.confirmed[endpoint.name]
-
-            # Kick off a loadbalancer update.
-            endpoint.update_loadbalancer()
+            self.update_loadbalancer(endpoint)
 
         # Watch the config for this endpoint.
-        logging.info("Watching endpoint %s." % (endpoint.name))
-        update_state(
-            self.client.zk_conn.watch_contents(paths.endpoint_state(endpoint.name),
-                                        update_state, '',
-                                        clean=True))
-        update_config(
-            self.client.zk_conn.watch_contents(paths.endpoint(endpoint.name),
-                                        update_config, '',
-                                        clean=True))
+        config_blob = self.client.zk_conn.watch_contents(
+            paths.endpoint(endpoint_name), update_config, '', clean=True)
+        config = EndpointConfig(values=config_blob)
+        endpoint = Endpoint(self.client, endpoint_name, config)
+        self._add_endpoint(endpoint)
 
         # Select the manager for this endpoint.
         self.manager_select(endpoint)
 
+        # Watch the state.
+        update_state(
+            self.client.zk_conn.watch_contents(paths.endpoint_state(endpoint.name),
+                                        update_state, '', clean=True))
+
         # Update the loadbalancer for this endpoint.
         update_confirmed(
-            self.client.zk_conn.watch_children(paths.confirmed_ips(endpoint.name),
-                                        update_confirmed,
-                                        clean=True))
-
-    @locked
-    def start_endpoint(self, endpoint):
-        # This endpoint is now being managed by us.
-        endpoint.manage()
-        endpoint.update()
+            self.client.zk_conn.watch_children(
+                paths.endpoint_confirmed_ips(endpoint.name),
+                update_confirmed, clean=True))
 
     @locked
     def _remove_endpoint(self, endpoint, unmanage):
-
         endpoint_name = endpoint.name
-        logging.info("Unmanaging endpoint %s" % (endpoint_name))
         endpoint_names = self.key_to_endpoints.get(endpoint.key(), [])
         if endpoint_name in endpoint_names:
             endpoint_names.remove(endpoint_name)
             if len(endpoint_names) == 0:
                 del self.key_to_endpoints[endpoint.key()]
-
-        # Perform a full unmanage if this is required.
-        if unmanage and self.endpoint_owned(endpoint):
-            endpoint.unmanage()
-
         del self.endpoints[endpoint_name]
 
     def remove_endpoint(self, endpoint_name, unmanage=False):
         """
-        This removes / unmanages the endpoint.
+        This removes the endpoint from management.
         """
         logging.info("Removing endpoint %s from manager %s" % (endpoint_name, self.uuid))
         endpoint = self.endpoints.get(endpoint_name, None)
@@ -510,10 +484,10 @@ class ScaleManager(object):
             # Clear any existing watches.
             self.client.zk_conn.clear_watch_path(paths.endpoint_state(endpoint.name))
             self.client.zk_conn.clear_watch_path(paths.endpoint(endpoint.name))
-            self.client.zk_conn.clear_watch_path(paths.confirmed_ips(endpoint.name))
+            self.client.zk_conn.clear_watch_path(paths.endpoint_confirmed_ips(endpoint.name))
 
             # Update the loadbalancer for this endpoint.
-            endpoint.update_loadbalancer(remove=True)
+            self.update_loadbalancer(endpoint)
             self._remove_endpoint(endpoint, unmanage)
             self.manager_remove(endpoint)
 
@@ -540,7 +514,7 @@ class ScaleManager(object):
     def drop_ip(self, endpoint_name, ip):
         logging.info("Dropping endpoint %s IP %s" % (endpoint_name, ip))
         self.client.zk_conn.delete(paths.endpoint_ip_metrics(endpoint_name, ip))
-        self.client.zk_conn.delete(paths.confirmed_ip(endpoint_name, ip))
+        self.client.zk_conn.delete(paths.endpoint_confirmed_ip(endpoint_name, ip))
         self.client.zk_conn.delete(paths.ip_address(ip))
         for lock in self.locks.values():
             lock.forget_ip(ip)
@@ -549,7 +523,7 @@ class ScaleManager(object):
     @locked
     def confirm_ip(self, endpoint_name, ip):
         logging.info("Adding endpoint %s IP %s" % (endpoint_name, ip))
-        self.client.zk_conn.write(paths.confirmed_ip(endpoint_name, ip), "")
+        self.client.zk_conn.write(paths.endpoint_confirmed_ip(endpoint_name, ip), "")
         self.client.zk_conn.write(paths.ip_address(ip), endpoint_name)
         self.endpoints[endpoint_name].ip_confirmed(ip)
 
@@ -602,7 +576,7 @@ class ScaleManager(object):
             self.client.zk_conn.delete(paths.drop_ip(ip))
 
     @locked
-    def collect_endpoint(self, endpoint):
+    def _collect_endpoint(self, endpoint):
         ips = []
         redirects = []
 
@@ -618,108 +592,9 @@ class ScaleManager(object):
 
         return (ips, redirects)
 
-    def endpoint_instances(self, endpoint_name):
-        """ Return a list of all endpoint instances. """
-        instances = self.client.zk_conn.list_children(paths.endpoint_instances(endpoint_name))
-        if instances == None:
-            instances = []
-        return instances
-
-    def add_endpoint_instance(self, endpoint_name, instance_id, data=''):
-        self.client.zk_conn.write(paths.endpoint_instance(endpoint_name, instance_id), data)
-
-    def get_endpoint_instance(self, endpoint_name, instance_id):
-        return self.client.zk_conn.read(paths.endpoint_instance(endpoint_name, instance_id))
-
-    def delete_endpoint_instance(self, endpoint_name, instance_id):
-        self.client.zk_conn.delete(paths.endpoint_instance(endpoint_name, instance_id))
-
-    @locked
-    def marked_instances(self, endpoint_name):
-        """ Return a list of all the marked instances. """
-        marked_instances = self.client.zk_conn.list_children(paths.marked_instances(endpoint_name))
-        if marked_instances == None:
-            marked_instances = []
-        return marked_instances
-
-    @locked
-    def mark_instance(self, endpoint_name, instance_id, label):
-        # Increment the mark counter.
-        remove_instance = False
-        mark_counters = self.client.zk_conn.read(paths.marked_instance(endpoint_name, instance_id), '{}')
-        mark_counters = json.loads(mark_counters)
-        mark_counter = mark_counters.get(label, 0)
-        mark_counter += 1
-
-        if mark_counter >= self.marks:
-            # This instance has been marked too many times. There is likely
-            # something really wrong with it, so we'll clean it up.
-            logging.warning("Instance %s for endpoint %s has been marked too many times and"
-                            " will be removed. (count=%s)" % (instance_id, endpoint_name, mark_counter))
-            remove_instance = True
-            self.client.zk_conn.delete(paths.marked_instance(endpoint_name, instance_id))
-
-        else:
-            # Just save the mark counter.
-            logging.info("Instance %s for endpoint %s has been marked (count=%s)" %
-                         (instance_id, endpoint_name, mark_counter))
-            mark_counters[label] = mark_counter
-            self.client.zk_conn.write(paths.marked_instance(endpoint_name, instance_id),
-                               json.dumps(mark_counters))
-
-        return remove_instance
-
-    @locked
-    def drop_marked_instance(self, endpoint_name, instance_id):
-        """ Delete the marked instance data. """
-        self.client.zk_conn.delete(paths.marked_instance(endpoint_name, instance_id))
-
-    @locked
-    def decommission_instance(self, endpoint_name, instance_id, ip_addresses):
-        """ Mark the instance id as being decommissioned. """
-        self.client.zk_conn.write(paths.decommissioned_instance(endpoint_name, instance_id),
-                           json.dumps(ip_addresses))
-
-    @locked
-    def recommission_instance(self, endpoint_name, instance_id):
-        """ Mark the instance id as being recommissioned. """
-        # Re-register all associated IPs.
-        ips = self.decommissioned_instance_ip_addresses(endpoint_name, instance_id)
-        self.register_ip(ips)
-
-        # Delete decommissioned instance path and marked data.
-        self.client.zk_conn.delete(paths.decommissioned_instance(endpoint_name,
-                            instance_id))
-        self.drop_marked_instance(endpoint_name, instance_id)
-
-    @locked
-    def decommissioned_instances(self, endpoint_name):
-        """ Return a list of all the decommissioned instances. """
-        decommissioned_instances = self.client.zk_conn.list_children(\
-            paths.decommissioned_instances(endpoint_name))
-        if decommissioned_instances == None:
-            decommissioned_instances = []
-        return decommissioned_instances
-
-    @locked
-    def decommissioned_instance_ip_addresses(self, endpoint_name, instance_id):
-        """ Return the ip address of a decommissioned instance. """
-        ip_addresses = self.client.zk_conn.read(paths.decommissioned_instance(endpoint_name, instance_id))
-        if ip_addresses != None:
-            ip_addresses = json.loads(ip_addresses)
-            if type(ip_addresses) == str:
-                ip_addresses = [ip_addresses]
-        else:
-            ip_addresses = []
-        return ip_addresses
-
-    @locked
-    def drop_decommissioned_instance(self, endpoint_name, instance_id):
-        """ Delete the decommissioned instance. """
-        ip_addresses = self.decommissioned_instance_ip_addresses(endpoint_name, instance_id)
-        for ip_address in ip_addresses:
-            self.drop_ip(endpoint_name, ip_address)
-        self.client.zk_conn.delete(paths.decommissioned_instance(endpoint_name, instance_id))
+    def update_loadbalancer(self, endpoint):
+        (ips, redirects) = self._collect_endpoint(endpoint)
+        endpoint.update_loadbalancer(ips, redirects)
 
     def metric_indicates_active(self, metrics):
         """ Returns true if the metrics indicate that there are active connections. """
@@ -751,14 +626,6 @@ class ScaleManager(object):
                     results[host][key] = (weight, value)
 
         return results
-
-    @locked
-    def start_params(self, endpoint=None):
-        return {}
-
-    @locked
-    def cleanup_start_params(self, endpoint, start_params):
-        pass
 
     @locked
     def update_metrics(self):
@@ -888,9 +755,9 @@ class ScaleManager(object):
                     logging.warn("Invalid instance metrics for %s:%s." % \
                                  (endpoint.name, ip_address))
 
-        for instance_id in self.decommissioned_instances(endpoint.name):
+        for instance_id in self.client.decommissioned_instances(endpoint.name):
             # Also check the metrics of decommissioned instances looking for any active counts.
-            for ip_address in self.decommissioned_instance_ip_addresses(endpoint.name, instance_id):
+            for ip_address in self.client.decommissioned_instance_ip_addresses(endpoint.name, instance_id):
                 if ip_address:
                     ip_metrics = self.client.zk_conn.read(paths.endpoint_ip_metrics(endpoint.name, ip_address))
                     if ip_metrics:
@@ -1000,12 +867,20 @@ class ScaleManager(object):
                                    ephemeral=True)
 
                 # Run a health check on this endpoint.
-                endpoint.health_check(active)
+                health_force = \
+                    endpoint.health_check(self.confirmed_ips(endpoint.name), active)
 
                 # Do the endpoint update.
-                endpoint.update(reconfigure=False, metrics=metrics,
+                update_force = \
+                    endpoint.update(reconfigure=False,
+                                metrics=metrics,
                                 metric_instances=len(metric_ips),
                                 active_ips=active)
+
+                # Run a loadbalancer update.
+                if health_force or update_force:
+                    self.update_loadbalancer(endpoint)
+
             except:
                 error = traceback.format_exc()
                 logging.error("Error updating endpoint %s: %s" % (endpoint.name, error))
