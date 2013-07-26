@@ -144,7 +144,7 @@ class ScaleManager(object):
         return log_buffer
 
     @locked
-    def url_change(self):
+    def url_change(self, url):
         self.url = url
         self._setup_cloud_connections()
 
