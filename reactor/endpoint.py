@@ -24,7 +24,7 @@ class State:
     running = "RUNNING"
     stopped = "STOPPED"
     paused  = "PAUSED"
-    default = stopped
+    default = paused
 
     @staticmethod
     def from_action(current, action):
@@ -65,6 +65,12 @@ class EndpointConfig(Config):
     loadbalancer = Config.select(label="Loadbalancer Driver", order=2,
         options=loadbalancer_options(),
         description="The loadbalancer for this endpoint.")
+
+    marks = Config.integer(label="Maximum Failed Health Checks",
+        default=36, order=2,
+        validate=lambda self: self.marks > 0 or \
+            Config.error("Marks must be positive."),
+        description="Timeout for unregistered and decomissioned VMs.")
 
     auth_hash = Config.string(label="Auth Hash Token", default=None, order=3,
         description="The authentication token for this endpoint.")
@@ -211,28 +217,32 @@ class EndpointLog(BinaryLog):
 
 class Endpoint(object):
 
-    def __init__(self, name, scale_manager):
+    def __init__(self, client, name, config=None):
+        self.client = client
         self.name = name
-        self.scale_manager = scale_manager
 
         # Initialize endpoint-specific logging.
         self.logging = EndpointLog(
-                store_cb=lambda data: self.scale_manager.client.endpoint_log_save(self.name, data),
-                retrieve_cb=lambda: self.scale_manager.client.endpoint_log_load(self.name))
+                store_cb=lambda data: self.client.endpoint_log_save(self.name, data),
+                retrieve_cb=lambda: self.client.endpoint_log_load(self.name))
 
-        # Initialize (currently empty) configurations.
-        self.config = EndpointConfig()
-        self.scaling = ScalingConfig()
+        # Initialize configuration.
+        if config is None:
+            self.config = EndpointConfig()
+            self.scaling = ScalingConfig()
+        else:
+            self.config = EndpointConfig(obj=config)
+            self.scaling = ScalingConfig(obj=config)
 
         # Endpoint state.
         self.state = State.default
         self.decommissioned_instances = []
 
         # Default to no cloud connection.
-        self.cloud_conn = scale_manager._find_cloud_connection()
+        self.cloud_conn = cloud_connection.get_connection(None)
 
         # Default to no load balancer.
-        self.lb_conn = scale_manager._find_loadbalancer_connection()
+        self.lb_conn = lb_connection.get_connection(None)
 
     def key(self):
         return compute_key(self.url())
@@ -259,18 +269,33 @@ class Endpoint(object):
     def manage(self):
         # Load the configuration and configure the endpoint.
         logging.info("Managing endpoint %s" % (self.name))
-        self.decommissioned_instances = self.scale_manager.decommissioned_instances(self.name)
+        self.decommissioned_instances = \
+            self.client.decommissioned_instances(self.name)
 
-    def unmanage(self):
-        # Do nothing.
-        logging.info("Unmanaging endpoint %s" % (self.name))
+    def update(self,
+               reconfigure=True,
+               metrics={},
+               metric_instances=None,
+               active_ips=[]):
+        """
+        Update the endpoint based on current metrics and
+        active instances. This will launch new instances or
+        recomission old ones in response to demand.
 
-    def update(self, reconfigure=True, metrics={}, metric_instances=None, active_ips=[]):
+        As per health_check() above, this function will return
+        True if a loadbalancer reload is required (instances
+        have been decomissioned or the active IPs have changed
+        in some way).
+        """
         try:
-            self._update(reconfigure, metrics, metric_instances, active_ips)
+            return self._update(reconfigure=reconfigure,
+                                metrics=metrics,
+                                metric_instances=metric_instances,
+                                active_ips=active_ips)
         except:
             logging.error("Error updating endpoint %s: %s" % \
                 (self.name, traceback.format_exc()))
+            return False
 
     def _determine_target_instances_range(self, metrics, num_instances):
         """
@@ -278,8 +303,8 @@ class Endpoint(object):
         form (min_instances, max_instances) is returned.
         """
 
-        # Evaluate the metrics on these instances and get the ideal bounds on the number
-        # of servers that should exist.
+        # Evaluate the metrics on these instances and get the ideal bounds on
+        # the number of servers that should exist.
         ideal_min, ideal_max = metric_calculator.calculate_ideal_uniform(\
                 self.scaling.rules, metrics, num_instances)
         logging.debug("Metrics for endpoint %s: ideal_servers=%s (%s)" % \
@@ -289,8 +314,9 @@ class Endpoint(object):
             # Either the metrics are undefined or have conflicting answers. We simply
             # return this conflicting result.
             if metrics != []:
-                # Only log the warning if there were values for the metrics provided. In other words
-                # only if the metrics could have made a difference.
+                # Only log the warning if there were values for the metrics
+                # provided. In other words only if the metrics could have made
+                # a difference.
                 self.logging.warn(self.logging.METRICS_CONFLICT)
                 logging.warn("The metrics defined for endpoint %s have resulted in a "
                              "conflicting result. (endpoint metrics: %s)"
@@ -326,10 +352,12 @@ class Endpoint(object):
         return False
 
     def _update(self, reconfigure, metrics, metric_instances, active_ips):
+        rv = False
+
         if self.state == State.paused:
             # Do nothing while paused, this will keep the current
             # instances alive and continue to process requests.
-            return
+            return rv
 
         instances = self.instances()
         num_instances = len(instances)
@@ -363,7 +391,7 @@ class Endpoint(object):
 
         else:
             logging.error("Unknown state '%s' ?!?" % self.state)
-            return
+            return rv
 
         if target != num_instances:
             self.logging.info(self.logging.SCALE_UPDATE, num_instances, target)
@@ -377,7 +405,7 @@ class Endpoint(object):
         if num_instances < target:
             # First, recommission instances that have been decommissioned.
             if len(self.decommissioned_instances) > 0:
-                self.recommission_instances(target - num_instances,
+                rv = rv or self.recommission_instances(target - num_instances,
                     "bringing instance total up to target %s" % target)
                 instances = self.instances()
                 num_instances = len(instances)
@@ -399,16 +427,18 @@ class Endpoint(object):
             for i in range(to_do):
                 instances_to_delete.append(inactive_instances.pop(0))
 
-            self.decommission_instances(instances_to_delete,
+            rv = rv or self.decommission_instances(instances_to_delete,
                 "bringing instance total down to target %s" % target)
+
+        return rv
 
     def update_sessions(self, dropped_sessions, authoritative):
         for client in dropped_sessions:
-            backend = self.scale_manager.session_backend(self.name, client)
+            backend = self.client.session_backend(self.name, client)
             if backend:
                 self.lb_conn.drop_session(client, backend)
                 if authoritative:
-                    self.scale_manager.session_dropped(self.name, client)
+                    self.client.session_dropped(self.name, client)
 
     def update_state(self, state):
         self.state = state or State.default
@@ -445,7 +475,14 @@ class Endpoint(object):
                 loadbalancer = loadbalancers[config.loadbalancer]
                 loadbalancer._endpoint_config(config=config)._validate()
 
-    def update_config(self, config):
+    def update_config(self, config, scale_manager=None):
+        """
+        Reload the configuration for this endpoint.
+
+        This function will return True if the loadbalancer should
+        be updated after return, much like update() and health_check().
+        """
+
         # Check if our configuration is about to change.
         old_url = self.config.url
         old_static_addresses = self.config._static_ips()
@@ -464,56 +501,63 @@ class Endpoint(object):
         new_redirect = new_config.redirect
         new_lb = new_config.loadbalancer
 
-        # Drop all removed static addresses.
-        for ip in old_static_addresses:
-            if not(ip in new_static_addresses):
-                self.scale_manager.drop_ip(self.name, ip)
+        # NOTE: We used to take action on old static
+        # addresses. This is no longer done, because it's
+        # an easy attack vector for different endpoints.
+        # Now we don't really allow static addresses to
+        # influence any actions wrt. to registered IPs.
 
-        # Remove all old instances from loadbalancer,
-        # (Only necessary if we've changed the endpoint URL).
-        if old_url != new_url:
-            self.scale_manager.remove_endpoint(self.name)
+        if scale_manager:
+            # Remove all old instances from loadbalancer,
+            # (Only necessary if we've changed the endpoint URL).
+            if old_url != new_url:
+                scale_manager.remove_endpoint(self.name)
 
         # Reload the configuration.
         self.config = new_config
         self.scaling = new_scaling
 
-        # Reconnect to the cloud controller (always).
-        self.cloud_conn = self.scale_manager._find_cloud_connection(new_config.cloud)
-
-        # Update loadbalancer.
-        if old_lb != new_lb:
-            # Get a new loadbalancer connection.
-            self.lb_conn = self.scale_manager._find_loadbalancer_connection(new_lb)
-
-        # Do a referesh (to capture the new endpoint).
-        if old_url != new_url:
-            self.scale_manager.add_endpoint(self)
-
-        # Update the load balancer.
-        elif old_static_addresses != new_static_addresses or \
-             old_port != new_port or \
-             old_weight != new_weight or \
-             old_redirect != new_redirect:
-            self.update_loadbalancer()
-
+        # Log the action.
         self.logging.info(self.logging.CONFIG_UPDATED)
+
+        if scale_manager:
+            # Reconnect to the cloud controller (always).
+            self.cloud_conn = scale_manager._find_cloud_connection(new_config.cloud)
+
+            # Get a new loadbalancer connection.
+            self.lb_conn = scale_manager._find_loadbalancer_connection(new_lb)
+
+            # Do a referesh (to capture the new endpoint).
+            # This mirros the scale_manager.remove_endpoint()
+            if old_url != new_url:
+                scale_manager.add_endpoint(self.name)
+
+            # Update the load balancer.
+            elif old_static_addresses != new_static_addresses or \
+                 old_port != new_port or \
+                 old_weight != new_weight or \
+                 old_redirect != new_redirect:
+                return True
+
+        return False
 
     def recommission_instances(self, num_instances, reason):
         """
         Recommission formerly decommissioned instances. Note: a reason
         should be given for why the instances are being recommissioned.
         """
+        rv = False
+
         while num_instances > 0 and len(self.decommissioned_instances) > 0:
             self.logging.info(self.logging.RECOMMISSION_INSTANCE)
             instance_id = self.decommissioned_instances.pop()
             logging.info("Recommissioning instance %s for server %s (reason: %s)" %
                     (instance_id, self.name, reason))
-            self.scale_manager.recommission_instance(self.name, instance_id)
+            self.client.recommission_instance(self.name, instance_id)
             num_instances -= 1
+            rv = True
 
-        # Update the load balancer.
-        self.update_loadbalancer()
+        return rv
 
     def decommission_instances(self, instances, reason):
         """
@@ -527,7 +571,7 @@ class Endpoint(object):
             instance_id = self.cloud_conn.id(self.config, instance)
             logging.info("Decommissioning instance %s for server %s (reason: %s)" %
                     (instance_id, self.name, reason))
-            self.scale_manager.decommission_instance(\
+            self.client.decommission_instance(\
                 self.name, instance_id,
                 self.cloud_conn.addresses(self.config, instance))
             if not(instance_id in self.decommissioned_instances):
@@ -536,8 +580,7 @@ class Endpoint(object):
         # update the load balancer. This can be done after decommissioning
         # because these instances will stay alive as long as there is an active
         # connection.
-        if len(instances) > 0:
-            self.update_loadbalancer()
+        return (len(instances) > 0)
 
     def _delete_instance(self, instance):
         instance_id = self.cloud_conn.id(self.config, instance)
@@ -546,8 +589,8 @@ class Endpoint(object):
         # Delete the instance from the cloud.
         self.logging.info(self.logging.DELETE_INSTANCE)
         logging.info("Deleting instance %s for server %s" % (instance_id, self.name))
-        self.scale_manager.delete_endpoint_instance(self.name, instance_name)
-        self.scale_manager.drop_decommissioned_instance(self.name, instance_id)
+        self.client.delete_endpoint_instance(self.name, instance_name)
+        self.client.drop_decommissioned_instance(self.name, instance_id)
         if instance_id in self.decommissioned_instances:
             self.decommissioned_instances.remove(instance_id)
         self.cloud_conn.delete_instance(self.config, instance_id)
@@ -561,21 +604,20 @@ class Endpoint(object):
         logging.info(("Launching new instance for server %s " +
                      "(reason: %s)") %
                      (self.name, reason))
-        start_params = self.scale_manager.start_params(self)
-        start_params.update(self.lb_conn.start_params(self.config))
+
+        # Start with the loadbalancer parameters.
+        start_params = self.lb_conn.start_params(self.config)
 
         try:
-            instance = self.cloud_conn.start_instance(self.config,
-                                                         params=start_params)
+            instance = self.cloud_conn.start_instance(self.config, params=start_params)
         except:
             self.logging.error(self.logging.LAUNCH_FAULURE)
             logging.error("Error launching instance for server %s: %s" % \
                 (self.name, traceback.format_exc()))
             self.lb_conn.cleanup_start_params(self.config, start_params)
-            self.scale_manager.cleanup_start_params(self, start_params)
             return
 
-        self.scale_manager.add_endpoint_instance(self.name,
+        self.client.add_endpoint_instance(self.name,
                 self.cloud_conn.id(self.config, instance),
                 self.cloud_conn.name(self.config, instance))
 
@@ -584,7 +626,7 @@ class Endpoint(object):
 
     def instances(self, filter=True):
         cloud_instances = self.cloud_conn.list_instances(self.config)
-        endpoint_instances = self.scale_manager.endpoint_instances(self.name)
+        endpoint_instances = self.client.endpoint_instances(self.name)
         instances = []
         for instance in cloud_instances:
             if self.cloud_conn.id(self.config, instance) in endpoint_instances:
@@ -602,7 +644,7 @@ class Endpoint(object):
 
     def orphaned_instances(self):
         cloud_instances = self.cloud_conn.list_instances(self.config)
-        endpoint_instances = self.scale_manager.endpoint_instances(self.name)
+        endpoint_instances = self.client.endpoint_instances(self.name)
         instance_ids = []
         for instance in cloud_instances:
             instance_id = self.cloud_conn.id(self.config, instance)
@@ -629,33 +671,29 @@ class Endpoint(object):
             return instance_list[0]
         raise KeyError('instance with id %s not found' % (instance_id))
 
-    def update_loadbalancer(self, remove=False):
-        (ips, redirects) = self.scale_manager.collect_endpoint(self)
+    def health_check(self, confirmed_ips, active_ips):
+        """
+        Reap instances that are not responding or have been
+        decomissioned for a sufficiently long period of time.
 
-        if len(ips) > 0 or len(redirects) == 0:
-            self.lb_conn.change(self.url(), [self.name], ips,
-                    config=self.config)
-        else:
-            self.lb_conn.redirect(self.url(), [self.name], redirects[0],
-                    config=self.config)
+        Like update(), this function returns True if there is
+        a need for any loadbalancer updates after it is finished.
+        """
 
-        self.lb_conn.save()
+        rv = False
 
-    def health_check(self, active_ips):
         instances = self.instances(filter=False)
+        confirmed_ips = set(confirmed_ips)
         instance_ids = map(lambda x: self.cloud_conn.id(self.config, x), instances)
 
         # Mark sure that the manager does not contain any scale data, which
         # may result in some false metric data and clogging up Zookeeper.
-        for instance_id in self.scale_manager.marked_instances(self.name):
+        for instance_id in self.client.marked_instances(self.name):
             if not(instance_id in instance_ids):
-                self.scale_manager.drop_marked_instance(self.name, instance_id)
-        for instance_id in self.scale_manager.decommissioned_instances(self.name):
+                self.client.drop_marked_instance(self.name, instance_id)
+        for instance_id in self.client.decommissioned_instances(self.name):
             if not(instance_id in instance_ids):
-                self.scale_manager.drop_decommissioned_instance(self.name, instance_id)
-
-        # Check if any expected machines have failed to come up and confirm their IP address.
-        confirmed_ips = set(self.scale_manager.confirmed_ips(self.name))
+                self.client.drop_decommissioned_instance(self.name, instance_id)
 
         # There are the confirmed ips that are actually associated with an
         # instance. Other confirmed ones will need to be dropped because the
@@ -675,7 +713,7 @@ class Endpoint(object):
                not instance_id in self.decommissioned_instances:
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
-                if self.scale_manager.mark_instance(self.name, instance_id, 'unregistered'):
+                if self.client.mark_instance(self.name, instance_id, 'unregistered', self.config.marks):
                     # This instance has been deemed to be dead and should be cleaned up.
                     # We don't decomission it because we have never heard from it in the
                     # first place. So there's no sense in decomissioning it.
@@ -698,16 +736,16 @@ class Endpoint(object):
             logging.info("Dropping ips %s for endpoint %s because they do not have"
                          " backing instances." % (orphaned_confirmed_ips, self.name))
             for orphaned_address in orphaned_confirmed_ips:
-                self.scale_manager.drop_ip(self.name, orphaned_address)
-            self.update_loadbalancer()
+                self.client.drop_ip(self.name, orphaned_address)
+            rv = True
 
         # Clean up any instances which don't exist any more.
         for instance_id in self.orphaned_instances():
             logging.info("Cleaning up disappeared instance %s" % instance_id)
-            instance_name = self.scale_manager.get_endpoint_instance(self.name, instance_id)
+            instance_name = self.client.get_endpoint_instance(self.name, instance_id)
             if instance_name:
                 self.lb_conn.cleanup(self.config, instance_name)
-            self.scale_manager.delete_endpoint_instance(self.name, instance_id)
+            self.client.delete_endpoint_instance(self.name, instance_id)
 
         # See if there are any decommissioned instances that are now inactive.
         decommissioned_instance_ids = copy.copy(self.decommissioned_instances)
@@ -716,11 +754,25 @@ class Endpoint(object):
 
         for inactive_instance_id in inactive_instance_ids:
             if inactive_instance_id in decommissioned_instance_ids:
-                if self.scale_manager.mark_instance(self.name,
-                                                    inactive_instance_id,
-                                                    'decommissioned'):
+                if self.client.mark_instance(self.name,
+                                             inactive_instance_id,
+                                             'decommissioned',
+                                             self.config.marks):
                         instance = self.instance_by_id(instances, inactive_instance_id)
                         self._delete_instance(instance)
+
+        return rv
+
+    def update_loadbalancer(self, ips=None, redirects=None):
+        if ips is None:
+            ips = []
+        if redirects is None:
+            redirects = []
+        if len(ips) > 0 or len(redirects) == 0:
+            self.lb_conn.change(self.url(), [self.name], ips, config=self.config)
+        else:
+            self.lb_conn.redirect(self.url(), [self.name], redirects[0], config=self.config)
+        self.lb_conn.save()
 
     # The following two methods are for advisory purposes only.
     def ip_confirmed(self, ip):

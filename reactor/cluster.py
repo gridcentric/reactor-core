@@ -26,30 +26,17 @@ class ClusterScaleManager(ScaleManager):
         names = ips.find_global()
         ScaleManager.__init__(self, client, names)
 
-    def start_params(self, endpoint=None):
-        # Pass a parameter pointed back to this instance.
-        params = super(ClusterScaleManager, self).start_params(endpoint=endpoint)
-        params.update({ "reactor": ips.find_global()[0] })
-        return params
-
     @locked
-    def setup_iptables(self, managers):
-        if managers is None:
-            return
-        hosts = []
-        hosts.extend(managers)
-        for host in self.client.zk_servers:
-            if not(host) in hosts:
-                hosts.append(host)
-        iptables.setup(hosts, extra_ports=[8080])
-
-    def serve(self):
-        # Perform normal setup.
-        super(ClusterScaleManager, self).serve()
-
-        # Make sure we've got our IPtables rocking.
-        self.setup_iptables(self.client.zk_conn.watch_children(
-            paths.manager_configs(), self.setup_iptables))
+    def _setup_cloud_connections(self, config):
+        # We automatically insert the address into all available
+        # cloud configurations. This absolutely requires the cloud
+        # configuration to support an address key for the manager,
+        # but we can address that on a case-by-case basis for now.
+        ScaleManager._setup_cloud_connections(self, config)
+        for cloud in self.clouds.values():
+            config = cloud._manager_config()
+            if hasattr(config, 'reactor'):
+                config.reactor = ips.find_global()[0]
 
 class ClusterApi(ReactorApiExtension):
 
@@ -65,8 +52,9 @@ class ClusterApi(ReactorApiExtension):
         api.config.add_route('api-servers', '/api_servers')
         api.config.add_view(self.set_api_servers, route_name='api-servers')
 
-        # Check the endpoint.
-        self.check(api.client.zk_servers)
+        # Check that everything is up and running.
+        self.check_zookeeper(api.client.zk_servers)
+        self.check_manager(api.client.zk_servers)
 
     @connected
     @authorized_admin_only
@@ -78,8 +66,9 @@ class ClusterApi(ReactorApiExtension):
             # Change the used set of API servers.
             logging.info("Updating API Servers.")
             api_servers = json.loads(request.body)['api_servers']
-            self.check(api_servers)
+            self.check_zookeeper(api_servers)
             self.api.client._reconnect(api_servers)
+            self.check_manager(api_servers)
             return Response()
 
         elif request.method == 'GET':
@@ -90,10 +79,14 @@ class ClusterApi(ReactorApiExtension):
             return Response(status=403)
 
     def start_manager(self, zk_servers):
-        zk_servers.sort()
-        self.api.client.zk_servers.sort()
-        if self.api.client.zk_servers != zk_servers:
-            self.stop_manager()
+        if self.manager:
+            zk_servers.sort()
+            self.manager.client.zk_servers.sort()
+            if self.manager.client.zk_servers != zk_servers:
+                # If we've changed Zookeeper servers, then
+                # we have to stop the manager and restart
+                # to ensure that it's using the full cluster.
+                self.stop_manager()
 
         def manager_run():
             try:
@@ -115,19 +108,35 @@ class ClusterApi(ReactorApiExtension):
             self.manager_thread.join()
             self.manager_running = False
 
-    def check(self, zk_servers):
+    def setup_iptables(self, managers, zk_servers=None):
+        if zk_servers is None:
+            # Use the currently active zookeeper servers.
+            zk_servers = self.api.client.zk_servers
+        hosts = list(set(managers + zk_servers))
+        iptables.setup(hosts, extra_ports=[8080])
+
+    def check_zookeeper(self, zk_servers):
         is_local = ips.any_local(zk_servers)
 
         if not(is_local):
             # Ensure that Zookeeper is stopped.
             config.ensure_stopped()
             config.check_config(zk_servers)
-
         else:
             # Ensure that Zookeeper is started.
             logging.info("Starting Zookeeper.")
             config.check_config(zk_servers)
             config.ensure_started()
+
+    def check_manager(self, zk_servers):
+        # We need to start listening for changes to the available
+        # manager. If the user creates a new configuration for manager
+        # that is not inside the cluster, we have to respond by opening
+        # up iptables rules appropriately so that it can connect.
+        self.setup_iptables(
+            self.api.client.zk_conn.watch_children(
+                paths.manager_configs(), self.setup_iptables),
+            zk_servers=zk_servers)
 
         # NOTE: We now *always* start the manager. We rely on the user to
         # actually deactivate it or set the number of keys appropriately when

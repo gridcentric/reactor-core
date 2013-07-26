@@ -9,6 +9,12 @@ import novaclient.exceptions
 from reactor.config import Config
 from reactor.cloud.connection import CloudConnection
 
+class BaseOsManagerConfig(Config):
+
+    reactor = Config.string(label="Reactor address",
+        default="localhost", order=0,
+        description="Used internally by Reactor.")
+
 class BaseOsEndpointConfig(Config):
 
     # Cached client.
@@ -78,6 +84,7 @@ class BaseOsEndpointConfig(Config):
 
 class BaseOsConnection(CloudConnection):
 
+    _MANAGER_CONFIG_CLASS = BaseOsManagerConfig
     _ENDPOINT_CONFIG_CLASS = BaseOsEndpointConfig
 
     def id(self, config, instance):
@@ -125,6 +132,8 @@ class BaseOsConnection(CloudConnection):
         Starts a new instance in the cloud using the endpoint.
         """
         try:
+            # Inject the manager parameters.
+            params.update({ "reactor" : self._manager_config().address })
             return self._start_instance(config, params=params)
         except HTTPException, e:
             traceback.print_exc()

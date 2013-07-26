@@ -1,6 +1,7 @@
 import binascii
 import json
 import array
+import logging
 
 from reactor.endpoint import EndpointConfig
 from reactor.zookeeper.connection import ZookeeperConnection
@@ -55,7 +56,7 @@ class ReactorClient(object):
     def endpoint_list(self):
         return self.zk_conn.list_children(paths.endpoints())
 
-    def endpoint_manage(self, endpoint_name, config):
+    def endpoint_manage(self, endpoint_name, config=""):
         self.zk_conn.write(paths.endpoint(endpoint_name), config)
 
     def endpoint_unmanage(self, endpoint_name):
@@ -123,7 +124,7 @@ class ReactorClient(object):
         """
         ip_addresses = []
         confirmed_ips = self.zk_conn.list_children(\
-            paths.confirmed_ips(endpoint_name))
+            paths.endpoint_confirmed_ips(endpoint_name))
         if confirmed_ips != None:
             ip_addresses += confirmed_ips
 
@@ -149,7 +150,6 @@ class ReactorClient(object):
                            binascii.hexlify(data))
 
     def ip_address_record(self, ip_address):
-        self.zk_conn.delete(paths.new_ip(ip_address))
         self.zk_conn.write(paths.new_ip(ip_address), "")
 
     def ip_address_drop(self, ip_address):
@@ -169,6 +169,103 @@ class ReactorClient(object):
             self.zk_conn.write(paths.auth_hash(), auth_hash)
         else:
             self.zk_conn.delete(paths.auth_hash())
+
+    def endpoint_instances(self, endpoint_name):
+        """ Return a list of all endpoint instances. """
+        instances = self.zk_conn.list_children(paths.endpoint_instances(endpoint_name))
+        if instances == None:
+            instances = []
+        return instances
+
+    def add_endpoint_instance(self, endpoint_name, instance_id, data=''):
+        self.zk_conn.write(paths.endpoint_instance(endpoint_name, instance_id), data)
+
+    def get_endpoint_instance(self, endpoint_name, instance_id):
+        return self.zk_conn.read(paths.endpoint_instance(endpoint_name, instance_id))
+
+    def delete_endpoint_instance(self, endpoint_name, instance_id):
+        self.zk_conn.delete(paths.endpoint_instance(endpoint_name, instance_id))
+
+    def drop_marked_instance(self, endpoint_name, instance_id):
+        """ Delete the marked instance data. """
+        self.zk_conn.delete(paths.endpoint_marked_instance(endpoint_name, instance_id))
+
+    def decommission_instance(self, endpoint_name, instance_id, ip_addresses):
+        """ Mark the instance id as being decommissioned. """
+        self.zk_conn.write(paths.endpoint_decommissioned_instance(endpoint_name, instance_id),
+                           json.dumps(ip_addresses))
+
+    def decommissioned_instance_ip_addresses(self, endpoint_name, instance_id):
+        """ Return the ip address of a decommissioned instance. """
+        ip_addresses = self.zk_conn.read(
+            paths.endpoint_decommissioned_instance(endpoint_name, instance_id))
+        if ip_addresses != None:
+            ip_addresses = json.loads(ip_addresses)
+            if type(ip_addresses) == str:
+                ip_addresses = [ip_addresses]
+        else:
+            ip_addresses = []
+        return ip_addresses
+
+    def drop_decommissioned_instance(self, endpoint_name, instance_id):
+        """ Delete the decommissioned instance. """
+        ip_addresses = self.decommissioned_instance_ip_addresses(endpoint_name, instance_id)
+        self.zk_conn.delete(paths.endpoint_decommissioned_instance(endpoint_name, instance_id))
+        for ip_address in ip_addresses:
+            self.ip_address_drop(ip_address)
+
+    def recommission_instance(self, endpoint_name, instance_id):
+        """ Mark the instance id as being recommissioned. """
+        # Re-register all associated IPs.
+        ips = self.decommissioned_instance_ip_addresses(endpoint_name, instance_id)
+        for ip in ips:
+            self.ip_address_record(ip)
+
+        # Delete decommissioned instance path and marked data.
+        self.zk_conn.delete(paths.endpoint_decommissioned_instance(endpoint_name,
+                            instance_id))
+        self.drop_marked_instance(endpoint_name, instance_id)
+
+    def decommissioned_instances(self, endpoint_name):
+        """ Return a list of all the decommissioned instances. """
+        decommissioned_instances = self.zk_conn.list_children(\
+            paths.endpoint_decommissioned_instances(endpoint_name))
+        if decommissioned_instances == None:
+            decommissioned_instances = []
+        return decommissioned_instances
+
+    def marked_instances(self, endpoint):
+        """ Return a list of all the marked instances. """
+        marked_instances = self.zk_conn.list_children(paths.endpoint_marked_instances(endpoint))
+        if marked_instances == None:
+            marked_instances = []
+        return marked_instances
+
+    def mark_instance(self, endpoint_name, instance_id, label, marks):
+        # Increment the mark counter.
+        remove_instance = False
+        mark_counters = self.zk_conn.read(paths.endpoint_marked_instance(endpoint_name, instance_id), '{}')
+        mark_counters = json.loads(mark_counters)
+        mark_counter = mark_counters.get(label, 0)
+        mark_counter += 1
+
+        if mark_counter >= marks:
+            # This instance has been marked too many times. There is likely
+            # something really wrong with it, so we'll clean it up.
+            logging.warning("Instance %s for endpoint %s has been marked too many times and"
+                            " will be removed. (count=%s)" % (instance_id, endpoint_name, mark_counter))
+            remove_instance = True
+            self.zk_conn.delete(paths.endpoint_marked_instance(endpoint_name, instance_id))
+
+        else:
+            # Just save the mark counter.
+            logging.info("Instance %s for endpoint %s has been marked (count=%s)" %
+                         (instance_id, endpoint_name, mark_counter))
+            mark_counters[label] = mark_counter
+            self.zk_conn.write(paths.endpoint_marked_instance(endpoint_name, instance_id),
+                               json.dumps(mark_counters), ephemeral=True)
+
+        return remove_instance
 
     def session_list(self, endpoint_name):
         """ Return a mapping of endpoint sessions. """
