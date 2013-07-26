@@ -155,7 +155,7 @@ class ScaleManager(object):
         self.manager_register()
 
         # Read and listen to the global URL.
-        self.url_change(self.client.zk_conn.watch_content(paths.url(), self.url_change))
+        self.url_change(self.client.zk_conn.watch_contents(paths.url(), self.url_change))
 
         # Watch all managers and endpoints.
         self.manager_change(self.client.zk_conn.watch_children(paths.managers(), self.manager_change))
