@@ -72,7 +72,9 @@ def loadbalancer(request):
 def client(request):
     """ A reactor client. """
     from reactor.zooclient import ReactorClient
-    return ReactorClient(zk_servers=["mock"])
+    c = ReactorClient(zk_servers=["mock"])
+    c._connect()
+    return c
 
 @fixture
 def scale_managers(request, n=5):

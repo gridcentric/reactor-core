@@ -92,7 +92,7 @@ def connected(request_handler):
     def try_once(*args, **kwargs):
         self = args[0]
         try:
-            self.ensure_connected()
+            self.connect()
             return request_handler(*args, **kwargs)
         except ZookeeperException:
             # Disconnect (next request will reconnect).
@@ -206,9 +206,8 @@ class ReactorApi(object):
     def disconnect(self):
         self.client._disconnect()
 
-    def ensure_connected(self):
-        if not(self.client._connected()):
-            self.client._connect()
+    def connect(self):
+        self.client._connect()
 
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()

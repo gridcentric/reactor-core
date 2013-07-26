@@ -22,7 +22,8 @@ class ReactorClient(object):
             zk_servers = self.zk_servers
         else:
             self.zk_servers = zk_servers
-        self.zk_conn = ZookeeperConnection(zk_servers)
+        if self.zk_conn is None:
+            self.zk_conn = ZookeeperConnection(zk_servers)
 
     def _disconnect(self):
         if self.zk_conn:
