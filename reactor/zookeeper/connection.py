@@ -157,7 +157,7 @@ class ZookeeperConnection(object):
         already exists.)
         """
 
-        if not(path) or not(contents):
+        if not(path) or contents is None:
             raise zookeeper.BadArgumentsException("Invalid path/contents: %s/%s" % (path, contents))
 
         while True:
