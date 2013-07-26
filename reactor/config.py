@@ -5,7 +5,7 @@ from StringIO import StringIO
 from collections import namedtuple
 
 ConfigSpec = namedtuple("ConfigSpec", \
-    ["type",
+    ["typ",
      "label",
      "default",
      "options",
@@ -68,7 +68,7 @@ class Config(object):
                     if spec.normalize:
                         value = spec.normalize(value)
                     self._set(k,
-                              typ=spec.type,
+                              typ=spec.typ,
                               label=spec.label,
                               value=value,
                               default=spec.default,
@@ -205,7 +205,7 @@ class Config(object):
 
     def _set(self, key, typ, label, value, default, options, order, description):
         self._get_obj(key).update([
-            ("type", typ),
+            ("typ", typ),
             ("label", label),
             ("default", default),
             ("options", options),

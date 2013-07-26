@@ -224,7 +224,7 @@ function readConfig(context) {
                 return true;
             }
 
-            switch (config["type"]) {
+            switch (config["typ"]) {
             case "boolean":
                 val = config["ref"].prop("checked");
                 break;
@@ -553,7 +553,7 @@ function generateSingleConfig(root, config_name, config)
     config["present"] = ("value" in config);
 
     // Perform any type-specific setup for the variable.
-    switch (config["type"]) {
+    switch (config["typ"]) {
     case "list":
         input_elt = $("#conf-input-list").clone().appendTo(slot);
         if (config["present"]) {
