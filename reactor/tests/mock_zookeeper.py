@@ -47,7 +47,7 @@ class BadArgumentsException(Exception):
 # Our pending list of tasks.
 TASKS = Queue.Queue()
 
-def _task_run():
+def _task_run(fn, *args, **kwargs):
     # Submit the task.
     TASKS.put((fn, args, kwargs))
 
