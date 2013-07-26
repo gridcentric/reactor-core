@@ -108,6 +108,7 @@ class Cluster(ReactorApiExtension):
             config.check_config(zk_servers)
             config.ensure_started()
 
+    @connected
     def check_manager(self, zk_servers):
         # We need to start listening for changes to the available
         # manager. If the user creates a new configuration for manager
