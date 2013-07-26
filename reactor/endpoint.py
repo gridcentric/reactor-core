@@ -120,7 +120,6 @@ class EndpointConfig(Config):
         Config._validate(self)
         ScalingConfig(obj=self)._validate()
         if self.loadbalancer:
-            print self.loadbalancer
             if not self.loadbalancer in loadbalancer_submodules():
                 self._add_error('loadbalancer', 'Unknown loadbalancer.')
             else:
