@@ -390,8 +390,6 @@ def main():
 
         elif command == "runapi":
 
-            log.configure(loglevel, logfile)
-
             api = get_api()
             app = api.get_wsgi_app()
 
