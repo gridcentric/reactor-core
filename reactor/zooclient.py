@@ -13,7 +13,6 @@ class ReactorClient(object):
     def __init__(self, zk_servers):
         self.zk_conn = None
         self.zk_servers = zk_servers
-        self._connect()
 
     def __del__(self):
         self._disconnect()
@@ -266,6 +265,15 @@ class ReactorClient(object):
                                json.dumps(mark_counters), ephemeral=True)
 
         return remove_instance
+
+    def url(self):
+        return self.zk_conn.read(paths.url())
+
+    def url_set(self, url):
+        if url:
+            self.zk_conn.write(paths.url(), url)
+        else:
+            self.zk_conn.delete(paths.url())
 
     def session_list(self, endpoint_name):
         """ Return a mapping of endpoint sessions. """

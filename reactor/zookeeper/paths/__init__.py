@@ -6,6 +6,7 @@ This defines the various paths used in zookeeper.
 ROOT = "/reactor"
 
 from auth import *
+from url import *
 from endpoints import *
 from instances import *
 from ip_addresses import *

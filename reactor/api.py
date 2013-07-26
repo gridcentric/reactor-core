@@ -134,6 +134,9 @@ class ReactorApi(object):
         self._add('domain-action', ['1.0'],
                   'domain', self.handle_domain_action)
 
+        self._add('url', ['1.1'],
+                  'url', self.handle_url_action)
+
         self._add('register-implicit', ['1.0', '1.1'],
                   'register', self.register_ip_implicit)
 
@@ -356,6 +359,19 @@ class ReactorApi(object):
         """
         if request.method == "GET":
             return Response(body=json.dumps({'domain':None}))
+        else:
+            return Response(status=403)
+
+    @connected
+    @authorized_admin_only
+    def handle_url_action(self, context, request):
+        if request.method == "GET":
+            url = self.client.url()
+            return Response(body=json.dumps({'url': url}))
+        elif request.method == "POST":
+            url = json.loads(request.body).get('url', '')
+            self.client.url_set(url)
+            return Response()
         else:
             return Response(status=403)
 
@@ -654,7 +670,7 @@ class ReactorApi(object):
 
 class ReactorApiExtension(object):
     """
-    This class can be used to wrap an API instance in order to
+    This class can be used to extend a API instance in order to
     provide additional functionality. It works as follows:
 
     * A class inherits from ReactorApiExtension.

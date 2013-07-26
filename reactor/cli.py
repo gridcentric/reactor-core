@@ -60,6 +60,8 @@ def usage():
     print "Commands:"
     print "    version                Get the server API version."
     print ""
+    print "    url                    Get the server API url."
+    print ""
     print "    list                   List all the endpoints currently being managed."
     print ""
     print "    manage <endpoint>      Manage or update a serivce with the given name."
@@ -228,14 +230,22 @@ def main():
             from reactor.gui import ReactorGui
             api = ReactorGui(api)
         if cluster:
-            from reactor.cluster import ClusterApi
-            api = ClusterApi(api)
+            from reactor.cluster import Cluster
+            api = Cluster(api)
         return api
 
     try:
         if command == "version":
             api_client = get_api_client()
             print api_client.version()
+
+        elif command == "url":
+            api_client = get_api_client()
+            if len(args) > 1:
+                new_url = get_arg(1)
+                api_client.url_set(new_url)
+            else:
+                print api_client.url()
 
         elif command == "list":
             api_client = get_api_client()
