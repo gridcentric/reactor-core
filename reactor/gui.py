@@ -19,39 +19,39 @@ from reactor.manager import ManagerConfig
 
 class ReactorGui(ReactorApiExtension):
 
-    def __init__(self, api):
-        ReactorApiExtension.__init__(self, api)
+    def __init__(self, *args, **kwargs):
+        super(ReactorGui, self).__init__(*args, **kwargs)
 
-        api.config.add_route('endpoint-info', '/endpoint')
-        api.config.add_view(self.endpoint_info, route_name='endpoint-info')
+        self.api.config.add_route('endpoint-info', '/endpoint')
+        self.api.config.add_view(self.endpoint_info, route_name='endpoint-info')
 
-        api.config.add_route('manager-info', '/manager')
-        api.config.add_view(self.manager_info, route_name='manager-info')
+        self.api.config.add_route('manager-info', '/manager')
+        self.api.config.add_view(self.manager_info, route_name='manager-info')
 
         # Add a login page.
-        api.config.add_route('admin-login', '/admin/login')
-        api.config.add_view(self.admin_login, route_name='admin-login')
+        self.api.config.add_route('admin-login', '/admin/login')
+        self.api.config.add_view(self.admin_login, route_name='admin-login')
 
         # Add a logout page.
-        api.config.add_route('admin-logout', '/admin/logout')
-        api.config.add_view(self.admin_logout, route_name='admin-logout')
+        self.api.config.add_route('admin-logout', '/admin/logout')
+        self.api.config.add_view(self.admin_logout, route_name='admin-logout')
 
         # Note: views are routed on a first-matched basis, so the ordering
         # of the following add_route calls are important since fetches to
         # /admin/assets could be matched by either the admin-asset or
         # admin-object routes (and we want them to go to admin-asset,
         # so that they can be fetched even in unathenticated contexts).
-        api.config.add_route('admin-home', '/admin/')
-        api.config.add_route('admin-passwd', '/admin/passwd')
-        api.config.add_route('admin-asset', '/admin/assets/{object_name:.*}')
-        api.config.add_route('admin-page', '/admin/{page_name}')
-        api.config.add_route('admin-object', '/admin/{page_name}/{object_name:.*}')
-        api.config.add_view(self.admin, route_name='admin-home')
-        api.config.add_view(self.admin_passwd, route_name='admin-passwd')
-        api.config.add_view(self.admin_asset, route_name='admin-asset')
-        api.config.add_view(self.admin, route_name='admin-page')
-        api.config.add_view(self.admin, route_name='admin-object')
-        api.config.add_view(context='pyramid.exceptions.NotFound',
+        self.api.config.add_route('admin-home', '/admin/')
+        self.api.config.add_route('admin-passwd', '/admin/passwd')
+        self.api.config.add_route('admin-asset', '/admin/assets/{object_name:.*}')
+        self.api.config.add_route('admin-page', '/admin/{page_name}')
+        self.api.config.add_route('admin-object', '/admin/{page_name}/{object_name:.*}')
+        self.api.config.add_view(self.admin, route_name='admin-home')
+        self.api.config.add_view(self.admin_passwd, route_name='admin-passwd')
+        self.api.config.add_view(self.admin_asset, route_name='admin-asset')
+        self.api.config.add_view(self.admin, route_name='admin-page')
+        self.api.config.add_view(self.admin, route_name='admin-object')
+        self.api.config.add_view(context='pyramid.exceptions.NotFound',
                 view='pyramid.view.append_slash_notfound_view')
 
     @connected

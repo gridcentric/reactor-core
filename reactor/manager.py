@@ -10,6 +10,8 @@ import socket
 import array
 from StringIO import StringIO
 
+import reactor.ips as ips
+
 from reactor.config import Config
 from reactor.config import fromini
 
@@ -73,10 +75,11 @@ class ManagerConfig(Config):
 
 def locked(fn):
     """
-    IMPORTANT: There is a potential deadlock if the manager is locked when setting / clearing
-    a zookeeper watch. Our policy is that the manager cannot be locked when it makes a call
-    to one of the zookeeper client's watch functions. Note to check the full call chain to
-    ensure that a higher level function is not setting the lock.
+    IMPORTANT: There is a potential deadlock if the manager is locked when
+    setting / clearing a zookeeper watch. Our policy is that the manager cannot
+    be locked when it makes a call to one of the zookeeper client's watch
+    functions. Note to check the full call chain to ensure that a higher level
+    function is not setting the lock.
     """
     def wrapped_fn(self, *args, **kwargs):
         try:
@@ -90,11 +93,16 @@ def locked(fn):
 
 class ScaleManager(object):
 
-    def __init__(self, zk_servers, names=[]):
+    def __init__(self, zk_servers, names=None):
         self.client = ReactorClient(zk_servers)
 
-        self.names   = names
-        self.running = False
+        if names is None:
+            self.names = ips.find_global()
+        else:
+            self.names = names
+
+        self.url     = None
+        self.running = True
         self.cond    = threading.Condition()
         self.uuid    = str(uuid.uuid4()) # Manager uuid (generated).
 
@@ -135,11 +143,19 @@ class ScaleManager(object):
         logger.addHandler(handler)
         return log_buffer
 
+    @locked
+    def url_change(self):
+        self.url = url
+        self._setup_cloud_connections()
+
     def serve(self):
         self._reconnect()
 
         # Load our configuration and register ourselves.
         self.manager_register()
+
+        # Read and listen to the global URL.
+        self.url_change(self.client.zk_conn.watch_content(paths.url(), self.url_change))
 
         # Watch all managers and endpoints.
         self.manager_change(self.client.zk_conn.watch_children(paths.managers(), self.manager_change))
@@ -333,6 +349,15 @@ class ScaleManager(object):
             self.clouds[name] = \
                 cloud_connection.get_connection( \
                     name, config=config)
+
+        # We automatically insert the address into all available
+        # cloud configurations. This absolutely requires the cloud
+        # configuration to support an address key for the manager,
+        # but we can address that on a case-by-case basis for now.
+        for cloud in self.clouds.values():
+            config = cloud._manager_config()
+            if hasattr(config, 'reactor'):
+                config.reactor = self.url or self.names[0]
 
     @locked
     def _find_cloud_connection(self, name=None):

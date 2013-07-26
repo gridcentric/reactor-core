@@ -11,7 +11,6 @@ import reactor.ips as ips
 
 from reactor.api import connected
 from reactor.api import authorized_admin_only
-from reactor.api import ReactorApi
 from reactor.api import ReactorApiExtension
 
 from pyramid.response import Response
@@ -19,29 +18,10 @@ from pyramid.response import Response
 from reactor.manager import ScaleManager
 from reactor.manager import locked
 
-class ClusterScaleManager(ScaleManager):
+class Cluster(ReactorApiExtension):
 
-    def __init__(self, client):
-        # Grab the list of global IPs.
-        names = ips.find_global()
-        ScaleManager.__init__(self, client, names)
-
-    @locked
-    def _setup_cloud_connections(self, config):
-        # We automatically insert the address into all available
-        # cloud configurations. This absolutely requires the cloud
-        # configuration to support an address key for the manager,
-        # but we can address that on a case-by-case basis for now.
-        ScaleManager._setup_cloud_connections(self, config)
-        for cloud in self.clouds.values():
-            config = cloud._manager_config()
-            if hasattr(config, 'reactor'):
-                config.reactor = ips.find_global()[0]
-
-class ClusterApi(ReactorApiExtension):
-
-    def __init__(self, api):
-        ReactorApiExtension.__init__(self, api)
+    def __init__(self, *args, **kwargs):
+        super(Cluster, self).__init__(*args, **kwargs)
 
         # Save our manager state.
         self.manager = None
@@ -49,12 +29,12 @@ class ClusterApi(ReactorApiExtension):
         self.manager_thread = None
 
         # Add route for changing the API servers.
-        api.config.add_route('api-servers', '/api_servers')
-        api.config.add_view(self.set_api_servers, route_name='api-servers')
+        self.api.config.add_route('api-servers', '/api_servers')
+        self.api.config.add_view(self.set_api_servers, route_name='api-servers')
 
         # Check that everything is up and running.
-        self.check_zookeeper(api.client.zk_servers)
-        self.check_manager(api.client.zk_servers)
+        self.check_zookeeper(self.api.client.zk_servers)
+        self.check_manager(self.api.client.zk_servers)
 
     @connected
     @authorized_admin_only
@@ -96,7 +76,7 @@ class ClusterApi(ReactorApiExtension):
                 logging.error("An unrecoverable error occurred: %s" % error)
 
         if not(self.manager_running):
-            self.manager = ClusterScaleManager(self.api.client.zk_servers)
+            self.manager = ScaleManager(self.api.client.zk_servers)
             self.manager_thread = threading.Thread(target=manager_run)
             self.manager_thread.daemon = True
             self.manager_thread.start()

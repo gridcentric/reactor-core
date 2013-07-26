@@ -24,6 +24,20 @@ class ReactorApiClient(httplib2.Http):
         resp, body = self._authenticated_request('/', 'GET')
         return body.get('version', None)
 
+    def url(self):
+        """
+        Return the API URL.
+        """
+        resp, body = self._authenticated_request('/v1.1/url', 'GET')
+        return body.get('url', None)
+
+    def url_set(self, url):
+        """
+        Changes the API URL in the system.
+        """
+        self._authenticated_request('/v1.1/url', 'POST',
+                                    body={'url': url})
+
     def endpoint_list(self):
         """
         Returns a list of all the endpoints currently being managed by the reactor.
