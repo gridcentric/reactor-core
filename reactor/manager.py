@@ -146,16 +146,17 @@ class ScaleManager(object):
     @locked
     def url_change(self, url):
         self.url = url
-        self._setup_cloud_connections()
+
+        # Trigger a configure step to reload the loadbalancer,
+        # cloud connections, etc. This is structured this way
+        # because these connections could depend on the URL value.
+        return self._configure()
 
     def serve(self):
         self._reconnect()
 
         # Load our configuration and register ourselves.
         self.manager_register()
-
-        # Read and listen to the global URL.
-        self.url_change(self.client.zk_conn.watch_contents(paths.url(), self.url_change))
 
         # Watch all managers and endpoints.
         self.manager_change(self.client.zk_conn.watch_children(paths.managers(), self.manager_change))
@@ -368,8 +369,14 @@ class ScaleManager(object):
         # Figure out our global IPs.
         logging.info("Manager %s has key %s." % (str(self.names), self.uuid))
 
-        # Configure and load connections.
-        manager_config = self._configure(config)
+        # Read and listen to the global URL.
+        # NOTE: We get the config through the url_change mechanism
+        # as a convenience, the need the URL prior to running through
+        # the full configuration.
+        manager_config = self.url_change(
+            self.client.zk_conn.watch_contents(paths.url(), self.url_change))
+
+        # Determine keys and register.
         self._determine_manager_keys(manager_config.keys)
         self._register_manager_ips(manager_config.ips)
         self._select_endpoints()
