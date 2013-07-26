@@ -222,10 +222,8 @@ def main():
         return ReactorApiClient(api_server, password)
 
     def get_api():
-        from reactor.zooclient import ReactorClient
         from reactor.api import ReactorApi
-        client = ReactorClient(zk_servers)
-        api = ReactorApi(client)
+        api = ReactorApi(zk_servers)
         if gui:
             from reactor.gui import ReactorGui
             api = ReactorGui(api)
@@ -376,14 +374,10 @@ def main():
 
             if cluster:
                 from reactor.cluster import ClusterScaleManager
-                from reactor.zooclient import ReactorClient
-                client = ReactorClient(zk_servers)
-                manager = ClusterScaleManager(client, get_args())
+                manager = ClusterScaleManager(zk_servers, get_args())
             else:
                 from reactor.manager import ScaleManager
-                from reactor.zooclient import ReactorClient
-                client = ReactorClient(zk_servers)
-                manager = ScaleManager(client, get_args())
+                manager = ScaleManager(zk_servers, get_args())
 
             ready()
             manager.run()

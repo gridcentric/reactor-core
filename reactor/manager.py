@@ -96,8 +96,8 @@ def locked(fn):
 
 class ScaleManager(object):
 
-    def __init__(self, client, names=[]):
-        self.client = client
+    def __init__(self, zk_servers, names=[]):
+        self.client = ReactorClient(zk_servers)
 
         self.names   = names
         self.running = False

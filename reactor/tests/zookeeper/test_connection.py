@@ -3,6 +3,16 @@ import thread
 import unittest
 import mock
 
+# NOTE: We import zookeeper here, but it's going
+# to be the mock zookeeper supplied by the tests.
+import zookeeper
+
+# We import the connection module with the "real"
+# zookeeper above. However, prior to running tests,
+# we will reload the module and ensure that it is
+# using our mocked module.
+import reactor.zookeeper.connection as connection
+
 # Patch zookeeper
 class FakeZookeeperException(Exception):
     pass
@@ -23,9 +33,6 @@ mock_zookeeper_mod.ZooKeeperException  = FakeZookeeperException
 mock_zookeeper_mod.BadArgumentsException = FakeBadArgumentsException
 mock_zookeeper_mod.NodeExistsException = FakeNodeExistsException
 mock_zookeeper_mod.NoNodeException = FakeNoNodeException
-sys.modules["zookeeper"] = mock_zookeeper_mod
-
-import reactor.zookeeper.connection as connection
 
 # Fake data
 FAKE_ZK_HANDLE = 0x5a5a5a5a
@@ -68,6 +75,15 @@ def mock_zookeeper_create(throw_exception=None, num_exceptions=-1):
     return _zookeeper_create
 
 class ConnectionTests(unittest.TestCase):
+
+    def setUp(self):
+        sys.modules["zookeeper"] = mock_zookeeper_mod
+        reload(connection)
+
+    def tearDown(self):
+        sys.modules["zookeeper"] = zookeeper
+        reload(connection)
+
     def test_connect_with_bad_server_arg(self):
         with mock.patch("zookeeper.init") as mock_init:
             mock_init.side_effect = mock_zookeeper_init()
@@ -644,7 +660,7 @@ class ConnectionTests(unittest.TestCase):
             mock_fn = mock.Mock()
             conn.content_watches[FAKE_ZK_PATH] = [mock_fn]
             conn.child_watches[FAKE_ZK_PATH] = [mock_fn]
-            conn.zookeeper_watch(FAKE_ZK_HANDLE, connection.ZOO_EVENT_NONE,
+            conn.zookeeper_watch(FAKE_ZK_HANDLE, zookeeper.OK,
                     mock_zookeeper_mod.CONNECTED_STATE, FAKE_ZK_PATH)
             self.assertEquals(mock_fn.call_count, 0)
             self.assertEquals(mock_get.call_count, 0)
@@ -662,7 +678,7 @@ class ConnectionTests(unittest.TestCase):
             conn.child_watches[FAKE_ZK_PATH] = [mock_child_fn]
             mock_get.return_value = (FAKE_ZK_CONTENTS, GARBAGE)
             conn.zookeeper_watch(FAKE_ZK_HANDLE,
-                    connection.ZOO_EVENT_NODE_DATA_CHANGED,
+                    mock_zookeeper_mod.CHANGED_EVENT,
                     mock_zookeeper_mod.CONNECTED_STATE, FAKE_ZK_PATH)
             self.assertEquals(mock_content_fn.call_count, 1)
             self.assertEquals(mock_content_fn.call_args_list[0][0][0], FAKE_ZK_CONTENTS)
@@ -682,7 +698,7 @@ class ConnectionTests(unittest.TestCase):
             conn.child_watches[FAKE_ZK_PATH] = [mock_child_fn]
             mock_get_children.return_value = FAKE_ZK_CHILDREN
             conn.zookeeper_watch(FAKE_ZK_HANDLE,
-                    connection.ZOO_EVENT_NODE_CHILDREN_CHANGED,
+                    mock_zookeeper_mod.CHILD_EVENT,
                     mock_zookeeper_mod.CONNECTED_STATE, FAKE_ZK_PATH)
             self.assertEquals(mock_content_fn.call_count, 0)
             self.assertEquals(mock_child_fn.call_count, 1)
