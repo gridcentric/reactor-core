@@ -5,7 +5,7 @@ from StringIO import StringIO
 from collections import namedtuple
 
 ConfigSpec = namedtuple("ConfigSpec", \
-    ["typ",
+    ["type",
      "label",
      "default",
      "options",
@@ -68,7 +68,7 @@ class Config(object):
                     if spec.normalize:
                         value = spec.normalize(value)
                     self._set(k,
-                              typ=spec.typ,
+                              type=spec.type,
                               label=spec.label,
                               value=value,
                               default=spec.default,
@@ -203,9 +203,9 @@ class Config(object):
     def _get(self, key, default):
         return self._get_obj(key).get("value", default)
 
-    def _set(self, key, typ, label, value, default, options, order, description):
+    def _set(self, key, type, label, value, default, options, order, description):
         self._get_obj(key).update([
-            ("typ", typ),
+            ("type", type),
             ("label", label),
             ("default", default),
             ("options", options),
@@ -225,7 +225,7 @@ class Config(object):
                 validate=None,
                 description="No description.",
                 alternates=None):
-        return ConfigSpec(typ="integer",
+        return ConfigSpec(type="integer",
                           label=label,
                           default=default,
                           options=None,
@@ -242,7 +242,7 @@ class Config(object):
                validate=None,
                description="No description.",
                alternates=None):
-        return ConfigSpec(typ="string",
+        return ConfigSpec(type="string",
                           label=label,
                           default=default,
                           options=None,
@@ -265,7 +265,7 @@ class Config(object):
             elif type(value) == bool:
                 return value
             return False
-        return ConfigSpec(typ="boolean",
+        return ConfigSpec(type="boolean",
                           label=label,
                           default=default,
                           options=None,
@@ -292,7 +292,7 @@ class Config(object):
             elif type(value) == list:
                 return value
             return []
-        return ConfigSpec(typ="list",
+        return ConfigSpec(type="list",
                           label=label,
                           default=default,
                           options=None,
@@ -309,7 +309,7 @@ class Config(object):
                order=1, validate=None, description="No description.", alternates=None):
         if options is None:
             options = []
-        return ConfigSpec(typ="select",
+        return ConfigSpec(type="select",
                           label=label,
                           default=default,
                           options=options,
@@ -339,7 +339,7 @@ class Config(object):
             elif type(value) == list:
                 return value
             return []
-        return ConfigSpec(typ="multiselect",
+        return ConfigSpec(type="multiselect",
                           label=label,
                           default=default,
                           options=options,
