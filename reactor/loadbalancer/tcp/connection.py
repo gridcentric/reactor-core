@@ -7,10 +7,11 @@ import threading
 import Queue
 import random
 import select
+import logging
 
 from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
-from reactor.loadbalancer.netstat import connection_count
+import reactor.loadbalancer.netstat as netstat
 
 def close_fds(except_fds=[]):
     try:
@@ -38,17 +39,22 @@ def fork_and_exec(cmd, child_fds=[]):
         # Close writing end of the pipe.
         os.close(w)
         
-        # Get a file object for the read end.
-        r_obj = os.fdopen(r, "r")
-
         # Wait for the child to exit.
         while True:
             (rpid, status) = os.waitpid(pid, 0)
             if rpid == pid:
-                # Read grandchild PID from pipe and close it.
-                child = int(r_obj.readline())
-                r_obj.close()
-                return child
+                if os.WEXITSTATUS(status) > 0:
+                    # Something went wrong, clean up.
+                    os.close(r)
+                    return None
+                else:
+                    # Get a file object for the read end.
+                    r_obj = os.fdopen(r, "r")
+
+                    # Read grandchild PID from pipe and close it.
+                    child = int(r_obj.readline())
+                    r_obj.close()
+                    return child
 
     # Close off all parent FDs.
     close_fds(except_fds=child_fds + [w])
@@ -73,6 +79,9 @@ def fork_and_exec(cmd, child_fds=[]):
     # Exec the given command.
     os.execvp(cmd[0], cmd)
 
+def _as_client(src_ip, src_port):
+    return "%s:%d" % (src_ip, src_port)
+
 class Accept(object):
 
     def __init__(self, sock):
@@ -88,7 +97,10 @@ class Accept(object):
 
     def drop(self):
         if self.fd is not None:
-            os.close(self.fd)
+            try:
+                os.close(self.fd)
+            except IOError:
+                logging.error("Dropping connection from %s: bad FD %d" % (_as_client(*(self.src)), self.fd))
             self.fd = None
 
     def redirect(self, host, port):
@@ -99,8 +111,9 @@ class Accept(object):
                 "tcp-connect:%s:%d" % (host, port)
             ]
             child = fork_and_exec(cmd, child_fds=[self.fd])
-            os.close(self.fd)
-            self.fd = None
+            if child:
+                os.close(self.fd)
+                self.fd = None
             return child
 
 class ConnectionConsumer(threading.Thread):
@@ -152,10 +165,10 @@ class ConnectionConsumer(threading.Thread):
             # Either redirect or drop the connection.
             if ip:
                 child = connection.redirect(ip, ipmap[ip])
-                self.children[child] = [ip, connection]
-                return True
-            else:
-                return False
+                if child:
+                    self.children[child] = [ip, connection]
+                    return True
+            return False
         finally:
             self.cond.release()
 
@@ -219,9 +232,6 @@ class ConnectionConsumer(threading.Thread):
                 del self.children[child]
         self.cond.release()
 
-    def _as_client(self, src_ip, src_port):
-        return "%s:%d" % (src_ip, src_port)
-
     def sessions(self):
         session_map = {}
         for (ip, conn) in self.children.values():
@@ -230,7 +240,7 @@ class ConnectionConsumer(threading.Thread):
             # This matters for below, where we must match
             # in order to drop the session.
             ip_sessions = session_map.get(ip, [])
-            ip_sessions.append(self._as_client(src_ip, src_port))
+            ip_sessions.append(_as_client(src_ip, src_port))
             session_map[ip] = ip_sessions
         return session_map
 
@@ -239,7 +249,7 @@ class ConnectionConsumer(threading.Thread):
         for child in self.children.keys():
             (ip, conn) = self.children[child]
             (src_ip, src_port) = conn.src
-            if client == self._as_client(src_ip, src_port) and backend == ip:
+            if client == _as_client(src_ip, src_port) and backend == ip:
                 try:
                     os.kill(child, signal.SIGTERM)
                 except:
@@ -254,7 +264,6 @@ class ConnectionProducer(threading.Thread):
         self.pending = Queue.Queue()
         self.sockets = {}
         self.filemap = {}
-        self.portmap = {}
         self.cond = threading.Condition()
         self.set()
 
@@ -269,22 +278,28 @@ class ConnectionProducer(threading.Thread):
                 if not(self.sockets.has_key(port)):
                     sock = socket.socket()
                     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    sock.bind(("", port))
+                    try:
+                        sock.bind(("", port))
+                    except IOError as ioe:
+                        # Can't bind this port (likely already in use), so skip it.
+                        logging.warning("Can't bind port %d: %s" % (port, ioe.strerror))
+                        continue
                     sock.listen(10)
                     self.sockets[port] = sock
                     self.filemap[sock.fileno()] = sock
-                    self.portmap[sock.fileno()] = port
+
             ports_to_delete = []
             for port in self.sockets:
                 if not(port in ports):
                     sock = self.sockets[port]
                     del self.filemap[sock.fileno()]
-                    del self.portmap[sock.fileno()]
                     sock.close()
                     ports_to_delete.append(port)
+
             # Clean old ports out after iterating.
             for port in ports_to_delete:
                 del self.sockets[port]
+
             self._update_epoll()
         finally:
             self.cond.release()
@@ -302,6 +317,9 @@ class ConnectionProducer(threading.Thread):
             return None
 
     def push(self, connection):
+        if not connection:
+            raise ValueError("Cannot push None")
+
         # Push back a connection.
         self.pending.put(connection)
 
@@ -328,11 +346,11 @@ class ConnectionProducer(threading.Thread):
             self.cond.acquire()
             for fileno, event in events:
                 if not(fileno in self.filemap):
-                    # Stale connection.
+                    # Stale connection. Update epoll.
+                    self._update_epoll()
                     continue
 
                 sock = self.filemap[fileno]
-                port = self.portmap[fileno]
 
                 # Create a new connection object.
                 connection = Accept(sock)
@@ -362,8 +380,7 @@ class Connection(LoadBalancerConnection):
     def __init__(self, **kwargs):
         LoadBalancerConnection.__init__(self, **kwargs)
         self.portmap = {}
-        self.tracked = {}
-        self.active = {}
+        self.active = set()
         self.standby = {}
 
         self.producer = ConnectionProducer()
@@ -377,8 +394,7 @@ class Connection(LoadBalancerConnection):
     def clear(self):
         # Remove all mapping and tracking configuration.
         self.portmap = {}
-        self.tracked = {}
-        self.active = {}
+        self.active = set()
         self.standby = {}
         if self.producer and self.consumer:
             self.producer.set([])
@@ -396,13 +412,12 @@ class Connection(LoadBalancerConnection):
         # Parse the url, we expect a form tcp://port and nothing else.
         m = re.match("tcp://(\d*)$", url)
         if not(m):
-            return
+            raise ValueError("Bad URL: %s" % url)
         listen = int(m.group(1))
 
         # Clear existing data.
         if self.portmap.has_key(listen):
             del self.portmap[listen]
-        self.tracked[url] = []
 
         # If no backends, don't queue anything
         if len(ips) == 0:
@@ -410,7 +425,7 @@ class Connection(LoadBalancerConnection):
 
         # Update the portmap (including exclusive info).
         config = self._endpoint_config(config)
-        self.portmap[listen] = [config.exclusive, config.reconnect, []]
+        self.portmap[listen] = (config.exclusive, config.reconnect, [])
         for backend in ips:
             if not(backend.port):
                 port = listen
@@ -418,11 +433,11 @@ class Connection(LoadBalancerConnection):
                 port = backend.port
 
             # NOTE: We save some extra metadata about these backends in the
-            # portmap and in the tracker connections list. These are used to
-            # later on cleanup backend machines and correctly assign
-            # connections (i.e. either exclusively or not exclusively).
-            self.portmap[listen][2].append((backend.ip, port))
-            self.tracked[url].append((backend.ip, port, config.exclusive, config.reconnect))
+            # portmap. These are used to later on cleanup backend machines
+            # and correctly assign connections (i.e. either exclusively or
+            # not exclusively).
+            (_, _, backends) = self.portmap[listen]
+            backends.append((backend.ip, port))
 
     def save(self):
         self.producer.set(self.portmap.keys())
@@ -433,15 +448,13 @@ class Connection(LoadBalancerConnection):
         records = {}
 
         # Grab the active connections.
-        active_connections = connection_count()
+        active_connections = netstat.connection_count()
         forget_active = []
         locked_ips = self.locks.list_ips() or []
         now = time.time()
 
-        for connection_list in self.tracked.values():
-
-            for (ip, port, exclusive, reconnect) in connection_list:
-
+        for (exclusive, reconnect, backends) in self.portmap.values():
+            for (ip, port) in backends:
                 active = active_connections.get((ip, port), 0)
 
                 # Cap at 1.0 if we are exclusive
@@ -452,11 +465,11 @@ class Connection(LoadBalancerConnection):
 
                 if active:
                     # Record this server as active.
-                    self.active[ip] = True
+                    self.active.add(ip)
                     if ip in self.standby:
                         del self.standby[ip]
 
-                elif not(active) and (self.active.has_key(ip) or ip in locked_ips):
+                elif not(active) and (ip in self.active or ip in locked_ips):
                     # Check the reconnect timer.
                     if exclusive and reconnect > 0:
                         # Add to the standby list if we are not there
@@ -467,15 +480,15 @@ class Connection(LoadBalancerConnection):
                         if self.standby[ip] > now:
                             # Skip for now.
                             records[ip] = { "active" : (1, 1) }
-                            self.active[ip] = True
+                            self.active.add(ip)
                             continue
                         # Else delete the entry and fall through
                         else:
                             del self.standby[ip]
 
                     # Record this server as stale.
-                    if self.active.has_key(ip):
-                        del self.active[ip]
+                    if ip in self.active:
+                        self.active.remove(ip)
 
                     if exclusive:
                         forget_active.append(ip)
