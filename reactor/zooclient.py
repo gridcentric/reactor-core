@@ -5,14 +5,13 @@ import array
 from reactor.endpoint import EndpointConfig
 from reactor.zookeeper.connection import ZookeeperConnection
 from reactor.config import fromstr
-import reactor.zookeeper.paths as paths
+from reactor.zookeeper import paths
 
 class ReactorClient(object):
 
-    def __init__(self, zk_servers=["localhost"], zk_class=ZookeeperConnection):
+    def __init__(self, zk_servers):
         self.zk_conn = None
         self.zk_servers = zk_servers
-        self.zk_class = zk_class
         self._connect()
 
     def __del__(self):
@@ -23,7 +22,7 @@ class ReactorClient(object):
             zk_servers = self.zk_servers
         else:
             self.zk_servers = zk_servers
-        self.zk_conn = self.zk_class(zk_servers)
+        self.zk_conn = ZookeeperConnection(zk_servers)
 
     def _disconnect(self):
         if self.zk_conn:

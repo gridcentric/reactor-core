@@ -113,8 +113,8 @@ class ReactorApi(object):
 
     AUTH_SALT = 'gridcentricreactor'
 
-    def __init__(self, client):
-        self.client = client
+    def __init__(self, zk_servers):
+        self.client = ReactorClient(zk_servers)
         self.config = Configurator()
 
         # Set up auth-ticket authentication.

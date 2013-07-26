@@ -103,7 +103,7 @@ class ClusterApi(ReactorApiExtension):
                 logging.error("An unrecoverable error occurred: %s" % error)
 
         if not(self.manager_running):
-            self.manager = ClusterScaleManager(self.api.client)
+            self.manager = ClusterScaleManager(self.api.client.zk_servers)
             self.manager_thread = threading.Thread(target=manager_run)
             self.manager_thread.daemon = True
             self.manager_thread.start()

@@ -1,19 +1,14 @@
 import logging
-import zookeeper
 import threading
 import traceback
+import zookeeper
 
 ZOO_OPEN_ACL_UNSAFE = {"perms":0x1f, "scheme":"world", "id":"anyone"}
-ZOO_EVENT_NONE = 0
-ZOO_EVENT_NODE_CREATED = 1
-ZOO_EVENT_NODE_DELETED = 2
-ZOO_EVENT_NODE_DATA_CHANGED = 3
-ZOO_EVENT_NODE_CHILDREN_CHANGED = 4
-
 ZOO_CONNECT_WAIT_TIME = 60.0
 
 # Save the exception for use in other modules.
 ZookeeperException = zookeeper.ZooKeeperException
+BadArgumentsException = zookeeper.BadArgumentsException
 
 def connect(servers, timeout=ZOO_CONNECT_WAIT_TIME):
     cond = threading.Condition()
@@ -32,13 +27,13 @@ def connect(servers, timeout=ZOO_CONNECT_WAIT_TIME):
                 connected[0] = True
                 cond.notify()
             elif state < 0:
-                # We've received an error state, bonk out
+                # We've received an error state, bonk out.
                 cond.notify()
         finally:
             cond.release()
 
     if not(servers) or not(isinstance(servers, (list, tuple))):
-        raise zookeeper.BadArgumentsException("servers must be a list or tuple")
+        raise BadArgumentsException("servers must be a list or tuple: %s" % servers)
 
     # We default to port 2181 if no port is provided as part of the host specification.
     server_list = ",".join(map(lambda x: (x.find(":") > 0 and x) or "%s:2181" % x, servers))
@@ -157,7 +152,7 @@ class ZookeeperConnection(object):
         already exists.)
         """
         if not(path) or contents is None:
-            raise zookeeper.BadArgumentsException("Invalid path/contents: %s/%s" % (path, contents))
+            raise BadArgumentsException("Invalid path/contents: %s/%s" % (path, contents))
 
         while True:
             try:
@@ -175,7 +170,7 @@ class ZookeeperConnection(object):
         Returns the conents in the path. default is returned if the path does not exists.
         """
         if not path:
-            raise zookeeper.BadArgumentsException("Invalid path: %s" % (path))
+            raise BadArgumentsException("Invalid path: %s" % (path))
 
         value = default
         if zookeeper.exists(self.handle, path):
@@ -193,7 +188,7 @@ class ZookeeperConnection(object):
         not exist.
         """
         if not path:
-            raise zookeeper.BadArgumentsException("Invalid path: %s" % (path))
+            raise BadArgumentsException("Invalid path: %s" % (path))
 
         if zookeeper.exists(self.handle, path):
             try:
@@ -209,7 +204,7 @@ class ZookeeperConnection(object):
         Delete the path.
         """
         if not path:
-            raise zookeeper.BadArgumentsException("Invalid path: %s" % (path))
+            raise BadArgumentsException("Invalid path: %s" % (path))
 
         path_children = self.list_children(path)
         for child in path_children:
@@ -233,7 +228,7 @@ class ZookeeperConnection(object):
     @wrap_exceptions
     def watch_contents(self, path, fn, default_value="", clean=False):
         if not (path and fn):
-            raise zookeeper.BadArgumentsException("Invalid path/fn: %s/%s" % (path, fn))
+            raise BadArgumentsException("Invalid path/fn: %s/%s" % (path, fn))
 
         if not zookeeper.exists(self.handle, path):
             self.write(path, default_value)
@@ -252,7 +247,7 @@ class ZookeeperConnection(object):
     @wrap_exceptions
     def watch_children(self, path, fn, clean=False):
         if not (path and fn):
-            raise zookeeper.BadArgumentsException("Invalid path/fn: %s/%s" % (path, fn))
+            raise BadArgumentsException("Invalid path/fn: %s/%s" % (path, fn))
 
         self.cond.acquire()
         if not zookeeper.exists(self.handle, path):
@@ -273,11 +268,11 @@ class ZookeeperConnection(object):
         self.cond.acquire()
         try:
             result = None
-            if event == ZOO_EVENT_NODE_CHILDREN_CHANGED:
+            if event == zookeeper.CHILD_EVENT:
                 fns = self.child_watches.get(path, None)
                 if fns:
                     result = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
-            elif event == ZOO_EVENT_NODE_DATA_CHANGED:
+            elif event == zookeeper.CHANGED_EVENT:
                 fns = self.content_watches.get(path, None)
                 if fns:
                     result, _ = zookeeper.get(self.handle, path, self.zookeeper_watch)
@@ -299,7 +294,7 @@ class ZookeeperConnection(object):
     @wrap_exceptions
     def clear_watch_path(self, path):
         if not path:
-            raise zookeeper.BadArgumentsException("Invalid path: %s" % (path))
+            raise BadArgumentsException("Invalid path: %s" % (path))
 
         self.cond.acquire()
         try:
@@ -313,7 +308,7 @@ class ZookeeperConnection(object):
     @wrap_exceptions
     def clear_watch_fn(self, fn):
         if not fn:
-            raise zookeeper.BadArgumentsException("Invalid fn: %s" % (fn))
+            raise BadArgumentsException("Invalid fn: %s" % (fn))
 
         self.cond.acquire()
         try:
@@ -327,3 +322,11 @@ class ZookeeperConnection(object):
                     fns.remove(fn)
         finally:
             self.cond.release()
+
+    def sync(self):
+        # This function exists to faciliate testing.
+        # If the underlying zookeeper module is mocked,
+        # then it is capable of flushing out all pending
+        # watches, etc. The sync calls is what does that.
+        if hasattr(zookeeper, '_sync'):
+            getattr(zookeeper, '_sync')()
