@@ -56,12 +56,16 @@ def list_rules(table="INPUT"):
     return found
 
 def modify_host(source="0.0.0.0/0", destination="0.0.0.0/0", action="ACCEPT", prot="tcp", port=0):
+    if source.find("/") < 0:
+        source = "%s/32" % source
+    if destination.find("/") < 0:
+        destination = "%s/32" % destination
     rule = IpTableRule(action, prot, "--", source, destination, [])
     if port:
         rule.filters.append("dpt:%d" % port)
     add_rule(rule)
 
-ZOOKEEPER_LOCAL = "127.0.0.1"
+ZOOKEEPER_LOCAL = "127.0.0.0/8"
 ZOOKEEPER_PORTS = [2181, 2888, 3888]
 
 def zookeeper_clear(extra_ports=[]):
@@ -80,7 +84,7 @@ def zookeeper_allow(host, extra_ports=[]):
     for port in ports:
         for prot in ("tcp", "udp"):
             try:
-                modify_host(source=("%s/32" % host), action="ACCEPT", prot=prot, port=port)
+                modify_host(source=host, action="ACCEPT", prot=prot, port=port)
             except socket.error:
                 return
 
