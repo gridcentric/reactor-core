@@ -24,13 +24,15 @@ def _build_options(mods, connection_fn):
     options = []
     for mod in mods:
         try:
+            # NOTE: The below line may roll an exception,
+            # because __doc__ is None on the class. If this is
+            # the case, it will be caught below and an empty
+            # description appended.
             desc = connection_fn(mod).__doc__.split("\n")[0]
             options.append((desc, mod))
         except:
-            import traceback
-            logging.debug("Module %s is missing docstring: %s" % \
-                          (mod, traceback.format_exc()))
-            continue
+            logging.error("Module %s is missing docstring!" % mod)
+            options.append((mod, mod))
     return options
 
 # We should really be querying the scale manager for the list

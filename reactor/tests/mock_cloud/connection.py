@@ -29,6 +29,8 @@ def ip_range_generator(base, count):
 
 class Connection(CloudConnection):
 
+    """ Mock cloud connection. """
+
     def __init__(self, *args, **kwargs):
         CloudConnection.__init__(self, *args, **kwargs)
         self.instances = {} # map(instance.id => MockInstance)
