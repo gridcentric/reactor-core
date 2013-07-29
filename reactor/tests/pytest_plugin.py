@@ -66,6 +66,20 @@ def zk_conn(request):
     return ZookeeperConnection(servers=["mock"])
 
 @fixture()
+def zk_client(request):
+    """ A zookeeper client. """
+    add_zk_finalizers(request)
+    from reactor.zookeeper.client import ZookeeperClient
+    return ZookeeperClient(zk_servers=["mock"])
+
+from reactor.zookeeper.object import RawObject, JSONObject, BinObject
+@fixture(params=[RawObject, JSONObject, BinObject])
+def zk_object(request):
+    """ A zookeeper object. """
+    add_zk_finalizers(request)
+    return request.param(zk_client(request), '/test/' + str(uuid.uuid4()))
+
+@fixture()
 def cloud(request):
     """ A mock cloud connection. """
     from mock_cloud import connection
