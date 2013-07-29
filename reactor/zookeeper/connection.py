@@ -165,6 +165,13 @@ class ZookeeperConnection(object):
                     return False
 
     @wrap_exceptions
+    def exists(self, path):
+        """
+        Return whether the path exists.
+        """
+        return zookeeper.exists(self.handle, path)
+
+    @wrap_exceptions
     def read(self, path, default=None):
         """
         Returns the conents in the path. default is returned if the path does not exists.

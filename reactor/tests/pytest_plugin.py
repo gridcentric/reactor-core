@@ -1,4 +1,5 @@
 import sys
+import uuid
 import pytest
 import atexit
 
@@ -37,38 +38,46 @@ sys.modules["zookeeper"] = mock_zookeeper
 # access to the mock clouds, zookeeper, etc. so that you
 # can easily assert the state matches expectations.
 
-def fixture(fn):
-    def _fn(request, *args, **kwargs):
-        mangled_name = "%s__%s__%s" % (fn.__name__, str(args), str(kwargs))
-        if hasattr(request, mangled_name):
-            val = getattr(request, mangled_name)
-        else:
-            val = fn(request, *args, **kwargs)
-            setattr(request, mangled_name, val)
-        return val
-    _fn.__name__ = fn.__name__
-    _fn.__doc__ = fn.__doc__
-    return pytest.fixture(_fn)
+def fixture(**kwargs):
+    pytest_fn = pytest.fixture(**kwargs)
+    def _dec(fn):
+        def _fn(request, *args, **kwargs):
+            mangled_name = "%s__%s__%s" % (fn.__name__, str(args), str(kwargs))
+            if hasattr(request, mangled_name):
+                val = getattr(request, mangled_name)
+            else:
+                val = fn(request, *args, **kwargs)
+                setattr(request, mangled_name, val)
+            return val
+        _fn.__name__ = fn.__name__
+        _fn.__doc__ = fn.__doc__
+        return pytest_fn(_fn)
+    return _dec
 
-@fixture
+def add_zk_finalizers(request):
+    request.addfinalizer(mock_zookeeper.dump)
+    request.addfinalizer(mock_zookeeper.reset)
+
+@fixture()
 def zk_conn(request):
     """ A zookeeper connection. """
+    add_zk_finalizers(request)
     from reactor.zookeeper.connection import ZookeeperConnection
     return ZookeeperConnection(servers=["mock"])
 
-@fixture
+@fixture()
 def cloud(request):
     """ A mock cloud connection. """
     from mock_cloud import connection
     return connection.Connection("mock")
 
-@fixture
+@fixture()
 def loadbalancer(request):
     """ A mock loadbalancer connection. """
     from mock_loadbalancer import connection
     return connection.Connection("mock")
 
-@fixture
+@fixture()
 def client(request):
     """ A reactor client. """
     from reactor.zooclient import ReactorClient
@@ -76,7 +85,7 @@ def client(request):
     c._connect()
     return c
 
-@fixture
+@fixture()
 def scale_managers(request, n=5):
     """ A collection of scale managers (default 5). """
     # Create N managers.
@@ -87,18 +96,18 @@ def scale_managers(request, n=5):
     zk_conn(request).sync()
     return ms
 
-@fixture
+@fixture()
 def scale_manager(request):
     """ A single scale manager. """
     return scale_managers(request, n=1)[0]
 
-@fixture
+@fixture()
 def manager_config(request):
     """ An empty manager config. """
     from reactor.manager import ManagerConfig
     return ManagerConfig()
 
-@fixture
+@fixture()
 def endpoints(request, n=5):
     """ A collection on endpoints (default 5). """
     # Create N endpoints.
@@ -112,19 +121,16 @@ def endpoints(request, n=5):
     from reactor.endpoint import Endpoint
     return map(lambda x: Endpoint(c, x), names)
 
-@fixture
+@fixture()
 def endpoint(request):
     """ A single endpoint. """
     return endpoints(request, n=1)[0]
 
-@fixture
+@fixture()
 def endpoint_config(request):
     """ An empty endpoint config. """
     from reactor.endpoint import EndpointConfig
     return EndpointConfig()
-
-# Register the zookeeper dump.
-atexit.register(mock_zookeeper.dump)
 
 # Enable debug logging.
 import logging

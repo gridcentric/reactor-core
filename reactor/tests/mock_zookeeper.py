@@ -70,12 +70,9 @@ class ZkNode(object):
     def __init__(self, name=None, parent=None, data="", handle=None):
         self._parent = parent
         self._name = name
-        self._children = collections.OrderedDict()
-        self._data = data
         self._handle = handle
         self._lock = threading.RLock()
-        self._data_callbacks = [] # Called when the data changes.
-        self._child_callbacks = [] # Called when a node child is added or deleted.
+        self.reset(data=data)
 
     def _fire_data_callbacks(self):
         value = self._data
@@ -164,13 +161,20 @@ class ZkNode(object):
             if not child in self._children:
                 raise NoNodeException()
             node = self._children[child]
-            with node._lock:
-                if len(node._children) != 0:
-                    raise BadArgumentsException()
-                node._fire_data_callbacks()
-                node._fire_child_callbacks()
+            if len(node._children) != 0:
+                raise BadArgumentsException()
             del self._children[child]
             self._fire_child_callbacks()
+        with node._lock:
+            node._fire_data_callbacks()
+            node._fire_child_callbacks()
+
+    def reset(self, data=None):
+        with self._lock:
+            self._children = collections.OrderedDict()
+            self._data = data
+            self._data_callbacks = []
+            self._child_callbacks = []
 
     def get_children(self, handle, callback):
         with self._lock:
@@ -253,6 +257,10 @@ def get_children(handle, path, callback=None):
 @log
 def dump():
     ROOT.dump()
+
+@log
+def reset():
+    ROOT.reset()
 
 @log
 def _sync():

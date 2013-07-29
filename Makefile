@@ -37,7 +37,7 @@ pylint: $(PYLINT_RESULT)
 $(PYLINT_RESULT): $(shell find reactor -name \*.py)
 	@pylint --ignore=tests --rcfile=pylintrc reactor | tee $@
 
-test:
+test: cache_clean
 	@./py.test $(PYTEST_FLAGS) reactor
 .PHONY: test
 
@@ -59,11 +59,14 @@ endif
 	@$(INSTALL_DATA) etc/logrotate.d/reactor $(DESTDIR)/etc/logrotate.d
 endif
 
-dist_clean:
+cache_clean:
+	@find . -name __pycache__ -exec rm -rf {} \; 2>/dev/null || true
+	@find . -name \*.pyc -exec rm -f {} \; 2>/dev/null || true
+.PHONY: cache_clean
+
+dist_clean: cache_clean
 	@rm -rf dist build reactor.egg-info
 	@rm -rf debbuild rpmbuild
-	@find . -name \*.pyc -exec rm -f {} \; 2>/dev/null || true
-	@find . -name __pycache__ -exec rm -rf {} \; 2>/dev/null || true
 .PHONY: dist_clean
 
 clean: dist_clean
