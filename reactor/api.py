@@ -5,10 +5,11 @@ import traceback
 
 from pyramid.config import Configurator
 from pyramid.response import Response
-from pyramid.security import authenticated_userid
+from pyramid.security import remember, forget, authenticated_userid
 from pyramid.authentication import AuthTktAuthenticationPolicy
 from pyramid.authorization import ACLAuthorizationPolicy
 
+from . log import log
 from . manager import ManagerConfig
 from . endpoint import EndpointConfig
 from . endpoint import EndpointLog
@@ -103,7 +104,7 @@ def connected(request_handler):
         response = try_once(*args, **kwargs)
         if not(response):
             response = try_once(*args, **kwargs)
-        if not(response):
+        if response is None:
             return Response(status=500, body="internal error")
         else:
             return response
@@ -126,7 +127,12 @@ class ReactorApi(object):
 
         # Setup basic version route.
         self.config.add_route('version', '/')
-        self.config.add_view(self.version, route_name='version')
+        self.config.add_view(self.version,
+            route_name='version', accept='application/json')
+
+        # Add authentication routes.
+        self._add('login', ['1.1'], 'login', self.login)
+        self._add('logout', ['1.1'], 'logout', self.logout)
 
         self._add('auth-key', ['1.0', '1.1'],
                   'auth_key', self.set_auth_key)
@@ -201,7 +207,8 @@ class ReactorApi(object):
             route_name = "%s:%s" % (version, name)
             url_path = "/v%s/%s" % (version, path)
             self.config.add_route(route_name, url_path)
-            self.config.add_view(fn, route_name=route_name)
+            self.config.add_view(fn,
+                route_name=route_name, accept="application/json")
 
     def disconnect(self):
         self.client._disconnect()
@@ -324,16 +331,45 @@ class ReactorApi(object):
                              "because algorithm type is not supported.")
                 return ""
 
+    def index(self, context, request):
+        return Response()
+
+    @log
     @connected
     def version(self, context, request):
         """
         Get the version implemented by this API.
         """
         if request.method == "GET":
-            return Response(body=json.dumps({'version': '1.1'}))
+            if 'json' in request.headers.get('Accept'):
+                return Response(body=json.dumps({'version': '1.1'}))
+            else:
+                return self.index(context, request)
         else:
             return Response(status=403)
 
+    @log
+    def login(self, context, request):
+        """
+        Logs the admin user in.
+        """
+        auth_key = self._req_get_auth_key(request)
+        auth_hash = self._create_admin_auth_token(auth_key)
+        if self.zkobj.auth_hash == auth_hash:
+            headers = remember(request, 'admin')
+            return Response(headers=headers)
+        else:
+            raise NotImplementedError()
+
+    @log
+    def logout(self, context, request):
+        """
+        Logs the admin user out.
+        """
+        headers = forget(request)
+        return Response(headers=headers)
+
+    @log
     @connected
     @authorized_admin_only
     def set_auth_key(self, context, request):
