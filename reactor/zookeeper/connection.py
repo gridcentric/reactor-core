@@ -17,7 +17,7 @@ def connect(servers, timeout=ZOO_CONNECT_WAIT_TIME):
     # We attempt a connection for 10 seconds here. This is a long timeout
     # for servicing a web request, so hopefully it is successful.
     def connect_watcher(zh, event, state, path):
-        logging.debug("CONNECT WATCHER: event=%s, state=%s, path=%s" % (event, state, path))
+        logging.debug("CONNECT WATCHER: event=%s, state=%s, path=%s", event, state, path)
         try:
             cond.acquire()
             if state == zookeeper.CONNECTED_STATE:
@@ -73,7 +73,9 @@ def wrap_exceptions(fn):
 class ZookeeperConnection(object):
 
     @wrap_exceptions
-    def __init__(self, servers, acl=ZOO_OPEN_ACL_UNSAFE):
+    def __init__(self, servers, acl=None):
+        if acl is None:
+            acl = ZOO_OPEN_ACL_UNSAFE
         self.cond = threading.Condition()
         self.acl = acl
         self.content_watches = {}
@@ -94,7 +96,7 @@ class ZookeeperConnection(object):
             if hasattr(self, 'handle') and self.handle:
                 zookeeper.close(self.handle)
                 self.handle = None
-        except:
+        except Exception:
             logging.warn("Error closing Zookeeper handle.")
         finally:
             self.cond.release()
@@ -182,7 +184,7 @@ class ZookeeperConnection(object):
         value = default
         if zookeeper.exists(self.handle, path):
             try:
-                value, timeinfo = zookeeper.get(self.handle, path)
+                value, _ = zookeeper.get(self.handle, path)
             except zookeeper.NoNodeException:
                 pass
 
@@ -225,14 +227,6 @@ class ZookeeperConnection(object):
             pass
 
     @wrap_exceptions
-    def trylock(self, path, default_value=""):
-        """
-        Try to write to the path in an exclusive way.
-        """
-        return self.write(path, default_value,
-                          ephemeral=True, exclusive=True)
-
-    @wrap_exceptions
     def watch_contents(self, path, fn, default_value="", clean=False):
         if not (path and fn):
             raise BadArgumentsException("Invalid path/fn: %s/%s" % (path, fn))
@@ -246,7 +240,7 @@ class ZookeeperConnection(object):
                 self.content_watches[path] = []
             if not(fn in self.content_watches.get(path, [])):
                 self.content_watches[path] = self.content_watches.get(path, []) + [fn]
-            value, timeinfo = zookeeper.get(self.handle, path, self.zookeeper_watch)
+            value, _ = zookeeper.get(self.handle, path, self.zookeeper_watch)
         finally:
             self.cond.release()
         return value
@@ -278,11 +272,17 @@ class ZookeeperConnection(object):
             if event == zookeeper.CHILD_EVENT:
                 fns = self.child_watches.get(path, None)
                 if fns:
-                    result = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
+                    try:
+                        result = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
+                    except zookeeper.NoNodeException:
+                        result = None
             elif event == zookeeper.CHANGED_EVENT:
                 fns = self.content_watches.get(path, None)
                 if fns:
-                    result, _ = zookeeper.get(self.handle, path, self.zookeeper_watch)
+                    try:
+                        result, _ = zookeeper.get(self.handle, path, self.zookeeper_watch)
+                    except zookeeper.NoNodeException:
+                        result = None
             else:
                 return
 
@@ -293,8 +293,8 @@ class ZookeeperConnection(object):
                     # error message and moved on to the next callback.
                     try:
                         fn(result)
-                    except:
-                        logging.exception("Error executing watch for %s." % path)
+                    except Exception:
+                        logging.exception("Error executing watch for %s.", path)
         finally:
             self.cond.release()
 

@@ -8,9 +8,8 @@ import json
 import gc
 import atexit
 
-from reactor.config import fromstr
-import reactor.zookeeper.config as zk_config
-from reactor import log
+from . import log
+from . zookeeper import config as zk_config
 
 # Resolve internal threading bug, that spams log output.
 # For more information see --
@@ -27,8 +26,6 @@ def print_threads():
         traceback.print_stack(stack)
 
 def sig_usr2_handler(signum, frame):
-    signum # unused
-    frame # unused
     print_threads()
 
 signal.signal(signal.SIGUSR2, sig_usr2_handler)
@@ -88,8 +85,8 @@ def usage():
     print "    managers               List all the configured managers."
     print "    managers-active        List all the active managers."
     print ""
-    print "    manager-update [ip]    Set the configuration for the given manager."
-    print "    manager-show [ip]      Show the current configuration for the manager."
+    print "    manager-update <ip>    Set the configuration for the given manager."
+    print "    manager-show <ip>      Show the current configuration for the manager."
     print "    manager-forget <ip>    Remove and forget the given manager."
     print ""
     print "    passwd [password]      Updates the API's password."
@@ -194,7 +191,7 @@ def main():
         try:
             # Try to read the saved configuration.
             zk_servers = zk_config.read_config()
-        except:
+        except Exception:
             zk_servers = []
 
     if len(zk_servers) == 0:
@@ -227,10 +224,10 @@ def main():
         from reactor.api import ReactorApi
         api = ReactorApi(zk_servers)
         if gui:
-            from reactor.gui import ReactorGui
+            from . gui import ReactorGui
             api = ReactorGui(api)
         if cluster:
-            from reactor.cluster import Cluster
+            from . cluster import Cluster
             api = Cluster(api)
         return api
 
@@ -261,8 +258,7 @@ def main():
                 new_conf += line
 
             api_client = get_api_client()
-            config = fromstr(new_conf)
-            api_client.endpoint_manage(endpoint_name, config)
+            api_client.endpoint_manage(endpoint_name, new_conf)
 
         elif command == "unmanage":
             endpoint_name = get_arg(1)
@@ -294,8 +290,7 @@ def main():
                 new_conf += line
 
             api_client = get_api_client()
-            config = fromstr(new_conf)
-            api_client.manager_update(manager, config)
+            api_client.manager_update(manager, new_conf)
 
         elif command == "manager-show":
             manager = get_arg(1)
@@ -382,13 +377,8 @@ def main():
 
         elif command == "runserver":
 
-            if cluster:
-                from reactor.cluster import ClusterScaleManager
-                manager = ClusterScaleManager(zk_servers, get_args())
-            else:
-                from reactor.manager import ScaleManager
-                manager = ScaleManager(zk_servers, get_args())
-
+            from . manager import ScaleManager
+            manager = ScaleManager(zk_servers, get_args())
             ready()
             manager.run()
 

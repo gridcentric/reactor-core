@@ -1,7 +1,6 @@
 import os
 import socket
 import signal
-import re
 import time
 import threading
 import Queue
@@ -13,7 +12,10 @@ from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
 import reactor.loadbalancer.netstat as netstat
 
-def close_fds(except_fds=[]):
+def close_fds(except_fds=None):
+    if except_fds is None:
+        except_fds = []
+
     try:
         maxfd = os.sysconf("SC_OPEN_MAX")
     except (AttributeError, ValueError):
@@ -25,7 +27,10 @@ def close_fds(except_fds=[]):
             except OSError:
                 pass
 
-def fork_and_exec(cmd, child_fds=[]):
+def fork_and_exec(cmd, child_fds=None):
+    if child_fds is None:
+        child_fds = []
+
     # Close all file descriptors, except
     # for those we have been specified to keep.
     # These file descriptors are closed in the
@@ -52,9 +57,13 @@ def fork_and_exec(cmd, child_fds=[]):
                     r_obj = os.fdopen(r, "r")
 
                     # Read grandchild PID from pipe and close it.
-                    child = int(r_obj.readline())
-                    r_obj.close()
-                    return child
+                    try:
+                        child = int(r_obj.readline())
+                        return child
+                    except ValueError:
+                        return None
+                    finally:
+                        r_obj.close()
 
     # Close off all parent FDs.
     close_fds(except_fds=child_fds + [w])
@@ -70,7 +79,7 @@ def fork_and_exec(cmd, child_fds=[]):
         w_obj.write(str(pid) + "\n")
         w_obj.flush()
 
-        # Exit
+        # Exit (hard).
         os._exit(0)
 
     # Close the write end of the pipe
@@ -100,7 +109,8 @@ class Accept(object):
             try:
                 os.close(self.fd)
             except IOError:
-                logging.error("Dropping connection from %s: bad FD %d" % (_as_client(*(self.src)), self.fd))
+                logging.error("Dropping connection from %s: bad FD %d",
+                    _as_client(*(self.src)), self.fd)
             self.fd = None
 
     def redirect(self, host, port):
@@ -117,8 +127,9 @@ class Accept(object):
             return child
 
 class ConnectionConsumer(threading.Thread):
+
     def __init__(self, locks, producer):
-        threading.Thread.__init__(self)
+        super(ConnectionConsumer, self).__init__()
         self.daemon = True
         self.execute = True
         self.locks = locks
@@ -156,14 +167,16 @@ class ConnectionConsumer(threading.Thread):
             if exclusive:
                 # See if we have a VM to reconnect to.
                 if reconnect > 0:
-                    ip = self.locks.find_locked_ip(connection.src[0])
-                if not(ip):
-                    ip = self.locks.find_unused_ip(ips, connection.src[0])
+                    existing = self.locks.find(connection.src[0])
+                    if len(existing) > 0:
+                        ip = existing[0]
+                if not ip:
+                    ip = self.locks.lock(ips, value=connection.src[0])
             else:
                 ip = ips[random.randint(0, len(ips)-1)]
 
-            # Either redirect or drop the connection.
             if ip:
+                # Either redirect or drop the connection.
                 child = connection.redirect(ip, ipmap[ip])
                 if child:
                     self.children[child] = [ip, connection]
@@ -211,14 +224,15 @@ class ConnectionConsumer(threading.Thread):
                     self.producer.push(connection)
                     self.wait()
 
-            # Reap dead children
+            # Reap dead children.
             self.reap_children()
 
-        # Kill all children
+        # Kill all children.
         for child in self.children.keys():
             try:
                 os.kill(child, signal.SIGQUIT)
-            except:
+            except OSError:
+                # Process no longer exists.
                 pass
 
     def reap_children(self):
@@ -227,8 +241,8 @@ class ConnectionConsumer(threading.Thread):
             # Check if child is alive
             try:
                 os.kill(child, 0)
-            except:
-                # Not alive - remove from children list
+            except OSError:
+                # Not alive - remove from children list.
                 del self.children[child]
         self.cond.release()
 
@@ -252,25 +266,32 @@ class ConnectionConsumer(threading.Thread):
             if client == _as_client(src_ip, src_port) and backend == ip:
                 try:
                     os.kill(child, signal.SIGTERM)
-                except:
+                except OSError:
+                    # The process no longer exists.
                     pass
         self.cond.release()
 
 class ConnectionProducer(threading.Thread):
+
     def __init__(self):
-        threading.Thread.__init__(self)
+        super(ConnectionProducer, self).__init__()
         self.daemon = True
         self.execute = True
+        self.epoll = None
         self.pending = Queue.Queue()
         self.sockets = {}
         self.filemap = {}
         self.cond = threading.Condition()
         self.set()
+        self._update_epoll()
 
     def stop(self):
         self.execute = False
 
-    def set(self, ports=[]):
+    def set(self, ports=None):
+        if ports is None:
+            ports = []
+
         # Set the appropriate ports.
         self.cond.acquire()
         try:
@@ -282,7 +303,7 @@ class ConnectionProducer(threading.Thread):
                         sock.bind(("", port))
                     except IOError as ioe:
                         # Can't bind this port (likely already in use), so skip it.
-                        logging.warning("Can't bind port %d: %s" % (port, ioe.strerror))
+                        logging.warning("Can't bind port %d: %s", port, ioe.strerror)
                         continue
                     sock.listen(10)
                     self.sockets[port] = sock
@@ -306,8 +327,8 @@ class ConnectionProducer(threading.Thread):
 
     def _update_epoll(self):
         self.epoll = select.epoll()
-        for socket in self.sockets.values():
-            self.epoll.register(socket.fileno(), select.EPOLLIN)
+        for sock in self.sockets.values():
+            self.epoll.register(sock.fileno(), select.EPOLLIN)
 
     def next(self, block=True, timeout=0):
         try:
@@ -350,9 +371,11 @@ class ConnectionProducer(threading.Thread):
                     self._update_epoll()
                     continue
 
-                sock = self.filemap[fileno]
+                # Check that it's a read event.
+                assert (event & select.EPOLLIN) == select.EPOLLIN
 
                 # Create a new connection object.
+                sock = self.filemap[fileno]
                 connection = Accept(sock)
 
                 # Push it into the queue.
@@ -373,12 +396,16 @@ class Connection(LoadBalancerConnection):
     """ Raw TCP """
 
     _ENDPOINT_CONFIG_CLASS = TcpEndpointConfig
+    _SUPPORTED_URLS = {
+        "tcp://([1-9][0-9]*)": lambda m: int(m.group(1))
+    }
 
     producer = None
     consumer = None
 
     def __init__(self, **kwargs):
-        LoadBalancerConnection.__init__(self, **kwargs)
+        super(Connection, self).__init__(**kwargs)
+
         self.portmap = {}
         self.active = set()
         self.standby = {}
@@ -403,30 +430,33 @@ class Connection(LoadBalancerConnection):
             self.producer.stop()
             self.consumer.stop()
         if self.locks:
-            self.locks.forget_all()
+            self.locks.clear()
 
-    def redirect(self, url, names, other, config=None):
-        pass
+    def change(self, url, backends, config=None):
+        # Grab the listen port.
+        listen = self.url_info(url)
 
-    def change(self, url, names, ips, config=None):
-        # Parse the url, we expect a form tcp://port and nothing else.
-        m = re.match("tcp://(\d*)$", url)
-        if not(m):
-            raise ValueError("Bad URL: %s" % url)
-        listen = int(m.group(1))
+        # Ensure that we can't end up in a loop.
+        looping_ips = [backend.ip for backend in backends
+            if (backend.port == listen or backend.port == 0)
+                and backend.ip.startswith("127.")]
+
+        if len(looping_ips) > 0:
+            logging.error("Attempted TCP loop.")
+            return
 
         # Clear existing data.
         if self.portmap.has_key(listen):
             del self.portmap[listen]
 
-        # If no backends, don't queue anything
-        if len(ips) == 0:
+        # If no backends, don't queue anything.
+        if len(backends) == 0:
             return
 
         # Update the portmap (including exclusive info).
         config = self._endpoint_config(config)
         self.portmap[listen] = (config.exclusive, config.reconnect, [])
-        for backend in ips:
+        for backend in backends:
             if not(backend.port):
                 port = listen
             else:
@@ -450,7 +480,7 @@ class Connection(LoadBalancerConnection):
         # Grab the active connections.
         active_connections = netstat.connection_count()
         forget_active = []
-        locked_ips = self.locks.list_ips() or []
+        locked_ips = self.locks.list() or []
         now = time.time()
 
         for (exclusive, reconnect, backends) in self.portmap.values():
@@ -496,7 +526,7 @@ class Connection(LoadBalancerConnection):
         # Remove old active connections.
         if forget_active:
             for ip in forget_active:
-                self.locks.forget_ip(ip)
+                self.locks.remove(ip)
             self.consumer.wakeup()
 
         return records

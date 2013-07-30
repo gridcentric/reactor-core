@@ -231,7 +231,7 @@
         });
     }
 
-    function addSessionRow(backend, client) {
+    function addSessionRow(client, backend) {
         var tr = $('<tr></tr>').attr({ class : "session-list-row" });
         var td = $('<td></td>');
         td.clone().text(client).appendTo(tr);

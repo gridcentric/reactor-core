@@ -2,6 +2,7 @@ import sys
 import uuid
 import pytest
 import atexit
+import array
 
 # Ensure that the available clouds are only the basic
 # no-op cloud and our mock cloud instance. Note that the
@@ -70,11 +71,19 @@ def zk_client(request):
     from reactor.zookeeper.client import ZookeeperClient
     return ZookeeperClient(zk_servers=["mock"])
 
-from reactor.zookeeper.objects import RawObject, JSONObject, BinObject
+from reactor.zookeeper.objects import RawObject
+from reactor.zookeeper.objects import JSONObject
+from reactor.zookeeper.objects import BinObject
 @fixture(params=[RawObject, JSONObject, BinObject])
 def zk_object(request):
     """ A zookeeper object. """
     return request.param(zk_client(request), '/test/' + str(uuid.uuid4()))
+
+@fixture()
+def reactor(request):
+    """ A Reactor client connection. """
+    from reactor.objects.root import Reactor
+    return Reactor(zk_client(request))
 
 @fixture()
 def cloud(request):
@@ -89,28 +98,23 @@ def loadbalancer(request):
     return connection.Connection("mock")
 
 @fixture()
-def client(request):
-    """ A reactor client. """
-    from reactor.zooclient import ReactorClient
-    c = ReactorClient(zk_servers=["mock"])
-    c._connect()
-    return c
-
-@fixture()
-def scale_managers(request, n=5):
+def managers(request, n=5):
     """ A collection of scale managers (default 5). """
     # Create N managers.
     from reactor.manager import ScaleManager
     ms = map(lambda x: ScaleManager(["mock"], names=["manager-%d" % x]), range(n))
     for m in ms:
         m.serve()
+
+    # Ensure that all have synchronized.
     zk_conn(request).sync()
+
     return ms
 
 @fixture()
-def scale_manager(request):
+def manager(request):
     """ A single scale manager. """
-    return scale_managers(request, n=1)[0]
+    return managers(request, n=1)[0]
 
 @fixture()
 def manager_config(request):
@@ -123,14 +127,18 @@ def endpoints(request, n=5):
     """ A collection on endpoints (default 5). """
     # Create N endpoints.
     names = map(lambda x: "endpoint-%d" % x, range(n))
-    c = client(request)
+    r = reactor(request)
     for name in names:
-        c.endpoint_manage(name)
+        # Save all with an empty configuration.
+        r.endpoints().get(name).set_config({})
+
+    # Ensure all watches have fired to
+    # synchronize manager's active state.
     zk_conn(request).sync()
 
     # Return the collection of endpoints.
     from reactor.endpoint import Endpoint
-    return map(lambda x: Endpoint(c, x), names)
+    return map(lambda x: Endpoint(r.endpoints().get(x)), names)
 
 @fixture()
 def endpoint(request):

@@ -35,7 +35,7 @@ class BinLogTests(unittest.TestCase):
         self.assertEqual(len(entries), 0)
         # Make an entry
         with self.assertRaises(KeyError):
-            log.info(TEST_ENTRY1, 1, -1)
+            log.info(TEST_ENTRY1, 1, 42)
 
     def test_constructor_with_record_types(self):
         record_types = [ TEST_ENTRY1 ]
@@ -46,11 +46,11 @@ class BinLogTests(unittest.TestCase):
         self.assertEqual(len(entries), 0)
         # Make an entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP):
-            log.info(TEST_ENTRY1, 1, -1)
+            log.info(TEST_ENTRY1, 1, 42)
         entries = log.get()
         # Make sure the log contains our entry
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 42"], entries)
 
     def test_constructor_with_callbacks(self):
         record_types = [ TEST_ENTRY1 ]
@@ -64,13 +64,13 @@ class BinLogTests(unittest.TestCase):
         self.assertEqual(len(entries), 0)
         # Make an entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP):
-            log.info(TEST_ENTRY1, 1, -1)
+            log.info(TEST_ENTRY1, 1, 42)
         # Make sure the length of the stored data is correct
         self.assertEqual(len(store.retrieve_cb()), entsize)
         # Make sure the log contains our entry
         entries = log.get()
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 42"], entries)
         # Recreate the log
         log = binlog.BinaryLog(entsize, record_types=record_types,
                                store_cb=store.store_cb,
@@ -78,7 +78,7 @@ class BinLogTests(unittest.TestCase):
         # Make sure the log still contains our entry
         entries = log.get()
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 42"], entries)
 
     def test_add_record_type(self):
         entsize = binlog.ENTRY_SIZE
@@ -86,25 +86,25 @@ class BinLogTests(unittest.TestCase):
         # Make an entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP),\
                 self.assertRaises(KeyError):
-            log.info(TEST_ENTRY1, 1, -1)
+            log.info(TEST_ENTRY1, 1, 42)
         # Add record types
         log.add_record_type(TEST_ENTRY1)
         # Make an entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP):
-            log.info(TEST_ENTRY1, 1, -1)
+            log.info(TEST_ENTRY1, 1, 42)
         # Make sure the log contains our entry
         entries = log.get()
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 42"], entries)
         # Add more record types
         log.add_record_type(TEST_ENTRY2)
         # Make an entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP+1):
-            log.info(TEST_ENTRY2, 1, -1)
+            log.info(TEST_ENTRY2, 1, 42)
         # Make sure the log contains our entry
         entries = log.get()
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP+1, "INFO", "T2 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP+1, "INFO", "T2 1 42"], entries)
 
     def test_add_record_types(self):
         entsize = binlog.ENTRY_SIZE
@@ -112,27 +112,27 @@ class BinLogTests(unittest.TestCase):
         # Make an entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP),\
                 self.assertRaises(KeyError):
-            log.info(TEST_ENTRY1, 1, -1)
+            log.info(TEST_ENTRY1, 1, 42)
         # Add record types
         record_types = [ TEST_ENTRY1 ]
         log.add_record_types(record_types)
         # Make an entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP):
-            log.info(TEST_ENTRY1, 1, -1)
+            log.info(TEST_ENTRY1, 1, 42)
         # Make sure the log contains our entry
         entries = log.get()
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 42"], entries)
         # Add more record types
         record_types = [ TEST_ENTRY2 ]
         log.add_record_types(record_types)
         # Make an entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP+1):
-            log.info(TEST_ENTRY2, 1, -1)
+            log.info(TEST_ENTRY2, 1, 42)
         # Make sure the log contains our entry
         entries = log.get()
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP+1, "INFO", "T2 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP+1, "INFO", "T2 1 42"], entries)
 
     def test_log_wraps_properly(self):
         record_types = [ TEST_ENTRY1, TEST_ENTRY2 ]
@@ -140,20 +140,20 @@ class BinLogTests(unittest.TestCase):
         log = binlog.BinaryLog(entsize, record_types=record_types)
         # Make an entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP):
-            log.info(TEST_ENTRY1, 1, -1)
+            log.info(TEST_ENTRY1, 1, 42)
         # Make sure the log contains our entry
         entries = log.get()
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 42"], entries)
         # Make an entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP+1):
-            log.info(TEST_ENTRY2, 1, -1)
+            log.info(TEST_ENTRY2, 1, 42)
         # Make sure the log contains our entry
         entries = log.get()
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP+1, "INFO", "T2 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP+1, "INFO", "T2 1 42"], entries)
         # Make sure the log doesn't contain the old entry
-        self.assertNotIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
+        self.assertNotIn([FAKE_TIMESTAMP, "INFO", "T1 1 42"], entries)
 
     def test_log_reloads(self):
         record_types = [ TEST_ENTRY1 ]
@@ -164,7 +164,7 @@ class BinLogTests(unittest.TestCase):
                                retrieve_cb=store.retrieve_cb)
         # Make an entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP):
-            log.info(TEST_ENTRY1, 1, -1)
+            log.info(TEST_ENTRY1, 1, 42)
         # Get the data and clear the store
         data = store.retrieve_cb()
         store.store_cb(None)
@@ -181,7 +181,7 @@ class BinLogTests(unittest.TestCase):
         # Make sure the log contains our entry
         entries = log.get()
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 42"], entries)
 
     def test_severity_levels(self):
         record_types = [ TEST_ENTRY1 ]
@@ -189,22 +189,22 @@ class BinLogTests(unittest.TestCase):
         log = binlog.BinaryLog(entsize, record_types=record_types)
         # Make an info entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP):
-            log.info(TEST_ENTRY1, 1, -1)
+            log.info(TEST_ENTRY1, 1, 42)
         # Make sure the log contains our entry
         entries = log.get()
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP, "INFO", "T1 1 42"], entries)
         # Make a warning entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP):
-            log.warn(TEST_ENTRY1, 1, -1)
+            log.warn(TEST_ENTRY1, 1, 42)
         # Make sure the log contains our entry
         entries = log.get()
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP, "WARNING", "T1 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP, "WARNING", "T1 1 42"], entries)
         # Make an error entry
         with mock.patch('time.time', return_value=FAKE_TIMESTAMP):
-            log.error(TEST_ENTRY1, 1, -1)
+            log.error(TEST_ENTRY1, 1, 42)
         # Make sure the log contains our entry
         entries = log.get()
         self.assertEqual(len(entries), 1)
-        self.assertIn([FAKE_TIMESTAMP, "ERROR", "T1 1 -1"], entries)
+        self.assertIn([FAKE_TIMESTAMP, "ERROR", "T1 1 42"], entries)

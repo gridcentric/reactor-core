@@ -27,12 +27,12 @@ def test_disconnect(zk_client):
     zk_client.disconnect()
     assert not zk_client.connected()
 
-def test_get_connection_disconnected(zk_client):
+def test_connect_disconnected(zk_client):
     assert not zk_client.connected()
-    assert zk_client.get_connection() != None
+    assert zk_client.connect() != None
 
-def test_get_connected_connected(zk_client):
+def test_connect_connected(zk_client):
     assert not zk_client.connected()
     zk_client.connect()
     orig_zk_conn = zk_client._zk_conn
-    assert zk_client.get_connection() == orig_zk_conn
+    assert zk_client.connect() == orig_zk_conn

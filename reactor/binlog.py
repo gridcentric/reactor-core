@@ -13,7 +13,7 @@ class BinaryLogRecord(object):
 #   u16 record type
 #   u32 arg1
 #   u32 arg2
-ENTRY_FMT = '<dHHll'
+ENTRY_FMT = '<dHHLL'
 ENTRY_SIZE = struct.calcsize(ENTRY_FMT)
 
 class BinaryLog(object):

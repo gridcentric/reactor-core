@@ -1,6 +1,6 @@
 """
-This module is used to calculate the ideal number of instances a endpoint requires given
-all the gather metrics and the scaling spec of the endpoint.
+This module is used to calculate the ideal number of instances a endpoint
+requires given all the gather metrics and the scaling spec of the endpoint.
 """
 
 import logging
@@ -9,7 +9,7 @@ import math
 import sys
 
 def calculate_weighted_averages(metrics):
-    """ Calculates the weighted average for each metric """
+    """ Calculates the weighted average for each metric. """
     totals = {}
     total_weights = {}
     for metric in metrics:
@@ -20,15 +20,14 @@ def calculate_weighted_averages(metrics):
             try:
                 (weight, value) = info
                 weight = float(weight)
-                value  = float(value)
+                value = float(value)
             except TypeError:
                 try:
                     (weight, value) = (1.0, float(info))
-                except:
+                except ValueError:
                     continue
             except:
                 continue
-
             totals[key] = totals.get(key, 0) + weight * value
             total_weights[key] = total_weights.get(key, 0) + weight
     for key in totals:
@@ -71,26 +70,29 @@ def calculate_server_range(total, lower, upper):
 
 def calculate_ideal_uniform(endpoint_spec, metric_averages, num_instances):
     """
-    Returns the ideal number of instances these endpoint spec should have as a tuple that
-    defines the range (min_servers, max_servers).
+    Returns the ideal number of instances these endpoint spec should have as a
+    tuple that defines the range (min_servers, max_servers).
 
-    endpoint_spec: A list of criteria that define that define the ideal range for a metric.
-                e.g. ['20<=rate<=50','100<=response<800']
-                (The hits per second should be between 20 - 50 for each instance
-                 and the response rate should be between 100ms - 800ms.)
+    endpoint_spec:
+        A list of criteria that define that define the ideal range for a metric.
+            e.g. ['20<=rate<=50','100<=response<800']
+        (The hits per second should be between 20 - 50 for each instance and
+        the response rate should be between 100ms - 800ms.)
 
-    metrics_averages: A set of metrics computed with calculate_weighted_averages
+    metrics_averages:
+        A set of metrics computed with calculate_weighted_averages.
 
-    num_instances: The number of instances that produced these metrics
+    num_instances:
+        The number of instances that produced these metrics.
     """
 
-    logging.debug("Metric totals: %s" % (metric_averages))
+    logging.debug("Metric totals: %s", metric_averages)
     ideal_instances = (-1, -1)
     for criteria in endpoint_spec:
         if criteria != '':
             c = EndpointCriteria(criteria)
-            logging.debug("Endpoint criteria found: (%s, %s, %s)" % \
-                    (c.metric_key(), c.lower_bound(), c.upper_bound()))
+            logging.debug("Endpoint criteria found: (%s, %s, %s)",
+                          c.metric_key(), c.lower_bound(), c.upper_bound())
 
             if c.metric_key() == 'instances':
                 (metric_min, metric_max) = (c.lower_bound(), c.upper_bound())
@@ -100,8 +102,8 @@ def calculate_ideal_uniform(endpoint_spec, metric_averages, num_instances):
                     calculate_server_range(avg * num_instances,
                                            c.lower_bound(), c.upper_bound())
 
-            logging.debug("Ideal instances for metric %s: [%s,%s]" % \
-                          (c.metric_key(), metric_min, metric_max))
+            logging.debug("Ideal instances for metric %s: [%s,%s]",
+                          c.metric_key(), metric_min, metric_max)
 
             if ideal_instances == (-1, -1):
                 # First time through the loop so we just set it to the first ideal values.
@@ -121,7 +123,7 @@ def calculate_ideal_uniform(endpoint_spec, metric_averages, num_instances):
                 elif metric_min > ideal_instances[1]:
                     ideal_instances = (ideal_instances[1], ideal_instances[1])
 
-            logging.debug("Returning ideal instances [%s,%s]" % (ideal_instances))
+            logging.debug("Returning ideal instances: %s", ideal_instances)
 
     return ideal_instances
 
@@ -173,7 +175,7 @@ class EndpointCriteria(object):
                             value = float(group)
                             # This is a value because it can be cast to a float.
                             self._add_value(value)
-                        except:
+                        except ValueError:
                             # This is the metric key.
                             self._add_metric_key(group)
 

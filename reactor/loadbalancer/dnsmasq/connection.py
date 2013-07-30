@@ -5,7 +5,6 @@ from mako.template import Template
 
 from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
-from reactor.loadbalancer.netstat import connection_count
 
 class DnsmasqManagerConfig(Config):
 
@@ -19,9 +18,13 @@ class Connection(LoadBalancerConnection):
     """ DNS-based (dnsmasq) """
 
     _MANAGER_CONFIG_CLASS = DnsmasqManagerConfig
+    _SUPPORTED_URLS = {
+        "dns://([a-zA-Z0-9]+[a-zA-Z0-9.]*)" : lambda m: m.group(1)
+    }
 
     def __init__(self, **kwargs):
-        LoadBalancerConnection.__init__(self, **kwargs)
+        super(Connection, self).__init__(**kwargs)
+
         # the __path__ symbol is set to the path from where this
         # module gets loaded.  In our case, the parent module loads
         # us, so the path is actually the parent directory, not the
@@ -46,17 +49,10 @@ class Connection(LoadBalancerConnection):
     def clear(self):
         self.ipmappings = {}
 
-    def redirect(self, url, names, other_url, config=None):
-        # We simply serve up the public servers as our DNS
-        # records. It's very difficult to implement CNAME
-        # records or even parse what is being specified in
-        # the other_url.
-        self.change(url, names, [], [])
-
-    def change(self, url, names, ips, config=None):
+    def change(self, url, backends, config=None):
         # Save the mappings.
-        for name in names:
-            self.ipmappings[name] = ips
+        name = self.url_info(url)
+        self.ipmappings[name] = backends
 
     def save(self):
         # Compute the address mapping.
@@ -83,7 +79,6 @@ class Connection(LoadBalancerConnection):
         # Write out the config file.
         config_file = file(os.path.join(self._manager_config().config_path, "reactor.conf"), 'wb')
         config_file.write(conf)
-        config_file.flush()
         config_file.close()
 
         # Send a signal to dnsmasq to reload the configuration

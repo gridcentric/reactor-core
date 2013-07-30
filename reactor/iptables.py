@@ -19,6 +19,8 @@ def build_cmd(rule):
             cmd.extend(["--dport", filt.split(":")[1]])
         if filt.startswith("spt:"):
             cmd.extend(["--sport", filt.split(":")[1]])
+        if filt.startswith("state:"):
+            cmd.extend(["-m", "state", "--state", filt.split(":")[1]])
     return cmd
 
 def add_rule(rule, table="INPUT"):
@@ -33,7 +35,7 @@ def remove_rule(rule, table="INPUT"):
 
 def list_rules(table="INPUT"):
     p = subprocess.Popen(["iptables", "-L", table, "-n"], stdout=subprocess.PIPE)
-    (stdout, stderr) = p.communicate()
+    (stdout, _) = p.communicate()
     if p.returncode != 0:
         raise Exception("Error executing iptables.")
 
@@ -51,6 +53,13 @@ def list_rules(table="INPUT"):
             destination = m.group(5)
             filters = m.group(6).split()
 
+            # Fixup the state filter.
+            if "state" in filters:
+                stateidx = filters.index("state")
+                state_val = "state:%s" % filters[stateidx+1]
+                filters.remove("state")
+                filters[stateidx] = state_val
+
             found.append(IpTableRule(target, prot, opt, source, destination, filters))
 
     return found
@@ -67,8 +76,18 @@ def modify_host(source="0.0.0.0/0", destination="0.0.0.0/0", action="ACCEPT", pr
 
 ZOOKEEPER_LOCAL = "127.0.0.0/8"
 ZOOKEEPER_PORTS = [2181, 2888, 3888]
+ESTABLISHED_RULE = IpTableRule(
+    "ACCEPT",
+    "tcp",
+    "--",
+    "0.0.0.0/0",
+    "0.0.0.0/0",
+    ["state:RELATED,ESTABLISHED"]
+)
 
-def zookeeper_clear(extra_ports=[]):
+def zookeeper_clear(extra_ports=None):
+    if extra_ports is None:
+        extra_ports = []
     rules = list_rules()
     ports = ZOOKEEPER_PORTS[:]
     ports.extend(extra_ports)
@@ -78,24 +97,38 @@ def zookeeper_clear(extra_ports=[]):
                 remove_rule(rule)
                 break
 
-def zookeeper_allow(host, extra_ports=[]):
+def zookeeper_allow(host, extra_ports=None):
+    if extra_ports is None:
+        extra_ports = []
+    if not ESTABLISHED_RULE in list_rules():
+        add_rule(ESTABLISHED_RULE)
     ports = ZOOKEEPER_PORTS[:]
     ports.extend(extra_ports)
     for port in ports:
         for prot in ("tcp", "udp"):
             try:
-                modify_host(source=host, action="ACCEPT", prot=prot, port=port)
+                modify_host(
+                    source=host,
+                    action="ACCEPT",
+                    prot=prot,
+                    port=port)
             except socket.error:
                 return
 
-def zookeeper_reject(extra_ports=[]):
+def zookeeper_reject(extra_ports=None):
+    if extra_ports is None:
+        extra_ports = []
     ports = ZOOKEEPER_PORTS[:]
     ports.extend(extra_ports)
     for port in ports:
         for prot in ("tcp", "udp"):
-            modify_host(source="0.0.0.0/0", action="REJECT", prot=prot, port=port)
+            modify_host(source="0.0.0.0/0", action="DROP", prot=prot, port=port)
 
-def setup(hosts=[], extra_ports=[]):
+def setup(hosts=None, extra_ports=None):
+    if hosts is None:
+        hosts = []
+    if extra_ports is None:
+        extra_ports = []
     zookeeper_clear(extra_ports=extra_ports)
     zookeeper_allow(ZOOKEEPER_LOCAL, extra_ports=extra_ports)
     addresses = [ZOOKEEPER_LOCAL]

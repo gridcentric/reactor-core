@@ -11,9 +11,8 @@ from mako.lookup import TemplateLookup
 from mako import exceptions
 
 from . api import connected
-from . api import authorized_admin_only
+from . api import authorized
 from . api import ReactorApiExtension
-
 from . endpoint import EndpointConfig
 from . manager import ManagerConfig
 
@@ -24,6 +23,13 @@ class ReactorGui(ReactorApiExtension):
 
         # Set the index.
         self.api.index = self.admin
+
+        # NOTE: We bind a collection of new endpoints onto
+        # the basic API configuration. For some of these endpoints,
+        # we filter by accept type. So if the user goes to the
+        # reactor URL in their web browser, they will see the admin
+        # interface. If they use javascript embedded in a page, they
+        # will get useable JSON.
 
         api.config.add_route(
             'admin-login', '/login', accept="text/html")
@@ -37,6 +43,7 @@ class ReactorGui(ReactorApiExtension):
         api.config.add_route(
             'admin-logout-form', '/logout', accept="application/x-www-form-urlencoded")
         api.config.add_view(self.admin_logout, route_name='admin-logout')
+        api.config.add_view(self.admin_logout, route_name='admin-logout-form')
 
         api.config.add_route('endpoint-info', '/endpoint')
         api.config.add_view(self.endpoint_info, route_name='endpoint-info')
@@ -63,50 +70,13 @@ class ReactorGui(ReactorApiExtension):
 
     @connected
     def manager_info(self, context, request):
-        return Response(body=json.dumps(ManagerConfig()._spec()))
+        return Response(body=json.dumps(ManagerConfig().spec()))
 
     @connected
     def endpoint_info(self, context, request):
-        return Response(body=json.dumps(EndpointConfig()._spec()))
+        return Response(body=json.dumps(EndpointConfig().spec()))
 
     @connected
-    @authorized_admin_only(forbidden_view='self.admin_login')
-    def admin(self, context, request):
-        """
-        Render a page from the admin directory and write it back.
-        """
-        if request.method == 'GET':
-            # Read the page_name from the request.
-            page_name = request.matchdict.get('page_name', 'index')
-            object_name = request.matchdict.get('object_name', '')
-
-            if object_name and page_name.endswith('s'):
-                page_name = page_name[:-1]
-            if page_name.find('.') < 0:
-                page_name += '.html'
-
-            # Check that the file exists.
-            filename = os.path.join(os.path.dirname(__file__), 'admin', page_name)
-            if not(os.path.exists(filename)):
-                return Response(status=404)
-
-            # Render it.
-            lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
-            lookup = TemplateLookup(directories=[lookup_path])
-            template = Template(filename=filename, lookup=lookup)
-            kwargs = { "object" : object_name,
-                       "user" : 'admin',
-                       "loggedin" : authenticated_userid(request) != None }
-            try:
-                page_data = template.render(**kwargs)
-            except:
-                page_data = exceptions.html_error_template().render()
-
-            return Response(body=page_data)
-
-        else:
-            return Response(status=403)
-
     def admin_login(self, context, request):
         """
         Logs the admin user in.
@@ -149,6 +119,44 @@ class ReactorGui(ReactorApiExtension):
         response = self.api.logout(context, request)
         return HTTPFound(location=route_url('admin-login', request), headers=response.headers)
 
+    @connected
+    @authorized(forbidden_view='self.admin_login')
+    def admin(self, context, request):
+        """
+        Render a page from the admin directory and write it back.
+        """
+        if request.method == 'GET':
+            # Read the page_name from the request.
+            page_name = request.matchdict.get('page_name', 'index')
+            object_name = request.matchdict.get('object_name', '')
+
+            if object_name and page_name.endswith('s'):
+                page_name = page_name[:-1]
+            if page_name.find('.') < 0:
+                page_name += '.html'
+
+            # Check that the file exists.
+            filename = os.path.join(os.path.dirname(__file__), 'admin', page_name)
+            if not(os.path.exists(filename)):
+                return Response(status=404)
+
+            # Render it.
+            lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
+            lookup = TemplateLookup(directories=[lookup_path])
+            template = Template(filename=filename, lookup=lookup)
+            kwargs = { "object" : object_name,
+                       "user" : 'admin',
+                       "loggedin" : authenticated_userid(request) != None }
+            try:
+                page_data = template.render(**kwargs)
+            except Exception:
+                page_data = exceptions.html_error_template().render()
+
+            return Response(body=page_data)
+
+        else:
+            return Response(status=403)
+
     def admin_asset(self, context, request):
         """
         Render an asset for the admin page
@@ -181,17 +189,16 @@ class ReactorGui(ReactorApiExtension):
             return Response(status=403)
 
     @connected
-    @authorized_admin_only(forbidden_view='self.admin_login')
+    @authorized(forbidden_view='self.admin_login')
     def admin_passwd(self, context, request):
         """
         Sets the admin password.
         """
-
         # See if the password form was submitted.
         if 'auth_key' in request.params:
             # Set the new password.
             auth_key = request.params['auth_key']
-            self.api.client.auth_hash_set(self.api._create_admin_auth_token(auth_key))
+            self.api.zkobj.auth_hash = self.api._create_admin_auth_token(auth_key)
 
             # Route user back to the home screen.
             return HTTPFound(location=route_url('admin-login', request))

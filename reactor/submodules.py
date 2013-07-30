@@ -13,10 +13,10 @@ def _discover_submodules(mod):
             # successfully perform get_connection().
             if os.path.isdir(os.path.join(path, name)):
                 discovered.append(name)
-        except:
+        except Exception:
             import traceback
-            logging.debug("Unable to load module %s: %s" % \
-                          (name, traceback.format_exc()))
+            logging.debug("Unable to load module %s: %s",
+                          name, traceback.format_exc())
             continue
     return discovered
 
@@ -30,8 +30,8 @@ def _build_options(mods, connection_fn):
             # description appended.
             desc = connection_fn(mod).__doc__.split("\n")[0]
             options.append((desc, mod))
-        except:
-            logging.error("Module %s is missing docstring!" % mod)
+        except Exception:
+            logging.error("Module %s is missing docstring!", mod)
             options.append((mod, mod))
     return options
 

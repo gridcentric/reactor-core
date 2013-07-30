@@ -3,41 +3,37 @@ import traceback
 import logging
 import json
 
-import reactor.zookeeper.config as config
-import reactor.zookeeper.paths as paths
-
-import reactor.iptables as iptables
-import reactor.ips as ips
-
-from reactor.api import connected
-from reactor.api import authorized_admin_only
-from reactor.api import ReactorApiExtension
-
 from pyramid.response import Response
 
-from reactor.manager import ScaleManager
-from reactor.manager import locked
+from . import iptables
+from . import ips
+from . api import connected
+from . api import authorized
+from . api import ReactorApiExtension
+from . manager import ScaleManager
+from . zookeeper import config
 
 class Cluster(ReactorApiExtension):
 
-    def __init__(self, *args, **kwargs):
-        super(Cluster, self).__init__(*args, **kwargs)
+    def __init__(self, api, *args, **kwargs):
+        super(Cluster, self).__init__(api, *args, **kwargs)
 
         # Save our manager state.
-        self.manager = None
-        self.manager_running = False
-        self.manager_thread = None
+        self._managers = None
+        self._manager = None
+        self._manager_running = False
+        self._manager_thread = None
 
         # Add route for changing the API servers.
-        self.api.config.add_route('api-servers', '/api_servers')
-        self.api.config.add_view(self.set_api_servers, route_name='api-servers')
+        api.config.add_route('api-servers', '/api_servers')
+        api.config.add_view(self.set_api_servers, route_name='api-servers')
 
         # Check that everything is up and running.
-        self.check_zookeeper(self.api.client.zk_servers)
-        self.check_manager(self.api.client.zk_servers)
+        self.check_zookeeper(api.client.servers())
+        self.check_manager(api.client.servers())
 
     @connected
-    @authorized_admin_only
+    @authorized()
     def set_api_servers(self, context, request):
         """
         Updates the list of API servers in the system.
@@ -47,51 +43,47 @@ class Cluster(ReactorApiExtension):
             logging.info("Updating API Servers.")
             api_servers = json.loads(request.body)['api_servers']
             self.check_zookeeper(api_servers)
-            self.api.client._reconnect(api_servers)
+            self.api.client.reconnect(api_servers)
             self.check_manager(api_servers)
             return Response()
 
         elif request.method == 'GET':
             # Return the current set of API servers.
-            return Response(body=json.dumps({ "api_servers" : self.api.client.zk_servers }))
+            return Response(body=json.dumps(
+                { "api_servers" : self.api.client.servers() }))
 
         else:
             return Response(status=403)
 
     def start_manager(self, zk_servers):
-        if self.manager:
-            zk_servers.sort()
-            self.manager.client.zk_servers.sort()
-            if self.manager.client.zk_servers != zk_servers:
-                # If we've changed Zookeeper servers, then
-                # we have to stop the manager and restart
-                # to ensure that it's using the full cluster.
-                self.stop_manager()
+        # If we've changed Zookeeper servers, then
+        # we have to stop the manager and restart
+        # to ensure that it's using the full cluster.
+        self.stop_manager()
 
         def manager_run():
             try:
-                self.manager.run()
-            except:
-                error = traceback.format_exc()
-                logging.error("An unrecoverable error occurred: %s" % error)
+                self._manager.run()
+            except Exception:
+                logging.error("An unrecoverable error occurred: %s",
+                    traceback.format_exc())
 
-        if not(self.manager_running):
-            self.manager = ScaleManager(self.api.client.zk_servers)
-            self.manager_thread = threading.Thread(target=manager_run)
-            self.manager_thread.daemon = True
-            self.manager_thread.start()
-            self.manager_running = True
+        if not(self._manager_running):
+            self._manager = ScaleManager(zk_servers)
+            self._manager_thread = threading.Thread(target=manager_run)
+            self._manager_thread.daemon = True
+            self._manager_thread.start()
+            self._manager_running = True
 
     def stop_manager(self):
-        if self.manager_running:
-            self.manager.clean_stop()
-            self.manager_thread.join()
-            self.manager_running = False
+        if self._manager_running:
+            self._manager.stop()
+            self._manager_thread.join()
+            self._manager_running = False
 
     def setup_iptables(self, managers, zk_servers=None):
         if zk_servers is None:
-            # Use the currently active zookeeper servers.
-            zk_servers = self.api.client.zk_servers
+            zk_servers = self.api.client.servers()
         hosts = list(set(managers + zk_servers))
         iptables.setup(hosts, extra_ports=[8080])
 
@@ -114,9 +106,9 @@ class Cluster(ReactorApiExtension):
         # manager. If the user creates a new configuration for manager
         # that is not inside the cluster, we have to respond by opening
         # up iptables rules appropriately so that it can connect.
+        self._managers = self.api.zkobj.managers()
         self.setup_iptables(
-            self.api.client.zk_conn.watch_children(
-                paths.manager_configs(), self.setup_iptables),
+            self._managers.list(watch=self.setup_iptables),
             zk_servers=zk_servers)
 
         # NOTE: We now *always* start the manager. We rely on the user to

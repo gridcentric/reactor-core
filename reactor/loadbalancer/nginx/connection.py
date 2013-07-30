@@ -1,7 +1,5 @@
-import hashlib
 import os
 import signal
-import urlparse
 import shutil
 import glob
 import re
@@ -14,11 +12,14 @@ import tempfile
 from mako.template import Template
 
 from reactor.config import Config
+from reactor.utils import sha_hash
 from reactor.loadbalancer.connection import LoadBalancerConnection
 from reactor.loadbalancer.netstat import connection_count
 
 class NginxLogReader(object):
+
     def __init__(self, log_filename, filter=None):
+        self.logfile = None
         self.log_filename = log_filename
         self.filter = None
         if filter != None:
@@ -66,7 +67,7 @@ class NginxLogWatcher(threading.Thread):
     This will monitor the nginx access log.
     """
     def __init__(self, access_logfile):
-        threading.Thread.__init__(self)
+        super(NginxLogWatcher, self).__init__()
         self.daemon = True
         log_filter = "reactor> " \
                    + "\[([^\]]*)\]" \
@@ -117,7 +118,7 @@ class NginxLogWatcher(threading.Thread):
                 time.sleep(1.0)
             else:
                 # We have some information.
-                (timeinfo, host, body, response) = line
+                (_, host, body, response) = line
                 self.lock.acquire()
                 hostinfo = host.split(":")
                 if len(hostinfo) > 1:
@@ -162,14 +163,23 @@ class NginxEndpointConfig(Config):
     ssl_key = Config.string(label="SSL Key", default=None,
         description="An SSL key (not password protected).")
 
+    redirect = Config.string(label="Redirect", default=None,
+        description="A 301 redirect to use when no backends are available.")
+
 class Connection(LoadBalancerConnection):
     """ HTTP-based (nginx) """
 
     _MANAGER_CONFIG_CLASS = NginxManagerConfig
     _ENDPOINT_CONFIG_CLASS = NginxEndpointConfig
+    _SUPPORTED_URLS = {
+        "(http|https)://([a-zA-Z0-9]+[a-zA-Z0-9.]*)(:[0-9]+|)(/.*|)": \
+            lambda m: (m.group(1), m.group(2), m.group(3), m.group(4)),
+        "(http|https)://(:[0-9]+|)": \
+            lambda m: (m.group(1), None, m.group(2), None)
+    }
 
     def __init__(self, **kwargs):
-        LoadBalancerConnection.__init__(self, **kwargs)
+        super(Connection, self).__init__(**kwargs)
         self.tracked = {}
         template_file = os.path.join(os.path.dirname(__file__), 'nginx.template')
         self.template = Template(filename=template_file)
@@ -244,55 +254,41 @@ class Connection(LoadBalancerConnection):
         # Remove all tracked connections.
         self.tracked = {}
 
-    def redirect(self, url, names, other, config=None):
-        self.change(url, names, [], [], redirect=other)
-
-    def change(self, url, names, ips, redirect=False, config=None):
+    def change(self, url, backends, config=None):
         # We use a simple hash of the URL as the file name for the configuration file.
-        hash_fn = hashlib.new('md5')
-        hash_fn.update(url)
-        uniq_id = hash_fn.hexdigest()
+        uniq_id = sha_hash(url)
         conf_filename = "%s.conf" % uniq_id
 
+        # Grab the endpoint configuration.
+        config = self._endpoint_config(config)
+
         # Check for a removal.
-        if not(redirect) and len(ips) == 0:
+        if len(backends) == 0 and not config.redirect:
             # Remove the connection from our tracking list.
             if uniq_id in self.tracked:
                 del self.tracked[uniq_id]
-
+            
             try:
-                os.remove(os.path.join(self._manager_config().site_path, conf_filename))
+                full_conf_file = os.path.join(
+                    self._manager_config().site_path, conf_filename)
+                if os.path.exists(full_conf_file):
+                    os.remove(full_conf_file)
             except OSError:
-                logging.warn("Unable to remove file: %s" % conf_filename)
+                logging.warn("Unable to remove file: %s", conf_filename)
             return
 
-        # Parse the url because we need to know the netloc.
-        (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(url)
+        # Parse the given URL.
+        (scheme, netloc, listen, path) = self.url_info(url)
 
-        # Check that this is a URL we should be managing.
-        if not(scheme == "http") and not(scheme == "https"):
-            return
-
-        # Grab a sensible listen port.
-        w_port = netloc.split(":")
-        netloc = w_port[0]
-        if len(w_port) == 1:
-            if scheme == "http":
-                listen = 80
-            elif scheme == "https":
-                listen = 443
-        else:
-            try:
-                listen = int(w_port[1])
-            except ValueError:
-                logging.warn("Invalid listen port: %s" % str(w_port[1]))
-                return
+        if listen:
+            listen = int(listen)
+        elif scheme == "http":
+            listen = 80
+        elif scheme == "https":
+            listen = 443
 
         # Ensure that there is a path.
         path = path or "/"
-
-        # If there is no netloc, set it so False.
-        netloc = netloc or False
 
         # Add the connection to our tracking list, and
         # compute the specification for the template.
@@ -301,7 +297,6 @@ class Connection(LoadBalancerConnection):
         extra = ''
 
         # Figure out if we're doing SSL.
-        config = self._endpoint_config(config)
         if config.ssl:
             # Try to either extract existing keys and certificates, or
             # we dynamically generate a local cert here (for testing).
@@ -310,26 +305,31 @@ class Connection(LoadBalancerConnection):
             # Since we are front-loading SSL, just use raw HTTP to connect
             # to the backends. If the user doesn't want this, they should disable
             # the SSL key in the nginx config.
-            if scheme == "https":
-                scheme = "http"
+            scheme = "http"
         else:
             # Don't use any SSL backend.
             (ssl_certificate, ssl_key) = (None, None)
 
-        if not(redirect):
-            for backend in ips:
-                if not(backend.port):
-                    port = listen
-                else:
-                    port = backend.port
-                ipspecs.append("%s:%d weight=%d" % (backend.ip, port, backend.weight))
-                self.tracked[uniq_id].append((backend.ip, port))
+        # Collect all the backend IPs.
+        for backend in backends:
+            if not(backend.port):
+                port = listen
+            else:
+                port = backend.port
+            ipspecs.append("%s:%d weight=%d" % (backend.ip, port, backend.weight))
+            self.tracked[uniq_id].append((backend.ip, port))
 
-            # Compute any extra bits for the template.
-            if self._endpoint_config(config).sticky_sessions:
-                extra += '    sticky;\n'
-            if self._endpoint_config(config).keepalive:
-                extra += '    keepalive %d single;\n' % self._endpoint_config(config).keepalive
+        # Compute any extra bits for the template.
+        if self._endpoint_config(config).sticky_sessions:
+            extra += '    sticky;\n'
+        if self._endpoint_config(config).keepalive:
+            extra += '    keepalive %d single;\n' % self._endpoint_config(config).keepalive
+
+        # Check if we're doing a redirect.
+        if len(ipspecs) == 0:
+            redirect = config.redirect
+        else:
+            redirect = False
 
         # Render our given template.
         conf = self.template.render(id=uniq_id,
@@ -348,7 +348,6 @@ class Connection(LoadBalancerConnection):
         # Write out the config file.
         config_file = file(os.path.join(self._manager_config().site_path, conf_filename), 'wb')
         config_file.write(conf)
-        config_file.flush()
         config_file.close()
 
     def save(self):

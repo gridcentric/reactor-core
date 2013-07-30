@@ -3,44 +3,25 @@ import logging
 import traceback
 import socket
 import sys
-import copy
 
-from reactor.config import Config
-from reactor.submodules import cloud_submodules, cloud_options
-from reactor.submodules import loadbalancer_submodules, loadbalancer_options
-from reactor.binlog import BinaryLog, BinaryLogRecord
-from reactor.utils import inet_ntoa, inet_aton
-
-import reactor.cloud.connection as cloud_connection
-import reactor.loadbalancer.connection as lb_connection
-import reactor.metrics.calculator as metric_calculator
-
-def compute_key(url):
-    hash_fn = hashlib.new('md5')
-    hash_fn.update(url)
-    return hash_fn.hexdigest()
-
-class State:
-    running = "RUNNING"
-    stopped = "STOPPED"
-    paused  = "PAUSED"
-    default = paused
-
-    @staticmethod
-    def from_action(current, action):
-        if action.upper() == "START":
-            return State.running
-        elif action.upper() == "STOP":
-            return State.stopped
-        elif action.upper() == "PAUSE":
-            return State.paused
-        else:
-            return current
+from . atomic import Atomic
+from . config import Config
+from . submodules import cloud_submodules, cloud_options
+from . submodules import loadbalancer_submodules, loadbalancer_options
+from . binlog import BinaryLog, BinaryLogRecord
+from . utils import inet_ntoa, inet_aton, sha_hash
+from . cloud import connection as cloud_connection
+from . loadbalancer import connection as lb_connection
+from . loadbalancer import backend as lb_backend
+from . metrics import calculator as metric_calculator
+from . objects.endpoint import State
+from . zookeeper.cache import Cache
 
 class EndpointConfig(Config):
 
     def __init__(self, **kwargs):
-        Config.__init__(self, section="endpoint", **kwargs)
+        super(EndpointConfig, self).__init__(
+            section="endpoint", **kwargs)
 
     url = Config.string(label="Endpoint URL", order=0,
         description="The URL for this endpoint.")
@@ -82,15 +63,17 @@ class EndpointConfig(Config):
         validate=lambda self: hashlib.new(self.auth_algo, ''),
         description="The algorithm used for computing authentication tokens.")
 
-    def _get_endpoint_auth(self):
+    def endpoint_auth(self):
         return (self.auth_hash, self.auth_salt, self.auth_algo)
 
     static_instances = Config.list(label="Static Backends", order=1,
-        validate=lambda self: self._static_ips(validate=True),
+        validate=lambda self: self.static_ips(validate=True),
         description="Static hosts for the endpoint.")
 
-    def _static_ips(self, validate=False):
-        """ Returns a list of static ips associated with the configured static instances. """
+    def static_ips(self, validate=False):
+        """
+        Returns a list of static ips associated with the endpoint.
+        """
         static_instances = self.static_instances
 
         # (dscannell) The static instances can be specified either as IP
@@ -101,45 +84,57 @@ class EndpointConfig(Config):
             try:
                 if static_instance != '':
                     ip_addresses += [socket.gethostbyname(static_instance)]
-            except:
+            except Exception:
                 logging.warn("Failed to determine the ip address "
-                             "for the static instance %s." % static_instance)
+                             "for the static instance %s.", static_instance)
                 if validate:
                     raise
         return ip_addresses
 
-    def _spec(self):
+    def spec(self):
         ScalingConfig(obj=self)
         for name in loadbalancer_submodules():
-            lb_connection.get_connection(name)._endpoint_config(config=self)
+            lb_connection.get_connection(name)._endpoint_config(self)
         for name in cloud_submodules():
-            cloud_connection.get_connection(name)._endpoint_config(config=self)
-        return Config._spec(self)
+            cloud_connection.get_connection(name)._endpoint_config(self)
+        return super(EndpointConfig, self).spec()
 
-    def _validate(self):
+    def validate(self):
         # NOTE: We do the validation here without a proper manager config.
         # it is quite possible that the available manager does not support
         # those clouds and / or load balancers, or that it is configured in
         # such a way that it may fail elsewhere. Unfortunately, there isn't
         # much we can really do at this point without making the architecture
         # overly complex.
-        Config._validate(self)
-        ScalingConfig(obj=self)._validate()
+        errors = super(EndpointConfig, self).validate()
+        errors.update(ScalingConfig(obj=self).validate())
         if self.loadbalancer:
             if not self.loadbalancer in loadbalancer_submodules():
                 self._add_error('loadbalancer', 'Unknown loadbalancer.')
             else:
-                lb_connection.get_connection(self.loadbalancer)._endpoint_config(config=self)._validate()
+                try:
+                    # Validate our URL with the loadbalancer.
+                    lb_connection.get_connection(
+                        self.loadbalancer).url_info(self.url)
+                except Exception, e:
+                    self._add_error('url', str(e))
+                # Validate any loadbalancer configuration.
+                errors.update(lb_connection.get_connection(
+                    self.loadbalancer)._endpoint_config(self).validate())
         if self.cloud:
             if not self.cloud in cloud_submodules():
                 self._add_error('cloud', 'Unknown cloud.')
             else:
-                cloud_connection.get_connection(self.cloud)._endpoint_config(config=self)._validate()
+                errors.update(cloud_connection.get_connection(
+                    self.cloud)._endpoint_config(self).validate())
+        errors.update(self._get_errors())
+        return errors
 
 class ScalingConfig(Config):
 
     def __init__(self, **kwargs):
-        Config.__init__(self, "scaling", **kwargs)
+        super(ScalingConfig, self).__init__(
+            "scaling", **kwargs)
 
     min_instances = Config.integer(label="Minimum Instances", default=1, order=0,
         validate=lambda self: (self.min_instances >= 0 or \
@@ -172,19 +167,34 @@ class ScalingConfig(Config):
 
 class EndpointLog(BinaryLog):
     # Log entry types.
-    ENDPOINT_STARTED        = BinaryLogRecord(lambda args: "Endpoint marked as Started")
-    ENDPOINT_STOPPED        = BinaryLogRecord(lambda args: "Endpoint marked as Stopped")
-    ENDPOINT_PAUSED         = BinaryLogRecord(lambda args: "Endpoint marked as Paused")
-    SCALE_UPDATE            = BinaryLogRecord(lambda args: "Target number of instances has changed: %d => %d" % (args[0], args[1]))
-    METRICS_CONFLICT        = BinaryLogRecord(lambda args: "Scaling rules conflict detected")
-    CONFIG_UPDATED          = BinaryLogRecord(lambda args: "Configuration reloaded")
-    RECOMMISSION_INSTANCE   = BinaryLogRecord(lambda args: "Recommissioning formerly decommissioned instance")
-    DECOMMISION_INSTANCE    = BinaryLogRecord(lambda args: "Decommissioning instance")
-    LAUNCH_INSTANCE         = BinaryLogRecord(lambda args: "Launching instance")
-    LAUNCH_FAULURE          = BinaryLogRecord(lambda args: "Failure launching instance")
-    DELETE_INSTANCE         = BinaryLogRecord(lambda args: "Deleting instance")
-    CONFIRM_IP              = BinaryLogRecord(lambda args: "Confirmed instance with IP %s" % (inet_ntoa(args[0])))
-    DROP_IP                 = BinaryLogRecord(lambda args: "Dropped instance with IP %s" % (inet_ntoa(args[0])))
+    ENDPOINT_STARTED = BinaryLogRecord(
+        lambda args: "Endpoint marked as Started")
+    ENDPOINT_STOPPED = BinaryLogRecord(
+        lambda args: "Endpoint marked as Stopped")
+    ENDPOINT_PAUSED = BinaryLogRecord(
+        lambda args: "Endpoint marked as Paused")
+    SCALE_UPDATE = BinaryLogRecord(
+        lambda args: "Target number of instances has changed: %d => %d" % (args[0], args[1]))
+    METRICS_CONFLICT = BinaryLogRecord(
+        lambda args: "Scaling rules conflict detected")
+    CONFIG_UPDATED = BinaryLogRecord(
+        lambda args: "Configuration reloaded")
+    RECOMMISSION_INSTANCE = BinaryLogRecord(
+        lambda args: "Recommissioning formerly decommissioned instance")
+    DECOMMISION_INSTANCE = BinaryLogRecord(
+        lambda args: "Decommissioning instance")
+    LAUNCH_INSTANCE = BinaryLogRecord(
+        lambda args: "Launching instance")
+    LAUNCH_FAILURE = BinaryLogRecord(
+        lambda args: "Failure launching instance")
+    DELETE_INSTANCE = BinaryLogRecord(
+        lambda args: "Deleting instance")
+    DELETE_FAILURE = BinaryLogRecord(
+        lambda args: "Failure deleting instance")
+    CONFIRM_IP = BinaryLogRecord(
+        lambda args: "Confirmed instance with IP %s" % (inet_ntoa(args[0])))
+    DROP_IP = BinaryLogRecord(
+        lambda args: "Dropped instance with IP %s" % (inet_ntoa(args[0])))
 
     def __init__(self, store_cb=None, retrieve_cb=None):
         # Note: if adding new log entry types, they must be added above
@@ -200,10 +210,11 @@ class EndpointLog(BinaryLog):
             EndpointLog.RECOMMISSION_INSTANCE,
             EndpointLog.DECOMMISION_INSTANCE,
             EndpointLog.LAUNCH_INSTANCE,
-            EndpointLog.LAUNCH_FAULURE,
+            EndpointLog.LAUNCH_FAILURE,
             EndpointLog.DELETE_INSTANCE,
             EndpointLog.CONFIRM_IP,
-            EndpointLog.DROP_IP
+            EndpointLog.DROP_IP,
+            EndpointLog.DELETE_FAILURE,
         ]
 
         # Zookeeper objects are limited to 1MB in size. Since we write
@@ -212,31 +223,37 @@ class EndpointLog(BinaryLog):
         # we limit the size of the log to 16kB, which we then double
         # by converting to a hex string before storing. At the current
         # log record size, this gives enough room for 1024 log entries.
-        BinaryLog.__init__(self, size=(16*1024), record_types=record_types,
+        super(EndpointLog, self).__init__(
+                size=(16*1024), record_types=record_types,
                 store_cb=store_cb, retrieve_cb=retrieve_cb)
 
-class Endpoint(object):
+class Endpoint(Atomic):
 
-    def __init__(self, client, name, config=None):
-        self.client = client
-        self.name = name
+    def __init__(self, zkobj,
+                 collect=None,
+                 find_cloud_connection=None,
+                 find_loadbalancer_connection=None):
+        super(Endpoint, self).__init__()
+
+        # Our zookeeper object.
+        self.zkobj = zkobj
+
+        # Values from our scale manager.
+        # NOTE: See the note in endpoint_change() within the
+        # manager. Because these callbacks come the manager class,
+        # the manager will call break_refs() to ensure that this
+        # object will be garbage collected properly.
+        self._collect = collect
+        self._find_cloud_connection = find_cloud_connection
+        self._find_loadbalancer_connection = find_loadbalancer_connection
 
         # Initialize endpoint-specific logging.
         self.logging = EndpointLog(
-                store_cb=lambda data: self.client.endpoint_log_save(self.name, data),
-                retrieve_cb=lambda: self.client.endpoint_log_load(self.name))
-
-        # Initialize configuration.
-        if config is None:
-            self.config = EndpointConfig()
-            self.scaling = ScalingConfig()
-        else:
-            self.config = EndpointConfig(obj=config)
-            self.scaling = ScalingConfig(obj=config)
+            store_cb=zkobj.log().store,
+            retrieve_cb=zkobj.log().retrieve)
 
         # Endpoint state.
         self.state = State.default
-        self.decommissioned_instances = []
 
         # Default to no cloud connection.
         self.cloud_conn = cloud_connection.get_connection(None)
@@ -244,57 +261,139 @@ class Endpoint(object):
         # Default to no load balancer.
         self.lb_conn = lb_connection.get_connection(None)
 
-    def key(self):
-        return compute_key(self.url())
+        # Initialize configuration.
+        self.config = EndpointConfig()
+        self.scaling = ScalingConfig()
 
-    def url(self):
-        return self.config.url or "none://%s" % self.name
+        # Instances is a cache which maps instances to their names.
+        self.instances = Cache(self.zkobj.instances())
 
-    def port(self):
-        return self.config.port
+        # Instance IPs is a separate cache which maps to the cloud IP address.
+        self.instance_ips = Cache(self.zkobj.instances(), populate=self._ips_for_instance)
 
-    def redirect(self):
-        return self.config.redirect
+        # Confirmed IPs map to the instance_id.
+        self.confirmed_ips = Cache(self.zkobj.confirmed_ips(), update=self._update_confirmed)
 
-    def weight(self):
-        return self.config.weight
+        # Decomissioned instances maps to the instance name (as instances above).
+        # NOTE: When we decommission an instance, we remove it from the set of
+        # known instances above. The instance name information is persisted here.
+        self.decommissioned = Cache(self.zkobj.decommissioned_instances())
 
-    def source_key(self):
-        source_url = self.scaling.url
-        if source_url:
-            return compute_key(source_url)
-        else:
+        # Start watching the configuration.
+        self.update_config(self.zkobj.get_config(watch=self.update_config))
+
+        # Start watching our state.
+        self.update_state(self.zkobj.state().current(watch=self.update_state))
+
+    def __del__(self):
+        self.zkobj.unwatch()
+ 
+    def break_refs(self):
+        # See NOTE above.
+        self.zkobj.unwatch()
+        del self._collect
+        del self._find_cloud_connection
+        del self._find_loadbalancer_connection
+
+    # This method is a simple method used for populating our
+    # instance IP cache. All the cached (decommissioned instances,
+    # confirmed ips, instance names) are populated and maintained
+    # automatically by the Cache class, but here we need to be able
+    # to pass in a bit more data when necessary.
+    def _ips_for_instance(self, instance_id):
+        instances = self.cloud_conn.list_instances(self.config, instance_id=instance_id)
+
+        # Probably a race condition.
+        # We just ignore this and populate() will get
+        # recalled or whatever at a more appropriate moment.
+        if len(instances) == 0:
             return None
 
-    def manage(self):
-        # Load the configuration and configure the endpoint.
-        logging.info("Managing endpoint %s" % (self.name))
-        self.decommissioned_instances = \
-            self.client.decommissioned_instances(self.name)
+        # Return the current set of IPs. Note that if this
+        # is an empty list (which will happen at the beginning)
+        # then populate() will be recalled until it is not an
+        # empty list.
+        return instances[0].ips
+
+    # This method is a hook used to update the loadbalancer when
+    # the confirmed cache changes. This will be automatically 
+    # called by the cache whenever the confirmed IPs change.
+    def _update_confirmed(self):
+        self.reload()
+
+    @Atomic.sync
+    def key(self):
+        # Some loadbalancers supported operation with
+        # an explicit URL specified. In order to ensure
+        # that we don't confuse endpoints that on two
+        # different loadbalancers without a URL, we will
+        # hash the loadbalancer name if no URL is provided.
+        if self.config.url:
+            return sha_hash(self.config.url)
+        elif self.config.loadbalancer:
+            return sha_hash(self.config.loadbalancer)
+        else:
+            return sha_hash("")
+
+    @Atomic.sync
+    def metric_key(self):
+        source_url = self.scaling.url
+        if source_url:
+            return sha_hash(source_url)
+        else:
+            return self.key()
+
+    def managed(self, uuid):
+        # Mark that this is our manager.
+        # NOTE: This is really for informational
+        # purposes only, we don't make any decisions
+        # internally on whether or not we will call
+        # update() based on this uuid etc. 
+        self.zkobj.manager = uuid
 
     def update(self,
-               reconfigure=True,
-               metrics={},
+               metrics=None,
                metric_instances=None,
-               active_ips=[]):
+               active_ips=None):
         """
         Update the endpoint based on current metrics and
         active instances. This will launch new instances or
         recomission old ones in response to demand.
-
-        As per health_check() above, this function will return
-        True if a loadbalancer reload is required (instances
-        have been decomissioned or the active IPs have changed
-        in some way).
         """
+        if metrics is None:
+            metrics = {}
+        if metric_instances is None:
+            metric_instances = []
+        if active_ips is None:
+            active_ips = []
+
         try:
-            return self._update(reconfigure=reconfigure,
+            # Save the live metrics and active connections
+            # to the zookeeper backend. These don't serve
+            # any practical purpose, they are simply exposed
+            # by the API for debugging purposes, etc.
+            self.zkobj.metrics = metrics
+            self.zkobj.active = active_ips
+
+            # Grab the current collection of instances.
+            # This includes all instances, depending on what
+            # you are doing with this list it will be necessary
+            # to filter it through decomissioned, etc.
+            instances = self.cloud_conn.list_instances(self.config)
+
+            # Run a healthcheck to reap old instances,
+            # decomissioned instances, unable to launch, etc.
+            (active_ids, inactive_ids) = self._health_check(instances, active_ips)
+
+            # Run an update to launch new instances.
+            return self._update(instances,
+                                active_ids=active_ids,
+                                inactive_ids=inactive_ids,
                                 metrics=metrics,
-                                metric_instances=metric_instances,
-                                active_ips=active_ips)
-        except:
-            logging.error("Error updating endpoint %s: %s" % \
-                (self.name, traceback.format_exc()))
+                                metric_instances=metric_instances)
+
+        except Exception:
+            logging.error("Error updating endpoint: %s", traceback.format_exc())
             return False
 
     def _determine_target_instances_range(self, metrics, num_instances):
@@ -305,11 +404,8 @@ class Endpoint(object):
 
         # Evaluate the metrics on these instances and get the ideal bounds on
         # the number of servers that should exist.
-        ideal_min, ideal_max = metric_calculator.calculate_ideal_uniform(\
+        ideal_min, ideal_max = metric_calculator.calculate_ideal_uniform(
                 self.scaling.rules, metrics, num_instances)
-        logging.debug("Metrics for endpoint %s: ideal_servers=%s (%s)" % \
-                (self.name, (ideal_min, ideal_max), metrics))
-
         if ideal_max < ideal_min:
             # Either the metrics are undefined or have conflicting answers. We simply
             # return this conflicting result.
@@ -318,9 +414,6 @@ class Endpoint(object):
                 # provided. In other words only if the metrics could have made
                 # a difference.
                 self.logging.warn(self.logging.METRICS_CONFLICT)
-                logging.warn("The metrics defined for endpoint %s have resulted in a "
-                             "conflicting result. (endpoint metrics: %s)"
-                             % (self.name, str(self.scaling.rules)))
             return (ideal_min, ideal_max)
 
         # Grab the allowable bounds of the number of servers that should exist.
@@ -345,58 +438,51 @@ class Endpoint(object):
 
         return (target_min, target_max)
 
-    def _instance_is_active(self, instance, active_ips):
-        for ip in self.cloud_conn.addresses(self.config, instance):
-            if ip in active_ips:
-                return True
-        return False
-
-    def _update(self, reconfigure, metrics, metric_instances, active_ips):
-        rv = False
+    def _update(self,
+                instances,
+                active_ids,
+                inactive_ids,
+                metrics,
+                metric_instances):
+        """
+        Launch new instances, decommission instances, etc.
+        """
+        # Look only at the current set of instances.
+        instances = self._filter_instances(instances, decommissioned=False)
+        num_instances = len(instances)
+        ramp_limit = self.scaling.ramp_limit
 
         if self.state == State.paused:
             # Do nothing while paused, this will keep the current
             # instances alive and continue to process requests.
-            return rv
-
-        instances = self.instances()
-        num_instances = len(instances)
-        ramp_limit = self.scaling.ramp_limit
+            return
 
         if self.state == State.running:
-            # If this is a config change update,
-            if reconfigure:
-                # Just make sure the number of instances is within range.
-                target = max(num_instances, self.scaling.min_instances)
-                target = min(target, self.scaling.max_instances)
-            # Else this is a health check, so make use of the passed metrics.
-            else:
-                (target_min, target_max) = \
-                    self._determine_target_instances_range(metrics, metric_instances)
 
-                if (num_instances >= target_min and num_instances <= target_max) \
-                    or (target_min > target_max):
-                    # Either the number of instances we currently have is within the
-                    # ideal range or we have no information to base changing the number
-                    # of instances. In either case we just keep the instances the same.
-                    target = num_instances
-                else:
-                    # we need to either scale up or scale down. Our target will be the
-                    # midpoint in the target range.
-                    target = (target_min + target_max) / 2
+            (target_min, target_max) = \
+                self._determine_target_instances_range(metrics, metric_instances)
+
+            if (num_instances >= target_min and num_instances <= target_max) \
+                or (target_min > target_max):
+                # Either the number of instances we currently have is within the
+                # ideal range or we have no information to base changing the number
+                # of instances. In either case we just keep the instances the same.
+                target = num_instances
+            else:
+                # we need to either scale up or scale down. Our target will be the
+                # midpoint in the target range.
+                target = (target_min + target_max) / 2
 
         elif self.state == State.stopped:
             target = 0
             ramp_limit = sys.maxint
 
         else:
-            logging.error("Unknown state '%s' ?!?" % self.state)
-            return rv
+            logging.error("Unknown state '%s' ?!?", self.state)
+            return
 
         if target != num_instances:
             self.logging.info(self.logging.SCALE_UPDATE, num_instances, target)
-            logging.info("Target number of instances for endpoint %s determined to be %s (current: %s)"
-                          % (self.name, target, num_instances))
 
         # Perform only 'ramp' actions per iterations.
         action_count = 0
@@ -404,102 +490,76 @@ class Endpoint(object):
         # Launch instances until we reach the min setting value.
         if num_instances < target:
             # First, recommission instances that have been decommissioned.
-            if len(self.decommissioned_instances) > 0:
-                rv = rv or self.recommission_instances(target - num_instances,
-                    "bringing instance total up to target %s" % target)
-                instances = self.instances()
-                num_instances = len(instances)
+            num_instances += self._recommission_instances(
+                target - num_instances,
+                "bringing instance total up to target %s" % target)
 
             # Then, launch new instances.
             while num_instances < target and action_count < ramp_limit:
-                self._launch_instance("bringing instance total up to target %s" % target)
+                self._launch_instance(
+                    "bringing instance total up to target %s" % target)
                 num_instances += 1
                 action_count += 1
 
         # Delete instances until we reach the max setting value.
         elif target < num_instances:
-            instances_to_delete = []
-            inactive_instances = \
-                filter(lambda x: not self._instance_is_active(x, active_ips),
-                        instances)
-            to_do = min(len(inactive_instances), ramp_limit,
-                                        (num_instances - target))
-            for i in range(to_do):
-                instances_to_delete.append(inactive_instances.pop(0))
 
-            rv = rv or self.decommission_instances(instances_to_delete,
+            # Build our list of candidates (favoring those that are not active).
+            candidates = list(set(inactive_ids).union(instances))
+            candidates.extend(list(set(active_ids).union(instances)))
+
+            # Take all the instances that we can.
+            to_do = min(len(candidates), ramp_limit, num_instances - target)
+            self._decommission_instances(candidates[:to_do],
                 "bringing instance total down to target %s" % target)
 
-        return rv
+    def session_opened(self, client, backend):
+        self.zkobj.sessions().opened(client, backend)
 
-    def update_sessions(self, dropped_sessions, authoritative):
-        for client in dropped_sessions:
-            backend = self.client.session_backend(self.name, client)
-            if backend:
-                self.lb_conn.drop_session(client, backend)
-                if authoritative:
-                    self.client.session_dropped(self.name, client)
+    def session_closed(self, client, backend):
+        self.zkobj.sessions().closed(client)
+
+    def drop_sessions(self, authoritative=False):
+        for (client, backend) in self.zkobj.sessions().drop_map().items():
+            self.lb_conn.drop_session(client, backend)
+            if authoritative:
+                self.zkobj.sessions().dropped(client)
+
+    @Atomic.sync
+    def _update_state(self, state):
+        self.state = state or State.default
+        return self.state
 
     def update_state(self, state):
-        self.state = state or State.default
-        if self.state == State.running:
+        state = self._update_state(state)
+        if state == State.running:
             self.logging.info(self.logging.ENDPOINT_STARTED)
-        elif self.state == State.paused:
+        elif state == State.paused:
             self.logging.info(self.logging.ENDPOINT_PAUSED)
-        elif self.state == State.stopped:
+        elif state == State.stopped:
             self.logging.info(self.logging.ENDPOINT_STOPPED)
 
-    def validate_config(self, config, clouds, loadbalancers):
-        config = EndpointConfig(obj=config)
-        scaling = ScalingConfig(obj=config)
-        config._validate()
-        scaling._validate()
-
-        # Ensure that this cloud is available.
-        if config.cloud:
-            if not config.cloud in clouds:
-                # Add a message indicating the available clouds.
-                config._add_error("cloud", "Available clouds: %s" % ",".join(clouds))
-            else:
-                # Ensure the cloud configuration is correct.
-                cloud = clouds[config.cloud]
-                cloud._endpoint_config(config=config)._validate()
-
-        # Ensure the loadbalancer is available.
-        if config.loadbalancer:
-            if not config.loadbalancer in loadbalancers:
-                # Add a message indicating the available loadbalancers.
-                config._add_error("loadbalancer", "Available load balancers: %s" % ",".join(loadbalancers))
-            else:
-                # Ensure the cloud configuration is correct.
-                loadbalancer = loadbalancers[config.loadbalancer]
-                loadbalancer._endpoint_config(config=config)._validate()
-
-    def update_config(self, config, scale_manager=None):
+    @Atomic.sync
+    def _update_config(self, config_val):
         """
         Reload the configuration for this endpoint.
 
         This function will return True if the loadbalancer should
         be updated after return, much like update() and health_check().
         """
-
         # Check if our configuration is about to change.
         old_url = self.config.url
-        old_static_addresses = self.config._static_ips()
+        old_static_addresses = self.config.static_ips()
         old_port = self.config.port
         old_weight = self.config.weight
-        old_redirect = self.config.redirect
-        old_lb = self.config.loadbalancer
 
-        new_config = EndpointConfig(obj=config)
-        new_scaling = ScalingConfig(obj=config)
+        new_config = EndpointConfig(values=config_val)
+        new_scaling = ScalingConfig(obj=new_config)
 
         new_url = new_config.url
-        new_static_addresses = new_config._static_ips()
+        new_static_addresses = new_config.static_ips()
         new_port = new_config.port
         new_weight = new_config.weight
-        new_redirect = new_config.redirect
-        new_lb = new_config.loadbalancer
 
         # NOTE: We used to take action on old static
         # addresses. This is no longer done, because it's
@@ -507,276 +567,321 @@ class Endpoint(object):
         # Now we don't really allow static addresses to
         # influence any actions wrt. to registered IPs.
 
-        if scale_manager:
-            # Remove all old instances from loadbalancer,
-            # (Only necessary if we've changed the endpoint URL).
-            if old_url != new_url:
-                scale_manager.remove_endpoint(self.name)
+        # Remove all old instances from loadbalancer,
+        # (Only necessary if we've changed the endpoint URL).
+        if old_url != new_url:
+            self.reload(exclude=True)
 
         # Reload the configuration.
         self.config = new_config
         self.scaling = new_scaling
 
-        # Log the action.
+        # Reconnect to the cloud controller.
+        if self._find_cloud_connection:
+            self.cloud_conn = self._find_cloud_connection(
+                new_config.cloud)
+
+        # Get a new loadbalancer connection.
+        if self._find_loadbalancer_connection:
+            self.lb_conn = self._find_loadbalancer_connection(
+                new_config.loadbalancer)
+
+        if old_url != new_url or \
+           old_static_addresses != new_static_addresses or \
+           old_port != new_port or \
+           old_weight != new_weight:
+            self.reload()
+
+    def update_config(self, config_val):
+        self._update_config(config_val)
         self.logging.info(self.logging.CONFIG_UPDATED)
 
-        if scale_manager:
-            # Reconnect to the cloud controller (always).
-            self.cloud_conn = scale_manager._find_cloud_connection(new_config.cloud)
-
-            # Get a new loadbalancer connection.
-            self.lb_conn = scale_manager._find_loadbalancer_connection(new_lb)
-
-            # Do a referesh (to capture the new endpoint).
-            # This mirros the scale_manager.remove_endpoint()
-            if old_url != new_url:
-                scale_manager.add_endpoint(self.name)
-
-            # Update the load balancer.
-            elif old_static_addresses != new_static_addresses or \
-                 old_port != new_port or \
-                 old_weight != new_weight or \
-                 old_redirect != new_redirect:
-                return True
-
-        return False
-
-    def recommission_instances(self, num_instances, reason):
+    def _recommission_instances(self, num_instances, reason):
         """
         Recommission formerly decommissioned instances. Note: a reason
         should be given for why the instances are being recommissioned.
         """
-        rv = False
+        recommissioned = 0
+        decommissioned = self.decommissioned.list()
 
-        while num_instances > 0 and len(self.decommissioned_instances) > 0:
+        while num_instances > 0 and len(decommissioned) > 0:
+            # Grab the old decomission data.
+            instance_id = decommissioned.pop()
+
+            # Log a message.
             self.logging.info(self.logging.RECOMMISSION_INSTANCE)
-            instance_id = self.decommissioned_instances.pop()
-            logging.info("Recommissioning instance %s for server %s (reason: %s)" %
-                    (instance_id, self.name, reason))
-            self.client.recommission_instance(self.name, instance_id)
+
+            # Drop old decommission state.
+            # Here we readd this instance to our regular instances.
+            data = self.decommissioned.get(instance_id)
+            self.decommissioned.remove(instance_id)
+            self.zkobj.marked_instances().remove(instance_id)
+            self.instances.add(instance_id, data)
+
+            for ip in self.instance_ips.get(instance_id):
+                # Reconfirm all ip addresses.
+                self.confirmed_ips.add(ip, instance_id)
+
+            recommissioned += 1
             num_instances -= 1
-            rv = True
 
-        return rv
+        return recommissioned
 
-    def decommission_instances(self, instances, reason):
+    def _decommission_instances(self, instance_ids, reason):
         """
-        Drop the instances from the system. Note: a reason should be given
-        for why the instances are being dropped.
+        Drop the instances from the system. Note: a reason
+        should be given for why the instances are being dropped.
         """
-        # It might be good to wait a little bit for the servers to clear out
-        # any requests they are currently serving.
-        for instance in instances:
+        # It might be good to wait a little bit for the servers
+        # to clear out any requests they are currently serving.
+        for instance_id in instance_ids:
+            # Log a message.
             self.logging.info(self.logging.DECOMMISION_INSTANCE)
-            instance_id = self.cloud_conn.id(self.config, instance)
-            logging.info("Decommissioning instance %s for server %s (reason: %s)" %
-                    (instance_id, self.name, reason))
-            self.client.decommission_instance(\
-                self.name, instance_id,
-                self.cloud_conn.addresses(self.config, instance))
-            if not(instance_id in self.decommissioned_instances):
-                self.decommissioned_instances += [instance_id]
 
-        # update the load balancer. This can be done after decommissioning
-        # because these instances will stay alive as long as there is an active
-        # connection.
-        return (len(instances) > 0)
+            # Write the instance id to decommission.
+            # (NOTE: Our update hooks will take care of the rest).
+            ips = self.instance_ips.get(instance_id)
+            self.instances.remove(instance_id)
+            self.decommissioned.add(instance_id, ips)
 
-    def _delete_instance(self, instance):
-        instance_id = self.cloud_conn.id(self.config, instance)
-        instance_name = self.cloud_conn.name(self.config, instance)
+            # Unconfirm the address.
+            # NOTE: We don't clear out the IP metrics here.
+            # If we end up recommissioning this instance, we want
+            # the same set of IP metrics to be effect, so they will
+            # only be cleared out when the actual instance is deleted.
+            for ip in ips:
+                self.zkobj.confirmed_ips().remove(ip)
 
+    def _delete_instance(self, instance_id, cloud=True, decommissioned=False):
         # Delete the instance from the cloud.
         self.logging.info(self.logging.DELETE_INSTANCE)
-        logging.info("Deleting instance %s for server %s" % (instance_id, self.name))
-        self.client.delete_endpoint_instance(self.name, instance_name)
-        self.client.drop_decommissioned_instance(self.name, instance_id)
-        if instance_id in self.decommissioned_instances:
-            self.decommissioned_instances.remove(instance_id)
-        self.cloud_conn.delete_instance(self.config, instance_id)
 
-        # Cleanup any loadbalancer artifacts
-        self.lb_conn.cleanup(self.config, instance_name)
+        if cloud:
+            try:
+                # Try the cloud call first thing.
+                self.cloud_conn.delete_instance(self.config, instance_id)
+            except Exception:
+                # Not much we can do? Log and return.
+                # Hopefully at some point the user will
+                # intervene and remove the instance.
+                logging.error(self.logging.DELETE_FAILURE)
+                return
+
+        if decommissioned:
+            name = self.decommissioned.get(instance_id)
+        else:
+            name = self.instances.get(instance_id)
+
+        if name:
+            # Cleanup any loadbalancer artifacts.
+            self.lb_conn.cleanup(self.config, name)
+
+        # Clear out all IP data.
+        # NOTE: There may also be decommissioned data
+        # and marked data associated with this instance,
+        # but we will allow that to be cleaned up naturally
+        # by the health_check process (which scrubs old ids).
+        ips = self.instance_ips.get(instance_id)
+        for ip in ips:
+            self.confirmed_ips.remove(ip)
+            self.zkobj.ip_metrics().remove(ip)
+
+        # Drop the basic instance information.
+        if decommissioned:
+            self.decommissioned.remove(instance_id)
+        else:
+            self.instances.remove(instance_id)
 
     def _launch_instance(self, reason):
         # Launch the instance.
         self.logging.info(self.logging.LAUNCH_INSTANCE)
-        logging.info(("Launching new instance for server %s " +
-                     "(reason: %s)") %
-                     (self.name, reason))
 
         # Start with the loadbalancer parameters.
         start_params = self.lb_conn.start_params(self.config)
 
         try:
+            # Try to start the instance via our cloud connection.
             instance = self.cloud_conn.start_instance(self.config, params=start_params)
-        except:
-            self.logging.error(self.logging.LAUNCH_FAULURE)
-            logging.error("Error launching instance for server %s: %s" % \
-                (self.name, traceback.format_exc()))
+        except Exception:
+            self.logging.error(self.logging.LAUNCH_FAILURE)
+
+            # Cleanup the start params.
             self.lb_conn.cleanup_start_params(self.config, start_params)
             return
 
-        self.client.add_endpoint_instance(self.name,
-                self.cloud_conn.id(self.config, instance),
-                self.cloud_conn.name(self.config, instance))
+        # Save basic instance data.
+        self.instances.add(instance.id, instance.name)
 
-    def static_addresses(self):
-        return self.config._static_ips()
+    def _filter_instances(self, instances, regular=True, decommissioned=True):
+        known_instances = self.instances.list()
+        decommissioned_instances = self.decommissioned.list()
+        return [x.id for x in instances if
+            (regular and x.id in known_instances or
+             decommissioned and x.id in decommissioned_instances)]
 
-    def instances(self, filter=True):
-        cloud_instances = self.cloud_conn.list_instances(self.config)
-        endpoint_instances = self.client.endpoint_instances(self.name)
-        instances = []
-        for instance in cloud_instances:
-            if self.cloud_conn.id(self.config, instance) in endpoint_instances:
-                instances.append(instance)
-
-        if filter:
-            # Filter out the decommissioned instances from the returned list.
-            all_instances = instances
-            instances = []
-            for instance in all_instances:
-                if not(self.cloud_conn.id(self.config, instance) \
-                    in self.decommissioned_instances):
-                    instances.append(instance)
-        return instances
-
-    def orphaned_instances(self):
-        cloud_instances = self.cloud_conn.list_instances(self.config)
-        endpoint_instances = self.client.endpoint_instances(self.name)
-        instance_ids = []
-        for instance in cloud_instances:
-            instance_id = self.cloud_conn.id(self.config, instance)
-            if instance_id in endpoint_instances:
-                instance_ids.append(instance_id)
-        return list(set(endpoint_instances) - set(instance_ids))
-
-    def addresses(self):
-        try:
-            all_addresses = set()
-            for instance in self.instances():
-                all_addresses.update( \
-                    self.cloud_conn.addresses(self.config, instance))
-            return list(all_addresses)
-        except:
-            logging.error("Error querying endpoint %s addresses: %s" % \
-                (self.name, traceback.format_exc()))
-            return []
-
-    def instance_by_id(self, instances, instance_id):
-        instance_list = filter( \
-            lambda x: self.cloud_conn.id(self.config, x) == instance_id, instances)
-        if len(instance_list) == 1:
-            return instance_list[0]
-        raise KeyError('instance with id %s not found' % (instance_id))
-
-    def health_check(self, confirmed_ips, active_ips):
+    def _health_check(self, instances, active_ips):
         """
         Reap instances that are not responding or have been
         decomissioned for a sufficiently long period of time.
-
-        Like update(), this function returns True if there is
-        a need for any loadbalancer updates after it is finished.
         """
+        instance_ids = self._filter_instances(instances)
+        decommissioned_instances = self.decommissioned.list()
+        confirmed_ips = set(self.confirmed_ips.list())
+        active_ips = set(active_ips)
 
-        rv = False
-
-        instances = self.instances(filter=False)
-        confirmed_ips = set(confirmed_ips)
-        instance_ids = map(lambda x: self.cloud_conn.id(self.config, x), instances)
-
-        # Mark sure that the manager does not contain any scale data, which
-        # may result in some false metric data and clogging up Zookeeper.
-        for instance_id in self.client.marked_instances(self.name):
+        # Mark sure that the manager does not contain old
+        # scale data, which may result in clogging up Zookeeper.
+        # (The internet is a series of tubes).
+        for instance_id in self.instances.list():
             if not(instance_id in instance_ids):
-                self.client.drop_marked_instance(self.name, instance_id)
-        for instance_id in self.client.decommissioned_instances(self.name):
+                self.instances.remove(instance_id)
+        for instance_id in self.decommissioned.list():
             if not(instance_id in instance_ids):
-                self.client.drop_decommissioned_instance(self.name, instance_id)
+                self.decommissioned.remove(instance_id)
+        for instance_id in self.zkobj.marked_instances().list():
+            if not(instance_id in instance_ids):
+                self.zkobj.marked_instances().remove(instance_id)
 
         # There are the confirmed ips that are actually associated with an
         # instance. Other confirmed ones will need to be dropped because the
         # instances they refer to no longer exists.
         associated_confirmed_ips = set()
+        active_instance_ids = []
         inactive_instance_ids = []
-        for instance in instances:
-            instance_id = self.cloud_conn.id(self.config, instance)
-            expected_ips = set(self.cloud_conn.addresses(self.config, instance))
+        for instance_id in instance_ids:
             # As long as there is one expected_ip in the confirmed_ip,
             # everything is good. Otherwise This instance has not checked in.
             # We need to mark it, and it if has enough marks it will be
             # destroyed.
-            logging.info("expected ips=%s, confirmed ips=%s" % (expected_ips, confirmed_ips))
+            expected_ips = set(self.instance_ips.get(instance_id))
             instance_confirmed_ips = confirmed_ips.intersection(expected_ips)
             if len(instance_confirmed_ips) == 0 and \
-               not instance_id in self.decommissioned_instances:
+               not instance_id in decommissioned_instances:
+
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
-                if self.client.mark_instance(self.name, instance_id, 'unregistered', self.config.marks):
-                    # This instance has been deemed to be dead and should be cleaned up.
-                    # We don't decomission it because we have never heard from it in the
-                    # first place. So there's no sense in decomissioning it.
-                    self._delete_instance(instance)
+                if self._mark_instance(instance_id, 'unregistered'):
+                    # This instance has been deemed to be dead and should be
+                    # cleaned up.  We don't decomission it because we have
+                    # never heard from it in the first place. So there's no
+                    # sense in decomissioning it.
+                    self._delete_instance(instance_id)
+
             else:
-                associated_confirmed_ips = associated_confirmed_ips.union(instance_confirmed_ips)
+                associated_confirmed_ips = \
+                    associated_confirmed_ips.union(instance_confirmed_ips)
 
             # Check if any of these expected_ips are not in our active set. If
             # so that this instance is currently considered inactive.
             if len(expected_ips.intersection(active_ips)) == 0:
                 inactive_instance_ids += [instance_id]
+            else:
+                active_instance_ids += [instance_id]
 
-        # TODO(dscannell) We also need to ensure that the confirmed IPs are
+        # TODO(dscannell): We also need to ensure that the confirmed IPs are
         # still valid. In other words, we have a running instance for it.
-        orphaned_confirmed_ips = confirmed_ips.difference(associated_confirmed_ips)
-        if len(orphaned_confirmed_ips) > 0:
+        orphaned_ips = confirmed_ips.difference(associated_confirmed_ips)
+        if len(orphaned_ips) > 0:
             # There are orphaned ip addresses. We need to drop them and then
             # update the load balancer because there is no actual instance
             # backing them.
-            logging.info("Dropping ips %s for endpoint %s because they do not have"
-                         " backing instances." % (orphaned_confirmed_ips, self.name))
-            for orphaned_address in orphaned_confirmed_ips:
-                self.client.drop_ip(self.name, orphaned_address)
-            rv = True
+            for orphaned_address in orphaned_ips:
+                self.zkobj.confirmed_ips().remove(orphaned_address)
 
-        # Clean up any instances which don't exist any more.
-        for instance_id in self.orphaned_instances():
-            logging.info("Cleaning up disappeared instance %s" % instance_id)
-            instance_name = self.client.get_endpoint_instance(self.name, instance_id)
-            if instance_name:
-                self.lb_conn.cleanup(self.config, instance_name)
-            self.client.delete_endpoint_instance(self.name, instance_id)
-
-        # See if there are any decommissioned instances that are now inactive.
-        decommissioned_instance_ids = copy.copy(self.decommissioned_instances)
-        logging.debug("Active instances: %s:%s:%s" % \
-            (active_ips, inactive_instance_ids, decommissioned_instance_ids))
-
+        # This step is done to ensure that the instance remains inactive for at
+        # least a small period of time before we destroy it. It's quite
+        # possible that it's reporting is out of date and there are some late
+        # sessions or connections to this backend.
         for inactive_instance_id in inactive_instance_ids:
-            if inactive_instance_id in decommissioned_instance_ids:
-                if self.client.mark_instance(self.name,
-                                             inactive_instance_id,
-                                             'decommissioned',
-                                             self.config.marks):
-                        instance = self.instance_by_id(instances, inactive_instance_id)
-                        self._delete_instance(instance)
+            if inactive_instance_id in decommissioned_instances:
+                if self._mark_instance(inactive_instance_id, 'decommissioned'):
+                    self._delete_instance(instance_id, decommissioned=True)
 
-        return rv
+        # Return the active instance ids for update().
+        return (active_instance_ids, inactive_instance_ids)
 
-    def update_loadbalancer(self, ips=None, redirects=None):
-        if ips is None:
-            ips = []
-        if redirects is None:
-            redirects = []
-        if len(ips) > 0 or len(redirects) == 0:
-            self.lb_conn.change(self.url(), [self.name], ips, config=self.config)
-        else:
-            self.lb_conn.redirect(self.url(), [self.name], redirects[0], config=self.config)
-        self.lb_conn.save()
-
-    # The following two methods are for advisory purposes only.
     def ip_confirmed(self, ip):
-        self.logging.info(self.logging.CONFIRM_IP, inet_aton(ip))
+        for instance_id in self.instances.list():
+            if ip in self.instance_ips.get(instance_id):
+                # NOTE: We only add the IP to the set of confirmed IPs.
+                # The reload of the loadbalancer, etc. will be handled
+                # out of the band when the confirmed IPs cache is updated.
+                self.logging.info(self.logging.CONFIRM_IP, inet_aton(ip))
+                self.confirmed_ips.add(ip, instance_id)
+                return True
+        return False
 
     def ip_dropped(self, ip):
-        self.logging.info(self.logging.DROP_IP, inet_aton(ip))
+        if ip in self.confirmed_ips.list():
+            # NOTE: We only remove the IP from our set of
+            # confirmed IPs. Eventually, the backing machine
+            # will fail a health check (marks, etc.) and be
+            # purged from the system.
+            self.logging.info(self.logging.DROP_IP, inet_aton(ip))
+            self.confirmed_ips.remove(ip)
+            return True
+        return False
+
+    def inactive_ips(self):
+        # These IPs belong to decomissioned instances and 
+        # specifically should not be doing anything. Note,
+        # if ever change the decomissioned map to hold something
+        # other than the set of IPs (as it is redunent), then
+        # we will need to update this code.
+        ips = []
+        for inactive in self.decommissioned.as_map().values():
+            ips.extend(inactive)
+        return ips
+
+    def active_ips(self):
+        # Return the current set of confirm and static IPs.
+        return self.confirmed_ips.list() + self.config.static_ips()
+
+    def backends(self):
+        """
+        Returns all backends associated with the endpoint.
+        """
+        return map(
+            lambda ip: lb_backend.Backend(
+                ip, self.config.port, self.config.weight),
+            self.active_ips())
+
+    def _mark_instance(self, instance_id, label):
+        """ Increments the mark counter. """
+        # Increment the mark counter.
+        remove_instance = False
+        mark_counters = self.zkobj.marked_instances().get(instance_id) or {}
+        mark_counter = mark_counters.get(label, 0)
+        mark_counter += 1
+
+        if mark_counter >= self.config.marks:
+            # This instance has been marked too many times. There is likely
+            # something really wrong with it, so we'll clean it up.
+            remove_instance = True
+            self.zkobj.marked_instances().remove(instance_id)
+
+        else:
+            # Just save the mark counter.
+            mark_counters[label] = mark_counter
+            self.zkobj.marked_instances().add(instance_id, mark_counters)
+
+        return remove_instance
+
+    def reload(self, exclude=False):
+        # Depending on whether or not we have a collect()
+        # available (whether this object was created by a
+        # scale manager or not), we will grab the set of ips
+        # in different ways. If we have a collect(), then
+        # we will it to ensure that all relevant endpoints are
+        # included.
+        # If not, then we use only our local active IPs to
+        # construct a reasonable collection of IPs to send to
+        # the loadbalancer.
+        if self._collect:
+            ips = self._collect(self, exclude=exclude)
+        elif exclude:
+            ips = []
+        else:
+            ips = self.backends()
+        self.lb_conn.change(self.config.url, ips, config=self.config)
+        self.lb_conn.save()

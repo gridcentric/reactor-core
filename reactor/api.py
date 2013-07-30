@@ -9,112 +9,91 @@ from pyramid.security import remember, forget, authenticated_userid
 from pyramid.authentication import AuthTktAuthenticationPolicy
 from pyramid.authorization import ACLAuthorizationPolicy
 
+from . import utils
 from . log import log
+from . config import fromstr
 from . manager import ManagerConfig
 from . endpoint import EndpointConfig
 from . endpoint import EndpointLog
-from . endpoint import State
+from . objects.root import Reactor
 from . zookeeper.connection import ZookeeperException
-from . zooclient import ReactorClient
+from . zookeeper.client import ZookeeperClient
 
-def authorized_admin_only(request_handler=None, forbidden_view=None):
+def authorized(forbidden_view=None, allow_endpoint=False):
     """
     A Decorator that does a simple check to see if the request is
-    authorized before executing the actual handler. NOTE: This will
-    only authorize for admins only. 
+    authorized before executing the actual handler.
 
     Use of this decorator implies use of the @connected decorator.
+    (This is implicit as we will definitely call functions that we
+    be decorated with @connected(). We don't force this here.)
     """
-    def _authorized_admin_only(request_handler):
+    def decorator(request_handler):
         def fn(self, context, request):
             try:
-                if self._authorize_admin_access(context, request):
-                    return request_handler(self, context, request)
+                # Make this implict routes are matched.
+                self.authorize_ip_access(context, request)
+            except Exception, e:
+                return Response(status=401, body=str(e))
 
-                # Access denied
-                if forbidden_view:
-                    return eval(forbidden_view)(context, request)
-                else:
-                    # Return an unauthorized response.
-                    return Response(status=401, body="unauthorized")
-            except:
-                # Return an internal error.
-                logging.error("Unexpected error: %s" % traceback.format_exc())
-                return Response(status=500, body="internal error")
-
-        return fn
-
-    # This decorator can be invoked either with arguments (e.g.
-    # @authorized_admin_only(forbidden_view='my_view') or without
-    # (e.g. @authorized_admin_only() or @authorized_admin_only).
-    #
-    # When invoked with (), we must generate a decorator, which
-    # python will then apply to the function via '@'. When
-    # invoked without (), we skip the generation step and
-    # decorate the function. We know how we were invoked via the
-    # request_handler parameter - if being called as a function,
-    # it will be None; if being called as a decorator, it will
-    # be the function being decorated.
-    if request_handler:
-        # Decorator
-        return _authorized_admin_only(request_handler)
-    else:
-        # Generator
-        return _authorized_admin_only
-
-def authorized(request_handler):
-    """
-    A Decorator that does a simple check to see if the request is
-    authorized before executing the actual handler. 
-
-    Use of this decorator implies use of the @connected decorator.
-    """
-    def fn(self, context, request):
-        try:
-            if self._authorize_ip_access(context, request) or \
-                self._authorize_endpoint_access(context, request) or \
-                self._authorize_admin_access(context, request):
+            # Can we authorize as an admin?
+            if self.authorize_admin_access(context, request):
                 return request_handler(self, context, request)
+
+            # Can we authorize as an endpoint?
+            if (allow_endpoint and
+                self.authorize_endpoint_access(context, request)):
+                return request_handler(self, context, request)
+
+            # Access denied.
+            if forbidden_view is not None:
+                return eval(forbidden_view)(context, request)
             else:
                 # Return an unauthorized response.
                 return Response(status=401, body="unauthorized")
-        except:
-            # Return an internal error.
-            logging.error("Unexpected error: %s" % traceback.format_exc())
-            return Response(status=500, body="internal error")
+        fn.__name__ = request_handler.__name__
+        fn.__doc__ = request_handler.__doc__
+        return fn
 
-    return fn
+    return decorator
 
-def connected(request_handler):
+def connected(fn):
     """
     A decorator that ensures we are connected to the Zookeeper server.
+
+    Additionally, this decorator will disconnect from the server on any
+    unexpected exception. This is useful to ensure that we don't get stuck with
+    a stale connection, retrying to the same calls over and over.
     """
-    def try_once(*args, **kwargs):
-        self = args[0]
+    def try_once(self, *args, **kwargs):
         try:
             self.connect()
-            return request_handler(*args, **kwargs)
+            return fn(self, *args, **kwargs)
         except ZookeeperException:
             # Disconnect (next request will reconnect).
-            logging.error("Unexpected error: %s" % traceback.format_exc())
+            logging.error("Unexpected error: %s", traceback.format_exc())
             self.disconnect()
             return None
-    def fn(*args, **kwargs):
+    def wrapper_fn(*args, **kwargs):
         response = try_once(*args, **kwargs)
-        if not(response):
+        if response is None:
             response = try_once(*args, **kwargs)
         if response is None:
             return Response(status=500, body="internal error")
         else:
             return response
-    return fn
+    wrapper_fn.__name__ = fn.__name__
+    wrapper_fn.__doc__ = fn.__doc__
+    return wrapper_fn
 
 class ReactorApi(object):
 
     AUTH_SALT = 'gridcentricreactor'
 
     def __init__(self, zk_servers):
-        self.client = ReactorClient(zk_servers)
+        super(ReactorApi, self).__init__()
+        self.client = ZookeeperClient(zk_servers)
+        self.zkobj = Reactor(self.client)
         self.config = Configurator()
 
         # Set up auth-ticket authentication.
@@ -149,7 +128,7 @@ class ReactorApi(object):
                   'register/{endpoint_ip}', self.register_ip_address)
 
         self._add('unregister-implicit',  ['1.0', '1.1'],
-                  'unregister', self.unregister_ip_address)
+                  'unregister', self.unregister_ip_implicit)
 
         self._add('unregister',  ['1.0', '1.1'],
                   'unregister/{endpoint_ip}', self.unregister_ip_address)
@@ -210,18 +189,21 @@ class ReactorApi(object):
                 route_name=route_name, accept="application/json")
 
     def disconnect(self):
-        self.client._disconnect()
+        self.client.disconnect()
 
     def connect(self):
-        self.client._connect()
+        self.client.connect()
 
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
 
-    def _authorize_admin_access(self, context, request):
-        auth_hash = self.client.auth_hash()
-        if auth_hash != None:
-            return authenticated_userid(request) != None
+    @connected
+    def authorize_admin_access(self, context, request):
+        if self.zkobj.auth_hash is not None:
+            if authenticated_userid(request) is not None:
+                return True
+            auth_hash = self._create_admin_auth_token(self._req_get_auth_key(request))
+            return (self.zkobj.auth_hash == auth_hash)
         else:
             # If there is no auth hash then authentication has not been turned
             # on so all requests are allowed by default.
@@ -231,40 +213,50 @@ class ReactorApi(object):
         return request.headers.get('X-Auth-Key', None) or \
                request.params.get('auth_key', None)
 
-    def _authorize_endpoint_access(self, context, request):
+    @connected
+    def authorize_endpoint_access(self, context, request):
         # Pull an endpoint name if it is specified.
         endpoint_name = request.matchdict.get('endpoint_name', None)
 
         # Pull an endpoint name via the endpoint IP.
-        if endpoint_name == None:
+        if endpoint_name is None:
             endpoint_ip = request.matchdict.get('endpoint_ip', None)
-            if endpoint_ip != None:
-                endpoint_name = self.client.ip_address_endpoint(endpoint_ip)
+            if endpoint_ip is not None:
+                # Pull out the endpoint name for the given ip address.
+                # NOTE: This set of ip addresses does not include static
+                # address -- this is for security reasons. You can't add
+                # arbitrary IPs to your endpoint by simply changing your
+                # configuration.
+                endpoint_name = self.zkobj.endpoint_ips().get(endpoint_ip)
 
-        if endpoint_name != None:
-            config = self.client.endpoint_config(endpoint_name)
-            if not(config):
-                return False
+        if endpoint_name is None:
+            return False
 
-            endpoint_config = EndpointConfig(values=config)
-            auth_hash, auth_salt, auth_algo = \
-                endpoint_config._get_endpoint_auth()
+        # Load the endpoint config.
+        config = self.zkobj.endpoints().get(endpoint_name).get_config()
+        if config is None:
+            return False
 
-            if auth_hash != None and auth_hash != "":
-                auth_key = self._req_get_auth_key(request)
-                if auth_key != None:
-                    auth_token = self._create_endpoint_auth_token(\
-                        auth_key, auth_salt, auth_algo)
-                    return auth_hash == auth_token
-                else:
-                    return False
-            else:
-                # If there is not auth hash then authentication has not been
-                # turned on so all requests are denied by default.
-                return False
+        # Parse authentication details.
+        endpoint_config = EndpointConfig(values=config)
+        auth_hash, auth_salt, auth_algo = \
+            endpoint_config.endpoint_auth()
 
+        if auth_hash is not None and auth_hash != "":
+            auth_key = self._req_get_auth_key(request)
+            if auth_key is not None:
+                auth_token = self._create_endpoint_auth_token(\
+                    auth_key, auth_salt, auth_algo)
+                return (auth_hash == auth_token)
+
+        # We were not able to authenticate using the 
+        # credentials from any endpoint associated with
+        # this ip address.
+        return False
+
+    @connected
     def _extract_remote_ip(self, context, request):
-        # TODO(dscannell): The remote ip address is taken from the
+        # NOTE(dscannell): The remote ip address is taken from the
         # request.environ['REMOTE_ADDR']. This value may need to be added by
         # some WSGI middleware depending on what webserver fronts this app.
         ip_address = request.environ.get('REMOTE_ADDR', "")
@@ -276,21 +268,22 @@ class ReactorApi(object):
         # that this header has been placed by a trusted middleman.
         if forwarded_for and \
             (ip_address == "127.0.0.1" or \
-             ip_address in self.client.managers_active(full=False)):
+            ip_address in self.zkobj.managers().list()):
             ip_address = forwarded_for
 
         return ip_address
 
-    def _authorize_ip_access(self, context, request):
+    @connected
+    def authorize_ip_access(self, context, request):
         matched_route = request.matched_route
-        if matched_route != None:
+        if matched_route is not None:
             if matched_route.name.endswith("-implicit"):
                 # We can only do ip authorizing on implicit routes. Essentially
                 # we will update the request to confine it to the endpoint with
                 # this address.
                 request_ip = self._extract_remote_ip(context, request)
-                endpoint_name = self.client.ip_address_endpoint(request_ip)
-                if endpoint_name != None:
+                endpoint_name = self.zkobj.endpoint_ips().get(request_ip)
+                if endpoint_name is not None:
                     # Authorize this request and set the endpoint_name.
                     request.matchdict['endpoint_name'] = endpoint_name
                     request.matchdict['endpoint_ip'] = request_ip
@@ -301,34 +294,26 @@ class ReactorApi(object):
         return False
 
     def _create_admin_auth_token(self, auth_key):
-        if auth_key:
+        if auth_key is not None:
             # NOTE: We use a fixed salt and force sha1 for the admin token.
             # This fixed salt matches the authentication policy used above.
-            hash_fn = hashlib.new('sha1')
-            hash_fn.update("%s%s" % (self.AUTH_SALT, auth_key))
-            return hash_fn.hexdigest()
+            return utils.sha_hash("%s%s" % (self.AUTH_SALT, auth_key))
         else:
             return None
 
-    def check_admin_auth_key(self, auth_key):
-        auth_hash = self.client.auth_hash()
-        client_hash = self._create_admin_auth_token(auth_key)
-        return auth_hash == client_hash
-
     def _create_endpoint_auth_token(self, auth_key, auth_salt, algo):
-        if auth_salt == None:
+        if auth_salt is None:
             auth_salt = ""
         salted = "%s%s" % (auth_salt, auth_key)
         if not algo:
             return salted
         else:
             try:
-                hash = hashlib.new(algo, salted)
-                return hash.hexdigest()
-            except:
-                logging.warn("Failed to authenticate against endpoint %s "
-                             "because algorithm type is not supported.")
-                return ""
+                hasher = hashlib.new(algo, salted)
+                return hasher.hexdigest()
+            except Exception:
+                logging.warn("Failed to authenticate against endpoint.")
+                return None
 
     def index(self, context, request):
         return Response()
@@ -370,7 +355,7 @@ class ReactorApi(object):
 
     @log
     @connected
-    @authorized_admin_only
+    @authorized()
     def set_auth_key(self, context, request):
         """
         Updates the auth key in the system.
@@ -378,13 +363,14 @@ class ReactorApi(object):
         if request.method == "POST" or request.method == "PUT":
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
-            self.client.auth_hash_set(self._create_admin_auth_token(auth_key))
+            self.zkobj.auth_hash = self._create_admin_auth_token(auth_key)
             return Response()
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized_admin_only
+    @authorized()
     def handle_domain_action(self, context, request):
         """
         Updates the domain in the system.
@@ -396,21 +382,21 @@ class ReactorApi(object):
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized_admin_only
+    @authorized()
     def handle_url_action(self, context, request):
         if request.method == "GET":
-            url = self.client.url()
-            return Response(body=json.dumps({'url': url}))
+            return Response(body=json.dumps({'url': self.zkobj.url().get()}))
         elif request.method == "POST":
-            url = json.loads(request.body).get('url', '')
-            self.client.url_set(url)
+            self.zkobj.url().set(json.loads(request.body).get('url'))
             return Response()
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized_admin_only
+    @authorized()
     def handle_manager_action(self, context, request):
         """
         This Handles a general manager action:
@@ -421,31 +407,29 @@ class ReactorApi(object):
         manager = request.matchdict['manager']
 
         if request.method == "GET":
-            logging.info("Retrieving manager %s configuration" % manager)
-            config = self.client.manager_config(manager)
-            if config != None:
-                config['uuid'] = self.client.manager_key(manager)
+            config = self.zkobj.managers().get_config(manager)
+            if config is not None:
+                config['uuid'] = self.zkobj.managers().key(manager)
+                config['info'] = self.zkobj.managers().info(config['uuid'])
                 return Response(body=json.dumps(config))
             else:
                 return Response(status=404, body="%s not found" % manager)
 
         elif request.method == "POST" or request.method == "PUT":
-            manager_config = json.loads(request.body)
-            logging.info("Updating manager %s" % manager)
-
+            manager_config = fromstr(request.body)
             config = ManagerConfig(values=manager_config)
-            config._validate()
-            errs = config._validate_errors()
-            if errs:
-                return Response(status=400, body=json.dumps(errs))
+            errors = config.validate()
+            if errors:
+                return Response(status=400, body=json.dumps(errors))
             else:
-                self.client.manager_update(manager, manager_config)
+                self.zkobj.managers().set_config(manager, manager_config)
                 return Response()
 
         elif request.method == "DELETE":
-            config = self.client.manager_config(manager)
-            if config != None:
-                self.client.manager_reset(manager)
+            config = self.zkobj.managers().get_config(manager)
+            if config is not None:
+                # Delete the given manager completely.
+                self.zkobj.managers().remove_config(manager)
                 return Response()
             else:
                 return Response(status=404, body="%s not found" % manager)
@@ -453,22 +437,24 @@ class ReactorApi(object):
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized_admin_only
+    @authorized()
     def list_managers(self, context, request):
         """
         Returns a list of managers currently running.
         """
         if request.method == 'GET':
-            configured = self.client.managers_list()
-            active = self.client.managers_active(full=True)
+            configured = self.zkobj.managers().list()
+            active = self.zkobj.managers().key_map()
             return Response(body=json.dumps(\
                 {'configured': configured, 'active': active}))
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized_admin_only
+    @authorized()
     def handle_endpoint_action(self, context, request):
         """
         This handles a general endpoint action:
@@ -479,54 +465,46 @@ class ReactorApi(object):
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
-            logging.info("Retrieving endpoint %s configuration" % endpoint_name)
-            config = self.client.endpoint_config(endpoint_name)
-            if config != None:
+            config = self.zkobj.endpoints().get(endpoint_name).get_config()
+            if config is not None:
                 return Response(body=json.dumps(config))
             else:
                 return Response(status=404, body="%s not found" % endpoint_name)
 
-        elif request.method == "DELETE":
-            logging.info("Unmanaging endpoint %s" % (endpoint_name))
-            self.client.endpoint_unmanage(endpoint_name)
-            return Response()
-
         elif request.method == "POST" or request.method == "PUT":
-            endpoint_config = json.loads(request.body)
-            logging.info("Managing or updating endpoint %s" % endpoint_name)
-
+            endpoint_config = fromstr(request.body)
             config = EndpointConfig(values=endpoint_config)
-            config._validate()
-            errs = config._validate_errors()
-            if errs:
-                return Response(status=400, body=json.dumps(errs))
+            errors = config.validate()
+            if errors:
+                return Response(status=400, body=json.dumps(errors))
             else:
-                self.client.endpoint_update(endpoint_name, endpoint_config)
+                self.zkobj.endpoints().get(endpoint_name).set_config(endpoint_config)
                 return Response()
 
-        else:
-            # Return an unauthorized response.
-            return Response(status=401, body="unauthorized")
+        elif request.method == "DELETE":
+            self.zkobj.endpoints().unmanage(endpoint_name)
+            return Response()
 
+        else:
+            return Response(status=403)
+
+    @log
     @connected
-    @authorized
+    @authorized(allow_endpoint=True)
     def handle_state_action(self, context, request):
         """
         This handles a endpoint info request:
         GET - Returns the current endpoint info
         """
         endpoint_name = request.matchdict['endpoint_name']
-        endpoint_ip = request.matchdict.get('endpoint_ip', None)
 
         if request.method == "GET":
-            logging.info("Retrieving state for endpoint %s" % endpoint_name)
-            config = self.client.endpoint_config(endpoint_name)
-
-            if config != None:
-                state = self.client.endpoint_state(endpoint_name) or State.default
-                active = self.client.endpoint_active(endpoint_name)
-                manager = self.client.endpoint_manager(endpoint_name)
-
+            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            config = endpoint.get_config()
+            if config is not None:
+                state = endpoint.state().current()
+                active = endpoint.active
+                manager = endpoint.manager
                 value = {
                     'state': state,
                     'active': active or [],
@@ -537,14 +515,12 @@ class ReactorApi(object):
                 return Response(status=404, body="%s not found" % endpoint_name)
 
         elif request.method == "POST" or request.method == "PUT":
-            logging.info("Posting state for endpoint %s" % endpoint_name)
             state_action = json.loads(request.body)
-            config = self.client.endpoint_config(endpoint_name)
+            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            config = endpoint.get_config()
 
-            if config != None:
-                current_state = self.client.endpoint_state(endpoint_name)
-                new_state = State.from_action(current_state, state_action.get('action', ''))
-                self.client.endpoint_state_set(endpoint_name, new_state)
+            if config is not None:
+                endpoint.state().action(state_action.get('action'))
                 return Response()
             else:
                 return Response(status=404, body="%s not found" % endpoint_name)
@@ -552,8 +528,9 @@ class ReactorApi(object):
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized
+    @authorized(allow_endpoint=True)
     def handle_metric_action(self, context, request):
         """
         This handles a general metric action:
@@ -564,108 +541,132 @@ class ReactorApi(object):
         endpoint_ip = request.matchdict.get('endpoint_ip', None)
 
         if request.method == "GET":
-            logging.info("Retrieving metrics for endpoint %s" % endpoint_name)
-            metrics = self.client.endpoint_metrics(endpoint_name)
+            metrics = self.zkobj.endpoints().get(endpoint_name).metrics
             return Response(body=json.dumps(metrics or {}))
 
         elif request.method == "POST" or request.method == "PUT":
             metrics = json.loads(request.body)
-            logging.info("Updating metrics for endpoint %s" % endpoint_name)
-            self.client.endpoint_metrics_set(endpoint_name, metrics, endpoint_ip)
+            if endpoint_ip is not None:
+                ip_metrics = self.zkobj.endpoints().get(endpoint_name).ip_metrics()
+                ip_metrics.add(endpoint_ip, metrics)
+            else:
+                self.zkobj.endpoints().get(endpoint_name).custom_metrics = metrics
             return Response()
 
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized
+    @authorized(allow_endpoint=True)
     def list_endpoint_ips(self, context, request):
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
-            return Response(body=json.dumps(\
-                {'ip_addresses': self.client.endpoint_ip_addresses(endpoint_name)}))
+            ips = self.zkobj.endpoints().get(
+                endpoint_name).confirmed_ips().list()
+            return Response(body=json.dumps({'ip_addresses': ips}))
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized_admin_only
+    @authorized()
     def list_endpoints(self, context, request):
         """
         Returns a list of endpoints currently being managed.
         """
         if request.method == "GET":
-            endpoints = self.client.endpoint_list()
+            endpoints = self.zkobj.endpoints().list()
             return Response(body=json.dumps({'endpoints':endpoints}))
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized_admin_only
+    @authorized(allow_endpoint=True)
     def register_ip_address(self, context, request):
         """
         Publish a new IP explicitly.
         """
         if request.method == "POST" or request.method == "PUT":
             ip_address = request.matchdict.get('endpoint_ip', None)
-            if ip_address:
-                logging.info("New IP address %s has been recieved." % (ip_address))
-                self.client.ip_address_record(ip_address)
+            if ip_address is not None:
+                self.zkobj.new_ips().add(ip_address)
             return Response()
         else:
             return Response(status=403)
 
+    @log
     @connected
+    @authorized(allow_endpoint=True)
     def register_ip_implicit(self, context, request):
         """
         Publish a new IP from an instance.
         """
         if request.method == "POST" or request.method == "PUT":
             ip_address = self._extract_remote_ip(context, request)
-            logging.info("New IP address %s has been recieved." % (ip_address))
-            self.client.ip_address_record(ip_address)
+            self.zkobj.new_ips().add(ip_address)
             return Response()
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized
+    @authorized(allow_endpoint=True)
     def unregister_ip_address(self, context, request):
         """
-        Publish a new IP from an instance.
+        Unregister the given IP.
         """
         if request.method == "POST" or request.method == "PUT":
             ip_address = request.matchdict.get('endpoint_ip', None)
-            if ip_address:
-                logging.info("Unregister requested for IP address %s." % (ip_address))
-                self.client.ip_address_drop(ip_address)
+            if ip_address is not None:
+                self.zkobj.drop_ips().add(ip_address)
             return Response()
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized_admin_only
+    @authorized(allow_endpoint=True)
+    def unregister_ip_implicit(self, context, request):
+        """
+        Unregister the given IP.
+        """
+        if request.method == "POST" or request.method == "PUT":
+            ip_address = self._extract_remote_ip(context, request)
+            if ip_address is not None:
+                self.zkobj.drop_ips().add(ip_address)
+            return Response()
+        else:
+            return Response(status=403)
+
+    @log
+    @connected
+    @authorized(allow_endpoint=True)
     def handle_log_action(self, context, request):
         """
         Returns the endpoints' log.
         """
         endpoint_name = request.matchdict['endpoint_name']
         since = request.params.get('since', None)
-        if since:
+        if since is not None:
             try:
                 since = float(since)
-            except:
+            except ValueError:
                 since = None
 
         if request.method == "GET":
-            log = EndpointLog(
-                    retrieve_cb=lambda: self.client.endpoint_log_load(endpoint_name))
-            return Response(body=json.dumps(log.get(since=since)))
+            endpoint_log = EndpointLog(
+                retrieve_cb=self.zkobj.endpoints().get(
+                    endpoint_name).log().retrieve)
+            return Response(body=json.dumps(endpoint_log.get(since=since)))
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized_admin_only
+    @authorized(allow_endpoint=True)
     def list_sessions(self, context, request):
         """
         Returns the endpoints' session list.
@@ -673,15 +674,15 @@ class ReactorApi(object):
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
-            sessions = {}
-            for session in self.client.session_list(endpoint_name):
-                sessions[session] = self.client.session_backend(endpoint_name, session)
+            sessions = self.zkobj.endpoints().get(
+                endpoint_name).sessions().active_map()
             return Response(body=json.dumps(sessions))
         else:
             return Response(status=403)
 
+    @log
     @connected
-    @authorized_admin_only
+    @authorized(allow_endpoint=True)
     def handle_session_action(self, context, request):
         """
         Returns the endpoints' session list, or drops a session
@@ -690,12 +691,13 @@ class ReactorApi(object):
         session = request.matchdict['session']
 
         if request.method == "GET":
-            sessions = self.client.session_backend(endpoint_name, session)
-            return Response(body=json.dumps({'sessions': sessions}))
+            backend = self.zkobj.endpoints().get(endpoint_name).sessions().backend(session)
+            return Response(body=json.dumps(backend))
+
         elif request.method == "DELETE":
-            config = self.client.endpoint_config(endpoint_name)
-            if config != None:
-                self.client.session_drop(endpoint_name, session)
+            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            if endpoint.get_config() is not None:
+                endpoint.sessions().drop(session)
             else:
                 return Response(status=404, body="%s not found" % endpoint_name)
             return Response()
@@ -716,14 +718,26 @@ class ReactorApiExtension(object):
     to specify a strict ordering as they are independent features.
 
     Sort of like Mixins, but without having to create a new class
-    definition to support the combination.
+    definition to support the combination. Could have gone with more
+    explicit Mixins or metaclasses or other craziness, but I prefer
+    the manual approach with a little bit more explicitness. There
+    are certainly some ugly bits, but at least it all makes sense.
     """
 
     def __init__(self, api):
+        super(ReactorApiExtension, self).__init__()
         self.api = api
 
         # Bind all base attributes from the API class.
         # After this point, you can freely add new stuff.
+        # This allows us to treat this class as the API
+        # object. NOTE: all of the original API views have
+        # been bound to the original API methods, so you
+        # *cannot* just change the methods. This is very
+        # much intentional. If you want to override some
+        # built-in behavior, then the API should have some
+        # internal function that it calls which can be
+        # overriden by the extension functionality.
         for attr in dir(api):
             if not attr.startswith('__') and not hasattr(self, attr):
                 setattr(self, attr, getattr(api, attr))

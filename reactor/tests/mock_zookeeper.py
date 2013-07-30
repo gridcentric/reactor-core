@@ -99,6 +99,8 @@ class ZkNode(object):
             return rv
 
     def find(self, path):
+        if path == "":
+            return self
         with self._lock:
             (parent, child) = self.find_parent(path)
             with parent._lock:
@@ -133,7 +135,15 @@ class ZkNode(object):
 
     def dump(self, indent=0):
         with self._lock:
-            sys.stderr.write("%s /%s\n" % (" " * indent, self._name or ""))
+            sys.stdout.write("%s /%s\n" % (" " * indent, self._name or ""))
+            if len(self._data_callbacks) > 0:
+                sys.stdout.write("%s  data watches\n" % (" " * indent))
+            for fn in self._data_callbacks:
+                sys.stdout.write("%s  -> %s\n" % (" " * indent, fn))
+            if len(self._child_callbacks) > 0:
+                sys.stdout.write("%s  child watches\n" % (" " * indent))
+            for fn in self._child_callbacks:
+                sys.stdout.write("%s  -> %s\n" % (" " * indent, fn))
             for child, node in self._children.items():
                 node.dump(indent=indent+2)
 

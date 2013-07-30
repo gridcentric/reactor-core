@@ -1,4 +1,3 @@
-import logging
 from reactor.config import Config
 
 from reactor.cloud.osapi.connection import BaseOsEndpointConfig
@@ -8,7 +7,7 @@ class OsVmsEndpointConfig(BaseOsEndpointConfig):
 
     instance_id = Config.string(label="Live-Image", order=2,
         validate=lambda self: \
-            self._novaclient().servers.get(self.instance_id)._info['status'] == 'BLESSED' or \
+            self.novaclient().servers.get(self.instance_id)._info['status'] == 'BLESSED' or \
             Config.error("Server is not in BLESSED state."),
         description="The live-image to use.")
 
@@ -17,17 +16,20 @@ class Connection(BaseOsConnection):
 
     _ENDPOINT_CONFIG_CLASS = OsVmsEndpointConfig
 
-    def _list_instances(self, config):
+    def _list_instances(self, config, instance_id):
         """ 
         Returns a list of instances from the endpoint.
         """
         config = self._endpoint_config(config)
-        server = config._novaclient().gridcentric.get(config.instance_id)
-        return server.list_launched()
+        if instance_id is None:
+            server = config.novaclient().cobalt.get(config.instance_id)
+            return server.list_launched()
+        else:
+            return [config.novaclient().servers.get(instance_id)]
 
-    def _start_instance(self, config, params={}):
+    def _start_instance(self, config, params):
         config = self._endpoint_config(config)
-        server = config._novaclient().gridcentric.get(config.instance_id)
+        server = config.novaclient().cobalt.get(config.instance_id)
         if 'name' in params:
             instance = server.launch(name=params['name'],
                               security_groups=config.security_groups,

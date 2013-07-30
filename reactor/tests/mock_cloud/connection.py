@@ -32,7 +32,7 @@ class Connection(CloudConnection):
     """ Mock cloud connection. """
 
     def __init__(self, *args, **kwargs):
-        CloudConnection.__init__(self, *args, **kwargs)
+        super(Connection, self).__init__(*args, **kwargs)
         self.instances = {} # map(instance.id => MockInstance)
         self.ip_generator = ip_range_generator('172.16.0.1', 255)
 

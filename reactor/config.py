@@ -4,6 +4,8 @@ from ConfigParser import SafeConfigParser
 from StringIO import StringIO
 from collections import namedtuple
 
+from . atomic import Atomic
+
 ConfigSpec = namedtuple("ConfigSpec", \
     ["type",
      "label",
@@ -18,6 +20,7 @@ ConfigSpec = namedtuple("ConfigSpec", \
 class Config(object):
 
     def __init__(self, section='', obj=None, values=None):
+        super(Config, self).__init__()
         self._section = section
         self._getters = {}
         self._setters = {}
@@ -36,7 +39,7 @@ class Config(object):
         if obj is None:
             self._obj = {}
         elif hasattr(obj, '_obj'):
-            self._obj = obj._obj
+            self._obj = getattr(obj, '_obj')
         else:
             self._obj = obj
 
@@ -44,14 +47,14 @@ class Config(object):
         # This takes all class attribues that do not start with an
         # underscore (and are not in the special list below) and turns
         # them into attributes in _avail.  These attributes are used
-        # in _validate() below.
+        # in validate() below.
         defaults = {}
         for k in dir(self):
             if k.startswith('_'):
                 continue
 
             # Ensure it's not one of our types.
-            if k in dir(Config):
+            if type(getattr(self, k)) != ConfigSpec:
                 continue
 
             # Pull out the specification.
@@ -108,7 +111,7 @@ class Config(object):
 
         if values:
             # Populate the given values.
-            self._update(values)
+            self.update(values)
 
     def __getattribute__(self, name):
         if name.startswith('_'):
@@ -149,7 +152,7 @@ class Config(object):
             self._obj[section][key] = {}
         return self._obj[section][key]
 
-    def _update(self, obj):
+    def update(self, obj):
         obj = fromstr(obj)
         for name, section in obj.items():
             for k, v in section.items():
@@ -158,7 +161,7 @@ class Config(object):
                     k = self._alternates[k]
                 self._get_obj(k, section=name)["value"] = v
 
-    def _spec(self):
+    def spec(self):
         """ The underlying specification and values. """
         return self._obj
 
@@ -172,33 +175,37 @@ class Config(object):
                     rval[name][k] = v.get("value")
         return rval
 
-    def _validate(self):
+    def validate(self):
         for k, fn in self._validation.items():
             if fn:
                 try:
                     fn(self)
                 except Exception, e:
                     self._add_error(k, str(e))
+        return self._get_errors()
 
     def _add_error(self, k, errmsg):
         """ Annotate the specification with a validation error. """
         # Save the given error message.
         self._get_obj(k)["error"] = errmsg
 
-    def _validate_errors(self):
+    def _get_errors(self):
         """ The set of all validation errors (organized as values). """
         result = {}
         for name, section in self._obj.items():
             for k, v in section.items():
                 errmsg = v.get("error")
-                if errmsg:
+                if errmsg is not None:
+                    # Add the error message.
                     if not result.has_key(name):
                         result[name] = {}
                     result[name][k] = errmsg
+                    # Clear the original error.
+                    del v["error"]
         if result:
             return result
         else:
-            return None
+            return {}
 
     def _get(self, key, default):
         return self._get_obj(key).get("value", default)
@@ -260,9 +267,9 @@ class Config(object):
                 description="No description.",
                 alternates=None):
         def normalize(value):
-            if type(value) == str or type(value) == unicode:
+            if isinstance(value, str) or isinstance(value, unicode):
                 return value.lower() == "true"
-            elif type(value) == bool:
+            elif isinstance(value, bool):
                 return value
             return False
         return ConfigSpec(type="boolean",
@@ -285,11 +292,11 @@ class Config(object):
         if default is None:
             default = []
         def normalize(value):
-            if type(value) == str or type(value) == unicode:
+            if isinstance(value, str) or isinstance(value, unicode):
                 value = value.strip()
                 if value:
                     return value.split(",")
-            elif type(value) == list:
+            elif isinstance(value, list):
                 return value
             return []
         return ConfigSpec(type="list",
@@ -332,11 +339,11 @@ class Config(object):
         if options is None:
             options = []
         def normalize(value):
-            if type(value) == str or type(value) == unicode:
+            if isinstance(value, str) or isinstance(value, unicode):
                 value = value.strip()
                 if value:
                     return value.split(",")
-            elif type(value) == list:
+            elif isinstance(value, list):
                 return value
             return []
         return ConfigSpec(type="multiselect",
@@ -350,34 +357,36 @@ class Config(object):
                           alternates=alternates)
 
 def fromini(ini):
-    """ Create a JSON object from a ini-style config. """
-    json = {}
+    """ Create a dictionary from a ini-style config. """
+    json_obj = {}
     for section in ini.sections():
-        json[section] = {}
+        json_obj[section] = {}
         for option in ini.options(section):
-            json[section][option] = ini.get(section, option)
-    return json
+            json_obj[section][option] = ini.get(section, option)
+    return json_obj
 
 def fromstr(obj):
-    """ Create a JSON object from an arbitrary string. """
-    if type(obj) == str:
-        try:
-            obj = json.loads(obj)
-        except ValueError:
-            if len(obj) == 0:
-                obj = {}
-            else:
-                config = SafeConfigParser()
-                config.readfp(StringIO(obj))
-                obj = fromini(config)
+    """ Create a dictionary from an arbitrary string. """
+    while not isinstance(obj, dict):
+        if isinstance(obj, str) or isinstance(obj, unicode):
+            try:
+                obj = json.loads(obj)
+            except ValueError:
+                if len(obj) == 0:
+                    obj = {}
+                else:
+                    config = SafeConfigParser()
+                    config.readfp(StringIO(obj))
+                    obj = fromini(config)
     return obj
 
-class Connection(object):
+class Connection(Atomic):
 
     _MANAGER_CONFIG_CLASS = Config
     _ENDPOINT_CONFIG_CLASS = Config
 
     def __init__(self, object_class=None, name='', config=None):
+        super(Connection, self).__init__()
         if object_class:
             self._section = "%s:%s" % (object_class, name)
         else:
@@ -387,15 +396,25 @@ class Connection(object):
             self._config = {}
         else:
             self._config = config
+        self._manager_cache = {}
+        self._endpoint_cache = {}
 
-    def _manager_config(self, config=None, values=None):
+    @Atomic.sync
+    def _manager_config(self, config=None):
         """ Return the manager config associated with this connection. """
         if config is None:
             config = self._config
-        return self._MANAGER_CONFIG_CLASS(obj=config, section=self._section, values=values)
+        if not config in self._manager_cache:
+            self._manager_cache[config] = \
+                self._MANAGER_CONFIG_CLASS(obj=config, section=self._section)
+        return self._manager_cache[config]
 
-    def _endpoint_config(self, config=None, values=None):
+    @Atomic.sync
+    def _endpoint_config(self, config=None):
         """ Return the endpoint config associated with the given values. """
         if config is None:
             config = {}
-        return self._ENDPOINT_CONFIG_CLASS(obj=config, section=self._section, values=values)
+        if not config in self._endpoint_cache:
+            self._endpoint_cache[config] = \
+                self._ENDPOINT_CONFIG_CLASS(obj=config, section=self._section)
+        return self._endpoint_cache[config]

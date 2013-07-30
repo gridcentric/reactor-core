@@ -42,6 +42,7 @@ FAKE_ZK_PATH = "/fake"
 FAKE_ZK_CONTENTS = "fakefake"
 FAKE_ZK_CHILDREN = ["foo", "bar"]
 GARBAGE = "garbage"
+LOCK_ARGS = { "ephemeral" : True, "exclusive" : True }
 
 # Mock methods
 def mock_zookeeper_init(connect_success=True, throw_exception=None):
@@ -456,13 +457,6 @@ class ConnectionTests(unittest.TestCase):
             self.assertEquals(mock_delete.call_count, 1)
             self.assertEquals(mock_delete.call_args_list[0][0], (FAKE_ZK_HANDLE, FAKE_ZK_PATH))
 
-    def test_trylock_with_bad_args(self):
-        with mock.patch("zookeeper.init") as mock_init:
-            mock_init.side_effect = mock_zookeeper_init()
-            conn = connection.ZookeeperConnection(FAKE_SERVERS)
-            with self.assertRaises(FakeBadArgumentsException):
-                conn.trylock(None)
-
     def test_trylock_new_path(self):
         with mock.patch("zookeeper.init") as mock_init,\
                 mock.patch("zookeeper.exists") as mock_exists,\
@@ -472,7 +466,7 @@ class ConnectionTests(unittest.TestCase):
             mock_init.side_effect = mock_zookeeper_init()
             conn = connection.ZookeeperConnection(FAKE_SERVERS)
             mock_exists.return_value = False
-            locked = conn.trylock(FAKE_ZK_PATH, FAKE_ZK_CONTENTS)
+            locked = conn.write(FAKE_ZK_PATH, FAKE_ZK_CONTENTS, **LOCK_ARGS)
             self.assertTrue(locked)
             # Make sure create got called correctly
             self.assertEquals(mock_create.call_count, 1)
@@ -486,7 +480,7 @@ class ConnectionTests(unittest.TestCase):
             mock_init.side_effect = mock_zookeeper_init()
             conn = connection.ZookeeperConnection(FAKE_SERVERS)
             mock_exists.return_value = True
-            locked = conn.trylock(FAKE_ZK_PATH, FAKE_ZK_CONTENTS)
+            locked = conn.write(FAKE_ZK_PATH, FAKE_ZK_CONTENTS, **LOCK_ARGS)
             self.assertFalse(locked)
             # Make sure nothing got called
             self.assertEquals(mock_set.call_count, 0)
@@ -506,7 +500,7 @@ class ConnectionTests(unittest.TestCase):
             # thowing a NodeExistsException.
             mock_create.side_effect = mock_zookeeper_create(\
                     throw_exception=FakeNodeExistsException)
-            locked = conn.trylock(FAKE_ZK_PATH, FAKE_ZK_CONTENTS)
+            locked = conn.write(FAKE_ZK_PATH, FAKE_ZK_CONTENTS, **LOCK_ARGS)
             self.assertFalse(locked)
             # Make sure nothing got called except the create
             self.assertEquals(mock_create.call_count, 1)

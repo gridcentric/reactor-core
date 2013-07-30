@@ -2,18 +2,14 @@ import base64
 import datetime
 import logging
 import os
-import random
 import re
-import time
-import uuid
 
 import ldap
 import ldap.modlist as modlist
 
 from reactor.config import Config
-from reactor.loadbalancer.connection import LoadBalancerConnection
-from reactor.loadbalancer.netstat import connection_count
 
+from reactor.loadbalancer.backend import Backend
 from reactor.loadbalancer.tcp.connection import TcpEndpointConfig
 from reactor.loadbalancer.tcp.connection import Connection as TcpConnection
 
@@ -78,6 +74,7 @@ def _wrap_and_retry(fn):
     return _wrapped_fn
 
 class LdapConnection:
+
     def __init__(self, domain, username, password, orgunit='', host=None):
         self.domain   = domain
         self.username = username
@@ -89,7 +86,7 @@ class LdapConnection:
             self.host = host
         self.con      = None
 
-    def _open(self):
+    def open(self):
         if not(self.con):
             ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
             self.con = ldap.initialize("ldaps://%s:636" % self.host)
@@ -104,11 +101,11 @@ class LdapConnection:
         try:
             if self.con:
                 self.con.unbind()
-        except:
+        except Exception:
             pass
 
     # Returns the properly formatted "ou=," string.
-    def _orgpath_from_ou(self):
+    def orgpath_from_ou(self):
         if self.orgunit:
             orgpath = self.orgunit.split("\\")
             orgpath.reverse()
@@ -118,22 +115,25 @@ class LdapConnection:
             return "cn=Computers"
 
     # Returns the properly formatted "dc=," string.
-    def _dom_from_domain(self):
+    def dom_from_domain(self):
         return ",".join(map(lambda x: 'dc=%s' % x, self.domain.split(".")))
 
-    def _machine_description(self, name=None):
-        dom      = self._dom_from_domain()
-        ou       = self._orgpath_from_ou()
+    def machine_description(self, name=None):
+        dom      = self.dom_from_domain()
+        ou       = self.orgpath_from_ou()
         if name:
             return "cn=%s,%s,%s" % (name, ou, dom)
         else:
             return "%s,%s" % (ou, dom)
 
     @_wrap_and_retry
-    def list_machines(self, name=None, attrs=COMPUTER_ATTRS):
+    def list_machines(self, name=None, attrs=None):
+        if attrs is None:
+            attrs = COMPUTER_ATTRS
+
         filter   = '(objectclass=computer)'
-        desc     = self._machine_description(name)
-        machines = self._open().search_s(desc, ldap.SCOPE_SUBTREE, filter, attrs)
+        desc     = self.machine_description(name)
+        machines = self.open().search_s(desc, ldap.SCOPE_SUBTREE, filter, attrs)
         rval     = {}
 
         # Synthesize the machines into a simple form.
@@ -144,9 +144,9 @@ class LdapConnection:
         return rval
 
     def check_logged_on(self, machine):
-        lastLogoff = int(machine.get('lastLogoff', ['0'])[0])
-        lastLogon  = int(machine.get('lastLogon', ['0'])[0])
-        if lastLogon > lastLogoff:
+        last_logoff = int(machine.get('lastLogoff', ['0'])[0])
+        last_logon  = int(machine.get('lastLogon', ['0'])[0])
+        if last_logon > last_logoff:
             return True
         else:
             return False
@@ -172,8 +172,8 @@ class LdapConnection:
                 return False
 
         # Check the last logon time.
-        lastLogon = int(machine.get('lastLogon', ['0'])[0])
-        dt = datetime.datetime.fromtimestamp(lastLogon / 1000000)
+        last_logon = int(machine.get('lastLogon', ['0'])[0])
+        dt = datetime.datetime.fromtimestamp(last_logon / 1000000)
         if dt > expiry:
             return False
 
@@ -182,10 +182,10 @@ class LdapConnection:
     # Removes a machine from the LDAP directory
     @_wrap_and_retry
     def remove_machine(self, machine):
-        connection = self._open()
+        connection = self.open()
         try:
             connection.delete_s(machine['distinguishedName'][0])
-        except:
+        except Exception:
             # Ignore, as long as we can create a new account we are okay.
             pass
 
@@ -282,26 +282,28 @@ class LdapConnection:
                 new_record['unicodePwd'] = str(utf_quoted_password)
                 new_record['userAccountControl'] = str('4096') # Enable account.
 
-                descr = self._machine_description(name)
-                connection = self._open()
+                descr = self.machine_description(name)
+                connection = self.open()
 
                 # Create the new account.
                 connection.add_s(descr, modlist.addModlist(new_record))
-            except ldap.ALREADY_EXISTS, x:
+            except ldap.ALREADY_EXISTS:
                 machines[name.lower()] = name.lower()
                 continue # repeat the process, optimistically.
+
             # success. don't loop.
             break
 
         return (name, base64_password)
 
 class RdpEndpointConfig(TcpEndpointConfig):
+
     def __init__(self, **kwargs):
-        TcpEndpointConfig.__init__(self, **kwargs)
+        super(RdpEndpointConfig, self).__init__(**kwargs)
         self._connection = None
 
     domain = Config.string(label="Active Directory Domain", order=0,
-        validate=lambda self: self._check_credentials(),
+        validate=lambda self: self.check_credentials(),
         description="Fully-qualified name of the Active Directory domain for " +
         "the VM machine accounts.")
 
@@ -322,10 +324,10 @@ class RdpEndpointConfig(TcpEndpointConfig):
         description="The template machine name for new machines.")
 
     host = Config.string(label="Domain Controller", order=5,
-        validate=lambda self: self._check_connection(),
+        validate=lambda self: self.check_connection(),
         description="The network address (hostname or IP) of the AD server to contact.")
 
-    def _get_connection(self):
+    def ldap_connection(self):
         if not(self.domain):
             return None
         if self._connection is None:
@@ -336,17 +338,17 @@ class RdpEndpointConfig(TcpEndpointConfig):
                                               self.host)
         return self._connection
 
-    def _check_credentials(self):
+    def check_credentials(self):
         try:
-            self._check_connection(False)
+            self.check_connection(False)
         except ldap.INVALID_CREDENTIALS:
             Config.error("Invalid credentials")
         except Exception as e:
             Config.error("Unknown exception: %s" % repr(e))
 
-    def _check_connection(self, hostcheck=True):
+    def check_connection(self, hostcheck=True):
         try:
-            self._try_connection()
+            self.try_connection()
         except ldap.SERVER_DOWN:
             if hostcheck:
                 Config.error("Could not connect to host")
@@ -355,33 +357,37 @@ class RdpEndpointConfig(TcpEndpointConfig):
             if not hostcheck:
                 raise e
 
-    def _try_connection(self):
-        conn = self._get_connection()
+    def try_connection(self):
+        conn = self.ldap_connection()
+        self._connection = None
         if conn:
             # If we have a connection (i.e. the user has
             # specified a windows domain in their config)
             # then we ensure that we can connect.
-            try:
-                conn._open()
-            finally:
-                del conn
-                self._connection = None
+            conn.open()
 
 class Connection(TcpConnection):
+
     """ Remote Desktop Protocol """
 
     _ENDPOINT_CONFIG_CLASS = RdpEndpointConfig
+    _SUPPORTED_URLS = {
+        # We return an expression compatible with the
+        # TCP loadbalancer. We accept a port, but we'll
+        # return the default port of 3389.
+        "(rdp://([1-9][0-9]*|)|)" : lambda m: int(m.group(2) or 3389)
+    }
 
     def start_params(self, config):
         config = self._endpoint_config(config)
-        connection = config._get_connection()
+        connection = config.ldap_connection()
         if not connection:
             return {}
 
         # Create a new machine accout.
         info = connection.create_machine(config.template)
         if info:
-            logging.info("Created new machine account %s" % info[0])
+            logging.info("Created new machine account %s", info[0])
             # Return the relevant information about the machine.
             return { "name" : info[0], "machinepassword" : info[1] }
         else:
@@ -389,19 +395,25 @@ class Connection(TcpConnection):
 
     def cleanup(self, config, name):
         config = self._endpoint_config(config)
-        connection = config._get_connection()
+        connection = config.ldap_connection()
         if connection:
             try:
                 # Look for machine that matches the name.
                 machines = connection.list_machines(name)
                 connection.remove_machine(machines[name])
-            except:
-                logging.warn("Unable to remove machine account %s" % name)
+            except Exception:
+                logging.warn("Unable to remove machine account %s", name)
             else:
-                logging.info("Removed machine account %s" % name)
+                logging.info("Removed machine account %s", name)
 
     def cleanup_start_params(self, config, start_params):
         # Extract name from start_params.
         name = start_params.get("name")
         if name:
             self.cleanup(config, name)
+
+    def change(self, url, ips, **kwargs):
+        # Update the backend port to be the sensible RDP default, instead
+        # of default to whatever port we're listening on here.
+        ips = [Backend(ip.ip, ip.port or 3389, ip.weight) for ip in ips]
+        return super(Connection, self).change(url, ips, **kwargs)

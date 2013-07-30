@@ -8,7 +8,7 @@ def connections():
     active = []
 
     netstat = subprocess.Popen(["netstat", "-tn"], stdout=subprocess.PIPE)
-    (stdout, stderr) = netstat.communicate()
+    (stdout, _) = netstat.communicate()
 
     lines = stdout.split("\n")
 
@@ -18,10 +18,15 @@ def connections():
     lines = lines[2:]
     for line in lines:
         try:
-            (proto, recvq, sendq, local, foreign, state) = line.split()
+            # NOTE(amscanne): These variables are unused at the moment,
+            # but good to know what the different components of the netstat
+            # output are... just in case we want to enhance this function in
+            # the future.
+            #   (proto, recvq, sendq, local, foreign, state) = line.split()
+            (_, _, _, _, foreign, _) = line.split()
             (host, port) = foreign.split(":")
             active.append((host, int(port)))
-        except:
+        except Exception:
             pass
 
     return active
@@ -34,7 +39,7 @@ def connection_count():
         try:
             active_count[(host, port)] = \
                 active_count.get((host, port), 0) + 1
-        except:
+        except Exception:
             pass
 
     return active_count

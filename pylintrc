@@ -1,14 +1,18 @@
 [MESSAGES CONTROL]
 # We use modules not always available.
 #   C0111 = Missing docstring
-#   W0622 = Redefining built-in
 #   R0201 = Method could be a function
-#   F0401 = Unable to import module
 #   W0142 = Used * or ** magic
 #   E1103 = Instance has no member
 #           (but types could not be inferred)
-disable=C0111,W0622,R0201,F0401,W0142,E1103,W0613
-disable-msg=C0111,W0623,R0201,F0401,W0142,E1103,W0613
+#   W0212 = Access to a protected member
+#   W0703 = too general exception
+#   R0912 = too many branches
+#   R0915 = too many statements
+#   R0914 = too many local variables
+#   R0921 = abstract class not referenced
+disable=C0111,R0201,W0142,E1103,W0613,W0212,W0703,R0912,R0915,R0914,R0921
+disable-msg=C0111,R0201,W0142,E1103,W0613,W0212,W0703,R0912,R0915,R0914,R0921
 
 [VARIABLES]
 init-import=yes
@@ -27,7 +31,7 @@ attr-rgx=[a-z_][a-z0-9_]{1,30}$
 argument-rgx=[a-z_][a-z0-9_]{1,40}$
 variable-rgx=[a-z_][a-z0-9_]{1,40}$
 inlinevar-rgx=[A-Za-z_][A-Za-z0-9_]*$
-good-names=a,b,c,d,e,f,i,j,k,v,l,m,n,ex,p,id,fd,rc,o,r,s,t,rv,u,w,x,y,z,_
+good-names=a,b,c,d,e,f,i,j,k,v,l,m,n,ex,p,id,fd,rc,o,r,s,t,rv,u,w,x,y,z,_,fn,ip
 bad-names=
 bad-functions=
 
@@ -38,7 +42,7 @@ max-returns=12
 max-branchs=30
 max-statements=100
 max-parents=7
-max-attributes=20
+max-attributes=25
 min-public-methods=0
 max-public-methods=100
 

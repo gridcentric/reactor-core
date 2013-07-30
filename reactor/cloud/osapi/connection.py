@@ -1,6 +1,4 @@
 import logging
-import traceback
-from httplib import HTTPException
 
 from novaclient import shell
 from novaclient.v1_1.client import Client as NovaClient
@@ -8,6 +6,7 @@ import novaclient.exceptions
 
 from reactor.config import Config
 from reactor.cloud.connection import CloudConnection
+from reactor.cloud.instance import Instance
 
 class BaseOsManagerConfig(Config):
 
@@ -23,7 +22,7 @@ class BaseOsEndpointConfig(Config):
     # Common authentication elements.
     auth_url = Config.string(label="OpenStack Auth URL",
         default="http://localhost:5000/v2.0/", order=0,
-        validate=lambda self: self._validate_connection_params(),
+        validate=lambda self: self.validate_connection_params(),
         alternates=["authurl"],
         description="The OpenStack authentication URL (OS_AUTH_URL).")
 
@@ -53,7 +52,7 @@ class BaseOsEndpointConfig(Config):
     availability_zone = Config.string(label="Availability Zone", order=5,
         description="Availability zone for new instances.")
 
-    def _novaclient(self):
+    def novaclient(self):
         if self._client is None:
             extensions = shell.OpenStackComputeShell()._discover_extensions("1.1")
             self._client = NovaClient(self.username,
@@ -65,17 +64,16 @@ class BaseOsEndpointConfig(Config):
                                       extensions=extensions)
         return self._client
 
-    def _validate_connection_params(self, throwerror=True):
+    def validate_connection_params(self, throwerror=True):
         try:
-            self._novaclient().authenticate()
+            self.novaclient().authenticate()
         except Exception, e:
             if throwerror:
-                # If we got an unathorized exception, propagate
-                if type(e) == novaclient.exceptions.Unauthorized:
+                # If we got an unathorized exception, propagate.
+                if isinstance(e, novaclient.exceptions.Unauthorized):
                     Config.error(e.message)
-                elif type(e) == novaclient.exceptions.EndpointNotFound:
+                elif isinstance(e, novaclient.exceptions.EndpointNotFound):
                     Config.error("Problem connecting to cloud endpoint. Bad Region?")
-                # Else it could be a number of things
                 else:
                     Config.error("Could not connect to OpenStack cloud. Bad URL?")
             else:
@@ -87,70 +85,82 @@ class BaseOsConnection(CloudConnection):
     _MANAGER_CONFIG_CLASS = BaseOsManagerConfig
     _ENDPOINT_CONFIG_CLASS = BaseOsEndpointConfig
 
-    def id(self, config, instance):
-        # Could be a dict, or an object
-        if hasattr(instance, 'id'):
-            return instance.id
-        return str(instance['id'])
-
-    def name(self, config, instance):
-        if hasattr(instance, 'name'):
-            return instance.name
-        return instance.get('name', None)
-
-    def addresses(self, config, instance):
-        addresses = []
-        for network_addresses in instance.get('addresses', {}).values():
-            for network_addrs in network_addresses:
-                addresses.append(str(network_addrs['addr']))
-        return addresses
-
-    def _list_instances(self, config):
+    def _list_instances(self, config, instance_id):
         """
-        Returns a  list of instances from the endpoint. This is implemented by the
-        subclasses
+        Returns a list of instances from the endpoint.
+        (This is implemented by the different subclasses).
         """
-        return []
+        raise NotImplementedError()
 
-    def list_instances(self, config):
+    def list_instances(self, config, instance_id=None):
         """
         Lists the instances related to a endpoint. The identifier is used to
         identify the related instances in the respective clouds.
         """
-        # Pull out the _info dictionary from the Server object.
-        instances = [instance._info for instance in self._list_instances(config)]
-        return sorted(instances, key=lambda x: x.get('created', ""))
+        instances = self._list_instances(config, instance_id=instance_id)
+        instances = sorted(instances, key=lambda x: x._info.get("created", ""))
 
-    def _start_instance(self, config, params={}):
+        def _sanitize(instance):
+            # Extract the instance id.
+            if hasattr(instance, 'id'):
+                id = instance.id
+            else:
+                id = instance._info['id']
+
+            # Extract the instance name.
+            if hasattr(instance, 'name'):
+                name = instance.name
+            else:
+                name = instance._info.get('name', None)
+
+            # Extract all available instance addresses.
+            addresses = []
+            for network_addresses in instance._info.get('addresses', {}).values():
+                for network_addrs in network_addresses:
+                    addresses.append(str(network_addrs['addr']))
+
+            return Instance(id, name, addresses)
+
+        # Return all sanitizing instances.
+        return map(_sanitize, instances)
+
+    def _start_instance(self, config, params):
         """
         Starts a new instance. This is implemented by the subclasses.
         """
         pass
 
-    def start_instance(self, config, params={}):
+    def start_instance(self, config, params=None):
         """
         Starts a new instance in the cloud using the endpoint.
         """
-        try:
-            # Inject the manager parameters.
-            params.update({ "reactor" : self._manager_config().address })
-            return self._start_instance(config, params=params)
-        except HTTPException, e:
-            traceback.print_exc()
-            logging.error("Error starting instance: %s" % str(e))
+        if params is None:
+            params = {}
+
+        # Inject the manager parameters.
+        params.update({ "reactor" : self._manager_config().reactor })
+
+        # Finally, do the start.
+        # NOTE: We don't catch any exceptions here,
+        # they will be caught in the endpoint so that
+        # they can be *logged*.
+        return self._start_instance(config, params=params)
 
     def _delete_instance(self, config, instance_id):
         try:
             config = self._endpoint_config(config)
-            config._novaclient().servers._delete("/servers/%s" % (instance_id))
-        except HTTPException, e:
-            traceback.print_exc()
-            logging.error("Error starting instance: %s" % str(e))
+            config.novaclient().servers._delete("/servers/%s" % (instance_id))
+        except novaclient.exceptions.NotFound:
+            logging.info("Instance already gone? Weird.")
 
     def delete_instance(self, config, instance_id):
         """
         Remove the instance from the cloud.
         """
+        # NOTE: Like launch_instance, we don't
+        # catch all exceptions. Instead we let
+        # them reach the endpoint so that they
+        # can be logged.
         self._delete_instance(config, instance_id)
 
 class OsApiEndpointConfig(BaseOsEndpointConfig):
@@ -159,20 +169,20 @@ class OsApiEndpointConfig(BaseOsEndpointConfig):
         description="The name given to new instances.")
 
     flavor_id = Config.string(label="Flavor", order=2,
-        validate=lambda self: self._validate_flavor(),
+        validate=lambda self: self.validate_flavor(),
         description="The flavor to use.")
 
     image_id = Config.string(label="Image", order=2,
-        validate=lambda self: self._validate_image(),
+        validate=lambda self: self.validate_image(),
         description="The image ID to boot.")
 
     key_name = Config.string(label="Key Name", order=2,
-        validate=lambda self: self._validate_keyname(),
+        validate=lambda self: self.validate_keyname(),
         description="The key_name (for injection).")
 
-    def _validate_flavor(self):
-        if self._validate_connection_params(False):
-            avail = [flavor._info['id'] for flavor in self._novaclient().flavors.list()]
+    def validate_flavor(self):
+        if self.validate_connection_params(False):
+            avail = [flavor._info['id'] for flavor in self.novaclient().flavors.list()]
             if self.flavor_id in avail:
                 return True
             else:
@@ -181,9 +191,9 @@ class OsApiEndpointConfig(BaseOsEndpointConfig):
             # Can't connect to cloud, ignore this param for now
             return True
 
-    def _validate_image(self):
-        if self._validate_connection_params(False):
-            avail = [image._info['id'] for image in self._novaclient().images.list()]
+    def validate_image(self):
+        if self.validate_connection_params(False):
+            avail = [image._info['id'] for image in self.novaclient().images.list()]
             if self.image_id in avail:
                 return True
             else:
@@ -192,9 +202,12 @@ class OsApiEndpointConfig(BaseOsEndpointConfig):
             # Can't connect to cloud, ignore this param for now
             return True
 
-    def _validate_keyname(self):
-        if self._validate_connection_params(False):
-            avail = [key._info['keypair']['name'] for key in self._novaclient().keypairs.list()]
+    def validate_keyname(self):
+        if self.key_name is None:
+            # No keyname provided.
+            return True
+        elif self.validate_connection_params(False):
+            avail = [key._info['keypair']['name'] for key in self.novaclient().keypairs.list()]
             if self.key_name in avail:
                 return True
             else:
@@ -208,25 +221,25 @@ class Connection(BaseOsConnection):
 
     _ENDPOINT_CONFIG_CLASS = OsApiEndpointConfig
 
-    def _list_instances(self, config):
+    def _list_instances(self, config, instance_id):
         """
         Returns a  list of instances from the endpoint.
         """
         config = self._endpoint_config(config)
-        search_opts = {
-            'name': config.instance_name,
-            'flavor': config.flavor_id,
-            'image': config.image_id
-        }
-        instances = config._novaclient().servers.list(search_opts=search_opts)
-        return instances
+        if instance_id is None:
+            search_opts = {
+                'name': config.instance_name,
+                'flavor': config.flavor_id,
+                'image': config.image_id
+            }
+            return config.novaclient().servers.list(search_opts=search_opts)
+        else:
+            return [config.novaclient().servers.get(instance_id)]
 
-    def _start_instance(self, config, params={}):
-        # TODO: We can pass in the reactor parameter here via
-        # CloudStart or some other standard support mechanism.
+    def _start_instance(self, config, params):
         config = self._endpoint_config(config)
         userdata = "reactor=%s" % params.get('reactor', '')
-        instance = config._novaclient().servers.create(
+        instance = config.novaclient().servers.create(
                                   config.instance_name,
                                   config.image_id,
                                   config.flavor_id,
@@ -234,4 +247,4 @@ class Connection(BaseOsConnection):
                                   key_name=config.key_name,
                                   availability_zone=config.availability_zone,
                                   userdata=userdata)
-        return instance[0]
+        return instance
