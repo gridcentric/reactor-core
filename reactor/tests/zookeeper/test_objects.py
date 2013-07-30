@@ -1,27 +1,47 @@
+import array
+
+from reactor.zookeeper.objects import ZookeeperObject, JSONObject, RawObject, BinObject
+
+def _test_obj(obj):
+    if isinstance(obj, JSONObject):
+        return { "a" : { "b" : [ "c", "d", "e" ] } }
+    elif isinstance(obj, RawObject):
+        return "foo"
+    elif isinstance(obj, BinObject):
+        return array.array("b", [1, 1, 2, 3, 5, 8])
+    else:
+        raise NotImplementedError()
+
 def test_create(zk_conn, zk_object):
     assert not zk_conn.exists(zk_object._path)
     zk_object.save()
 
 def test_save_contents(zk_object):
-    zk_object.save(zk_object._test_object())
-    assert zk_object.load() == zk_object._test_object()
+    test_obj = _test_obj(zk_object)
+    zk_object.save(test_obj)
+    assert zk_object.load() == test_obj
 
 def test_watch_contents(zk_conn, zk_object):
+    test_obj = _test_obj(zk_object)
     watch_ref = [False]
     def watch_fired(value):
         watch_ref[0] = value
     assert not zk_object.load(watch=watch_fired)
-    zk_object.save(zk_object._test_object())
+    zk_object.save(test_obj)
     zk_conn.sync()
-    assert watch_ref[0] == zk_object._test_object()
+    assert watch_ref[0] == test_obj
+    zk_object.save(None)
+    zk_conn.sync()
+    assert watch_ref[0] != test_obj
 
 def test_watch_removed(zk_conn, zk_object):
+    test_obj = _test_obj(zk_object)
     watch_ref = [False]
     def watch_fired(value):
         watch_ref[0] = value
     assert not zk_object.load(watch=watch_fired)
     zk_object.unwatch()
-    zk_object.save(zk_object._test_object())
+    zk_object.save(test_obj)
     zk_conn.sync()
     assert watch_ref[0] == False
 

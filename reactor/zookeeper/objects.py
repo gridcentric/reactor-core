@@ -8,7 +8,7 @@ class ZookeeperObject(object):
 
     """ An object abstraction around the Zookeeper client interface. """
 
-    def __init__(self, zk_client, path):
+    def __init__(self, zk_client, path='/'):
         self._zk_client = zk_client
         self._content_watches = {}
         self._child_watches = {}
@@ -29,12 +29,9 @@ class ZookeeperObject(object):
                 client.clear_watch_fn(self._watch_children)
 
     def _serialize(self, data):
-        return data
+        raise NotImplementedError()
 
     def _deserialize(self, data):
-        return data
-
-    def _test_object(self):
         raise NotImplementedError()
 
     def load(self, watch=None):
@@ -50,7 +47,8 @@ class ZookeeperObject(object):
             return self._deserialize(client.read(self._path))
 
     def save(self, val="", **kwargs):
-        self._zk_client.get_connection().write(self._path, self._serialize(val), **kwargs)
+        return self._zk_client.get_connection().write(
+            self._path, self._serialize(val), **kwargs)
 
     def list(self, watch=None):
         client = self._zk_client.get_connection()
@@ -63,8 +61,17 @@ class ZookeeperObject(object):
         else:
             return client.list_children(self._path) or []
 
-    def get(self, child):
-        return self.__class__(self._zk_client, os.path.join(self._path, child))
+    def get(self, child, clazz=None):
+        if clazz is None:
+            return self.__class__(self._zk_client, os.path.join(self._path, child))
+        else:
+            return clazz(self._zk_client, os.path.join(self._path, child))
+
+    def do_attr(self, name, value=None, **kwargs):
+        if value is None:
+            return self.get(name, clazz=kwargs.pop("clazz", None)).load()
+        else:
+            self.get(name, clazz=kwargs.pop("clazz", None)).save(value, **kwargs)
 
     def delete(self):
         client = self._zk_client.get_connection()
@@ -75,6 +82,14 @@ class ZookeeperObject(object):
                 client.clear_watch_fn(self._watch_children)
         client.delete(self._path)
 
+class NullObject(ZookeeperObject):
+
+    def _serialize(self, data):
+        assert False
+
+    def _deserialize(self, data):
+        assert False
+
 class RawObject(ZookeeperObject):
 
     def _serialize(self, data):
@@ -82,9 +97,6 @@ class RawObject(ZookeeperObject):
 
     def _deserialize(self, data):
         return data
-
-    def _test_object(self):
-        return "foo"
 
 class JSONObject(ZookeeperObject):
 
@@ -97,39 +109,37 @@ class JSONObject(ZookeeperObject):
         else:
             return data
 
-    def _test_object(self):
-        return { "a" : { "b" : [ "c", "d" ] } }
-
 class BinObject(ZookeeperObject):
 
     def _serialize(self, data):
-        return binascii.hexlify(data)
+        return binascii.hexlify(data or '')
 
     def _deserialize(self, data):
         if data:
             try:
                 data = array.array('b', binascii.unhexlify(data))
-            except:
+            except ValueError:
                 data = None
         return data
 
-    def _test_object(self):
-        return array.array('b', [1, 1, 2, 3, 5, 8])
-
-def Attr(name, **kwargs):
+def attr(name, **kwargs):
+    obj = kwargs.pop('obj', False)
     def getx(self):
-        return self.do_attr(name, **kwargs)
+        if obj:
+            return self.get(name, **kwargs)
+        else:
+            return self.do_attr(name, **kwargs)
     def setx(self, value):
         return self.do_attr(name, value=value, **kwargs)
     def delx(self):
         raise NotImplementedError()
     return property(getx, setx, delx)
 
-def RawAttr(name):
-    return Attr(name, clazz=RawObject)
+def raw_attr(name, **kwargs):
+    return attr(name, clazz=RawObject, **kwargs)
 
-def JSONAttr(name):
-    return Attr(name, clazz=JSONObject)
+def json_attr(name, **kwargs):
+    return attr(name, clazz=JSONObject, **kwargs)
 
-def BinAttr(name):
-    return Attr(name, clazz=BinObject)
+def bin_attr(name, **kwargs):
+    return attr(name, clazz=BinObject, **kwargs)

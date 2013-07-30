@@ -42,6 +42,10 @@ def fixture(**kwargs):
     pytest_fn = pytest.fixture(**kwargs)
     def _dec(fn):
         def _fn(request, *args, **kwargs):
+            if not hasattr(request, '__zk_finalizers'):
+                request.addfinalizer(mock_zookeeper.dump)
+                request.addfinalizer(mock_zookeeper.reset)
+                setattr(request, '__zk_finalizers', True)
             mangled_name = "%s__%s__%s" % (fn.__name__, str(args), str(kwargs))
             if hasattr(request, mangled_name):
                 val = getattr(request, mangled_name)
@@ -54,29 +58,22 @@ def fixture(**kwargs):
         return pytest_fn(_fn)
     return _dec
 
-def add_zk_finalizers(request):
-    request.addfinalizer(mock_zookeeper.dump)
-    request.addfinalizer(mock_zookeeper.reset)
-
 @fixture()
 def zk_conn(request):
     """ A zookeeper connection. """
-    add_zk_finalizers(request)
     from reactor.zookeeper.connection import ZookeeperConnection
     return ZookeeperConnection(servers=["mock"])
 
 @fixture()
 def zk_client(request):
     """ A zookeeper client. """
-    add_zk_finalizers(request)
     from reactor.zookeeper.client import ZookeeperClient
     return ZookeeperClient(zk_servers=["mock"])
 
-from reactor.zookeeper.object import RawObject, JSONObject, BinObject
+from reactor.zookeeper.objects import RawObject, JSONObject, BinObject
 @fixture(params=[RawObject, JSONObject, BinObject])
 def zk_object(request):
     """ A zookeeper object. """
-    add_zk_finalizers(request)
     return request.param(zk_client(request), '/test/' + str(uuid.uuid4()))
 
 @fixture()
