@@ -7,8 +7,8 @@
 #   W0142 = Used * or ** magic
 #   E1103 = Instance has no member
 #           (but types could not be inferred)
-disable=C0111,W0622,R0201,F0401,W0142,E1103
-disable-msg=C0111,W0623,R0201,F0401,W0142,E1103
+disable=C0111,W0622,R0201,F0401,W0142,E1103,W0613
+disable-msg=C0111,W0623,R0201,F0401,W0142,E1103,W0613
 
 [VARIABLES]
 init-import=yes
@@ -27,7 +27,7 @@ attr-rgx=[a-z_][a-z0-9_]{1,30}$
 argument-rgx=[a-z_][a-z0-9_]{1,40}$
 variable-rgx=[a-z_][a-z0-9_]{1,40}$
 inlinevar-rgx=[A-Za-z_][A-Za-z0-9_]*$
-good-names=a,b,c,d,e,f,i,j,k,v,l,m,n,ex,p,id,fd,rc,o,r,s,t,rv,u,w,x,y,z
+good-names=a,b,c,d,e,f,i,j,k,v,l,m,n,ex,p,id,fd,rc,o,r,s,t,rv,u,w,x,y,z,_
 bad-names=
 bad-functions=
 
