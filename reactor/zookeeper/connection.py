@@ -258,7 +258,7 @@ class ZookeeperConnection(object):
 
         self.cond.acquire()
         if not zookeeper.exists(self.handle, path):
-            self.write(path, " ")
+            self.write(path, "")
 
         try:
             if clean:

@@ -9,13 +9,13 @@ from pyramid.security import authenticated_userid
 from pyramid.authentication import AuthTktAuthenticationPolicy
 from pyramid.authorization import ACLAuthorizationPolicy
 
-from reactor.endpoint import EndpointConfig
-from reactor.endpoint import EndpointLog
-from reactor.endpoint import State
-
-from reactor.manager import ManagerConfig
-from reactor.zooclient import ReactorClient
-from reactor.zookeeper.connection import ZookeeperException
+from . manager import ManagerConfig
+from . endpoint import EndpointConfig
+from . endpoint import EndpointLog
+from . endpoint import State
+from . objects.root import Reactor
+from . zookeeper.connection import ZookeeperException
+from . zookeeper.client import ZookeeperClient
 
 def authorized_admin_only(request_handler=None, forbidden_view=None):
     """
