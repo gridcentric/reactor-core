@@ -3,56 +3,63 @@ import json
 
 from pyramid.httpexceptions import HTTPFound
 from pyramid.response import Response
-from pyramid.security import remember, forget, authenticated_userid
+from pyramid.security import authenticated_userid
 from pyramid.url import route_url
+
 from mako.template import Template
 from mako.lookup import TemplateLookup
 from mako import exceptions
 
-from reactor.api import connected
-from reactor.api import authorized
-from reactor.api import authorized_admin_only
-from reactor.api import ReactorApiExtension
+from . api import connected
+from . api import authorized_admin_only
+from . api import ReactorApiExtension
 
-from reactor.endpoint import EndpointConfig
-from reactor.manager import ManagerConfig
+from . endpoint import EndpointConfig
+from . manager import ManagerConfig
 
 class ReactorGui(ReactorApiExtension):
 
-    def __init__(self, *args, **kwargs):
-        super(ReactorGui, self).__init__(*args, **kwargs)
+    def __init__(self, api, *args, **kwargs):
+        super(ReactorGui, self).__init__(api, *args, **kwargs)
 
-        self.api.config.add_route('endpoint-info', '/endpoint')
-        self.api.config.add_view(self.endpoint_info, route_name='endpoint-info')
+        # Set the index.
+        self.api.index = self.admin
 
-        self.api.config.add_route('manager-info', '/manager')
-        self.api.config.add_view(self.manager_info, route_name='manager-info')
+        api.config.add_route(
+            'admin-login', '/login', accept="text/html")
+        api.config.add_route(
+            'admin-login-form', '/login', accept="application/x-www-form-urlencoded")
+        api.config.add_view(self.admin_login, route_name='admin-login')
+        api.config.add_view(self.admin_login, route_name='admin-login-form')
 
-        # Add a login page.
-        self.api.config.add_route('admin-login', '/admin/login')
-        self.api.config.add_view(self.admin_login, route_name='admin-login')
+        api.config.add_route(
+            'admin-logout', '/logout', accept="text/html")
+        api.config.add_route(
+            'admin-logout-form', '/logout', accept="application/x-www-form-urlencoded")
+        api.config.add_view(self.admin_logout, route_name='admin-logout')
 
-        # Add a logout page.
-        self.api.config.add_route('admin-logout', '/admin/logout')
-        self.api.config.add_view(self.admin_logout, route_name='admin-logout')
+        api.config.add_route('endpoint-info', '/endpoint')
+        api.config.add_view(self.endpoint_info, route_name='endpoint-info')
+
+        api.config.add_route('manager-info', '/manager')
+        api.config.add_view(self.manager_info, route_name='manager-info')
 
         # Note: views are routed on a first-matched basis, so the ordering
         # of the following add_route calls are important since fetches to
         # /admin/assets could be matched by either the admin-asset or
         # admin-object routes (and we want them to go to admin-asset,
         # so that they can be fetched even in unathenticated contexts).
-        self.api.config.add_route('admin-home', '/admin/')
-        self.api.config.add_route('admin-passwd', '/admin/passwd')
-        self.api.config.add_route('admin-asset', '/admin/assets/{object_name:.*}')
-        self.api.config.add_route('admin-page', '/admin/{page_name}')
-        self.api.config.add_route('admin-object', '/admin/{page_name}/{object_name:.*}')
-        self.api.config.add_view(self.admin, route_name='admin-home')
-        self.api.config.add_view(self.admin_passwd, route_name='admin-passwd')
-        self.api.config.add_view(self.admin_asset, route_name='admin-asset')
-        self.api.config.add_view(self.admin, route_name='admin-page')
-        self.api.config.add_view(self.admin, route_name='admin-object')
-        self.api.config.add_view(context='pyramid.exceptions.NotFound',
-                view='pyramid.view.append_slash_notfound_view')
+        api.config.add_route('admin-passwd', '/passwd')
+        api.config.add_route('admin-page', '/{page_name}', accept="text/html")
+        api.config.add_route('admin-asset', '/assets/{object_name:.*}')
+        api.config.add_route('admin-object', '/{page_name}/{object_name:.*}', accept="text/html")
+
+        api.config.add_view(self.admin_passwd, route_name='admin-passwd')
+        api.config.add_view(self.admin_asset, route_name='admin-asset')
+        api.config.add_view(self.admin, route_name='admin-page')
+        api.config.add_view(self.admin, route_name='admin-object')
+        api.config.add_view(context='pyramid.exceptions.NotFound',
+            view='pyramid.view.append_slash_notfound_view')
 
     @connected
     def manager_info(self, context, request):
@@ -61,48 +68,6 @@ class ReactorGui(ReactorApiExtension):
     @connected
     def endpoint_info(self, context, request):
         return Response(body=json.dumps(EndpointConfig()._spec()))
-
-    @connected
-    def admin_login(self, context, request):
-        """
-        Logs the admin user in.
-        """
-        login_url = route_url('admin-login', request)
-        referrer = request.url
-        if referrer == login_url:
-            referrer = '/admin/'
-        came_from = request.params.get('came_from', referrer)
-        message = ''
-
-        # See if the login form was submitted.
-        if 'auth_key' in request.params:
-            auth_key = request.params['auth_key']
-            if self.api.check_admin_auth_key(auth_key):
-                headers = remember(request, 'admin')
-                return HTTPFound(location = came_from,
-                                 headers = headers)
-            message = 'Incorrect password.'
-
-        # Credentials not submitted or incorrect, render login page.
-        filename = os.path.join(os.path.dirname(__file__), 'admin', 'login.html')
-        lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
-        lookup = TemplateLookup(directories=[lookup_path])
-        template = Template(filename=filename, lookup=lookup)
-        kwargs = { 'message' :  message,
-                   'url' : route_url('admin-login', request),
-                   'came_from' : came_from,
-                   'user' : '',
-                   'loggedin' : False }
-
-        body = template.render(**kwargs)
-        return Response(body=body)
-
-    def admin_logout(self, context, request):
-        """
-        Logs the admin user out.
-        """
-        headers = forget(request)
-        return HTTPFound(location=route_url('admin-home', request), headers=headers)
 
     @connected
     @authorized_admin_only(forbidden_view='self.admin_login')
@@ -141,6 +106,48 @@ class ReactorGui(ReactorApiExtension):
 
         else:
             return Response(status=403)
+
+    def admin_login(self, context, request):
+        """
+        Logs the admin user in.
+        """
+        login_url = route_url('admin-login', request)
+        referrer = request.url
+        if referrer == login_url:
+            referrer = '/'
+        came_from = request.params.get('came_from', referrer)
+        message = ''
+
+        try:
+            # See if the login form was submitted.
+            response = self.api.login(context, request)
+            return HTTPFound(location=came_from, headers=response.headers)
+        except NotImplementedError:
+            # Credentials not submitted or incorrect, render login page.
+            filename = os.path.join(os.path.dirname(__file__), 'admin', 'login.html')
+            lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
+            lookup = TemplateLookup(directories=[lookup_path])
+            template = Template(filename=filename, lookup=lookup)
+            if self.api._req_get_auth_key(request) != None:
+                message = "Invalid credentials."
+            else:
+                message = ""
+            kwargs = {
+                'message' : message,
+                'url' : route_url('admin-login', request),
+                'came_from' : came_from,
+                'user' : '',
+                'loggedin' : False
+            }
+            body = template.render(**kwargs)
+            return Response(body=body)
+
+    def admin_logout(self, context, request):
+        """
+        Logs the admin user out.
+        """
+        response = self.api.logout(context, request)
+        return HTTPFound(location=route_url('admin-login', request), headers=response.headers)
 
     def admin_asset(self, context, request):
         """
@@ -187,7 +194,7 @@ class ReactorGui(ReactorApiExtension):
             self.api.client.auth_hash_set(self.api._create_admin_auth_token(auth_key))
 
             # Route user back to the home screen.
-            return HTTPFound(location=route_url('admin-home', request))
+            return HTTPFound(location=route_url('admin-login', request))
 
         # New password not submitted, render password page.
         filename = os.path.join(os.path.dirname(__file__), 'admin', 'passwd.html')
