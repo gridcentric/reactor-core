@@ -222,8 +222,8 @@
                         addLogRow(ent);
                     });
                     since = log[log.length-1][0];
+                    $('#endpoint-log-div').scrollTop($('#endpoint-log-div')[0].scrollHeight);
                 }
-                $('#endpoint-log-div').scrollTop($('#endpoint-log-div')[0].scrollHeight);
                 setTimeout(function() {
                     loadLog(since);
                 }, UPDATE_PERIOD);
