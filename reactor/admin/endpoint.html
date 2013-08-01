@@ -122,11 +122,13 @@
     // Graph/log update period, in ms.
     var UPDATE_PERIOD = 1000;
 
-    // Dynamically construct config UI based on spec we get back from the server.
-    var context = beginMakeConfig("endpoint-conf-container",
-                                  {"loadbalancer": "Load Balancer"},
-                                  "/endpoint",
-                                  "/v1.1/endpoints/${object}");
+    function loadConfig() {
+        // Start constructing dynamic config.
+        beginMakeConfig("endpoint-conf-container",
+                        {"loadbalancer": "Load Balancer"},
+                        "/endpoint",
+                        "/v1.1/endpoints/${object}");
+    }
 
     function loadState() {
         $("#state").html('Loading...');
@@ -408,6 +410,7 @@
     }
 
     // Set everything up.
+    loadConfig();
     loadState();
     setupActions({
         "#start" : { "action" : "START" },
