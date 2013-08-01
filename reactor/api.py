@@ -14,9 +14,8 @@ from . manager import ManagerConfig
 from . endpoint import EndpointConfig
 from . endpoint import EndpointLog
 from . endpoint import State
-from . objects.root import Reactor
 from . zookeeper.connection import ZookeeperException
-from . zookeeper.client import ZookeeperClient
+from . zooclient import ReactorClient
 
 def authorized_admin_only(request_handler=None, forbidden_view=None):
     """
