@@ -3,7 +3,7 @@ from reactor.tests.pytest_plugin import fixture, zk_client
 from reactor.objects.endpoint import Instances
 from reactor.objects.endpoint import IPAddresses
 from reactor.objects.endpoint import Sessions
-from reactor.objects.endpoint import Log
+from reactor.objects.endpoint import Ring
 from reactor.objects.endpoint import State
 
 from reactor.zookeeper.objects import BinObject
@@ -19,7 +19,7 @@ def test_state(endpoint):
     assert endpoint.state().current() == State.running
 
 def test_log(endpoint):
-    assert isinstance(endpoint.log(), Log)
+    assert isinstance(endpoint.log(), Ring)
 
 def test_manager(endpoint):
     assert not endpoint.manager

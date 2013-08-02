@@ -14,6 +14,7 @@ from . import ips as ips_mod
 from . log import log
 from . config import fromstr
 from . manager import ManagerConfig
+from . manager import ManagerLog
 from . endpoint import EndpointConfig
 from . endpoint import EndpointLog
 from . objects.root import Reactor
@@ -139,6 +140,9 @@ class ReactorApi(object):
 
         self._add('manager-list',  ['1.0', '1.1'],
                   'managers', self.list_managers)
+
+        self._add('manager-log', ['1.1'],
+                  'managers/{manager}/log', self.handle_manager_log)
 
         self._add('endpoint-action',  ['1.0', '1.1'],
                   'endpoints/{endpoint_name}', self.handle_endpoint_action)
@@ -410,8 +414,12 @@ class ReactorApi(object):
         if request.method == "GET":
             config = self.zkobj.managers().get_config(manager)
             if config is not None:
-                config['uuid'] = self.zkobj.managers().key(manager)
-                config['info'] = self.zkobj.managers().info(config['uuid'])
+                try:
+                    config['uuid'] = self.zkobj.managers().key(manager)
+                    config['info'] = self.zkobj.managers().info(config['uuid'])
+                except:
+                    config['uuid'] = None
+                    config['info'] = None
                 return Response(body=json.dumps(config))
             else:
                 return Response(status=404, body="%s not found" % manager)
@@ -450,6 +458,28 @@ class ReactorApi(object):
             active = self.zkobj.managers().key_map()
             return Response(body=json.dumps(\
                 {'configured': configured, 'active': active}))
+        else:
+            return Response(status=403)
+
+    @log
+    @connected
+    @authorized()
+    def handle_manager_log(self, context, request):
+        """
+        Returns the manager's log.
+        """
+        manager = request.matchdict['manager']
+        since = request.params.get('since', None)
+        if since is not None:
+            try:
+                since = float(since)
+            except ValueError:
+                since = None
+
+        if request.method == "GET":
+            manager_log = ManagerLog(
+                self.zkobj.managers().log(manager))
+            return Response(body=json.dumps(manager_log.get(since=since)))
         else:
             return Response(status=403)
 
@@ -664,8 +694,7 @@ class ReactorApi(object):
 
         if request.method == "GET":
             endpoint_log = EndpointLog(
-                retrieve_cb=self.zkobj.endpoints().get(
-                    endpoint_name).log().retrieve)
+                self.zkobj.endpoints().get(endpoint_name).log())
             return Response(body=json.dumps(endpoint_log.get(since=since)))
         else:
             return Response(status=403)

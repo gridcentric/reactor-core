@@ -16,7 +16,7 @@ class ZookeeperObject(object):
         self._path = path
         self._watch_content = None
         self._watch_children = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def __del__(self):
         self.unwatch()

@@ -1,6 +1,5 @@
 from uuid import uuid4
 from struct import pack, unpack
-from socket import inet_ntoa, inet_aton
 from collections import namedtuple
 
 from reactor.cloud.connection import CloudConnection
@@ -12,12 +11,6 @@ def instance_sequencer():
     while True:
         current += 1
         yield current
-
-def ip_to_int(ip):
-    return unpack("!I", inet_aton(ip))[0]
-
-def int_to_ip(ip_int):
-    return inet_ntoa(pack("!I", ip_int))
 
 def ip_range_generator(base, count):
     base_ip = ip_to_int(base)

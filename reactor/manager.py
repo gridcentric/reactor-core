@@ -1,14 +1,15 @@
-import logging
 import threading
 import time
 import uuid
 import bisect
 import traceback
+import logging
 
 from . import ips as ips_mod
 from . import submodules
 from . atomic import Atomic
 from . config import Config
+from . eventlog import EventLog, Event
 from . zookeeper.client import ZookeeperClient
 from . zookeeper.connection import ZookeeperException
 from . objects.root import Reactor
@@ -62,6 +63,40 @@ class ManagerConfig(Config):
                 name, config=self)._manager_config().validate())
         return errors
 
+class ManagerLog(EventLog):
+
+    # The log size (# of entries).
+    LOG_SIZE = 200
+
+    # Log entry types.
+    NO_MANAGER_AVAILABLE = Event(
+        lambda args: "No manager avilable for endpoint %s!" % args[0])
+    ENDPOINT_MANAGED = Event(
+        lambda args: "Endpoint %s is managed (owned? %s)" % (args[0], args[1]))
+    ENDPOINTS_CHANGED = Event(
+        lambda args: "Endpoints have changed: %s" % args[0])
+    REGISTERED = Event(
+        lambda args: "Manager registered")
+    MALFORMED_METRICS = Event(
+        lambda args: "Found malformed metrics: %s" % args[0])
+    LOCAL_METRICS = Event(
+        lambda args: "Loaded local metrics: %s" % args[0])
+    ALL_METRICS = Event(
+        lambda args: "Loaded all metrics: %s" % args[0])
+    LOCAL_PENDING = Event(
+        lambda args: "Loaded local pending: %s" % args[0])
+    ALL_PENDING = Event(
+        lambda args: "Loaded all pending: %s" % args[0])
+    SESSION_MULTIPLE_MATCH = Event(
+        lambda args: "Multiple matches for session %s!" % args[0])
+    SESSION_NO_MATCH = Event(
+        lambda args: "No match for session %s!" % args[0])
+    ENDPOINT_ERROR = Event(
+        lambda args: "Error updating endpoint %s: %s" % (args[0], args[1]))
+
+    def __init__(self, *args):
+        super(ManagerLog, self).__init__(*args, size=ManagerLog.LOG_SIZE)
+
 # IMPORTANT: There is a potential deadlock if the manager is locked when
 # setting / clearing a zookeeper watch. Our policy is that the manager cannot
 # be locked when it makes a call to one of the zookeeper client's watch
@@ -72,8 +107,38 @@ class ScaleManager(Atomic):
 
     def __init__(self, zk_servers, names=None):
         super(ScaleManager, self).__init__()
+
+        # Manager uuid (generated).
+        # This doesn't serve any particular purpose other than
+        # giving us a unique node to register our information.
+        # We save a collection of keys, loadbalancers, clouds, etc.
+        self._uuid = str(uuid.uuid4())
+
+        # Manager names.
+        # Each manager has a collection of readable names.
+        # Basically, this can be used to provide some kind
+        # of sensible scheme for configuration, etc.
+        # By default, these names are the available non-local
+        # IP addresses found on the machine.
+        if names is None:
+            self._names = ips_mod.find_global()
+        else:
+            self._names = names
+        if not self._names:
+            raise Exception("Manager has no persistent names!")
+
+        # Zookeeper objects.
         self.client = ZookeeperClient(zk_servers)
         self.zkobj = Reactor(self.client)
+
+        # Grab the log.
+        # We want the logs to be persistent, but we don't want to
+        # store it under our UUID since it is generated each start.
+        # The solution to this problem is that we store the logs
+        # under the first name, and ensure that we expose our names
+        # via the manager info block (see _register() below). This way, 
+        # clients can look up the right place for each manager.
+        self.logging = ManagerLog(self.zkobj.managers().log(self._names[0]))
 
         # Runtime state.
         self._running = True
@@ -86,25 +151,8 @@ class ScaleManager(Atomic):
         self._new_ips_zkobj = self.zkobj.new_ips()
         self._drop_ips_zkobj = self.zkobj.drop_ips()
 
-        # Manager names.
-        # Each manager has a collection of readable names.
-        # Basically, this can be used to provide some kind
-        # of sensible scheme for configuration, etc.
-        # By default, these names are the available non-local
-        # IP addresses found on the machine.
-        if names is None:
-            self._names = ips_mod.find_global()
-        else:
-            self._names = names
-
         # Our configuration.
         self.config = ManagerConfig()
-
-        # Manager uuid (generated).
-        # This doesn't serve any particular purpose other than
-        # giving us a unique node to register our information.
-        # We save a collection of keys, loadbalancers, clouds, etc.
-        self._uuid = str(uuid.uuid4())
 
         # Endpoint map.
         self._endpoints = {}
@@ -139,8 +187,8 @@ class ScaleManager(Atomic):
         self._sessions = {}
 
     def __del__(self):
-        self.unserve()
-        super(ScaleManager, self).__init__()
+        if hasattr(self, 'zkobj'):
+            self.unserve()
 
     @Atomic.sync
     def _reconnect(self):
@@ -187,7 +235,7 @@ class ScaleManager(Atomic):
         manager_key = None
         keys = self._key_to_uuid.keys()
         if len(keys) == 0:
-            logging.error("No scale manager available!")
+            self.logging.error(self.logging.NO_MANAGER_AVAILABLE, endpoint.key())
         else:
             keys.sort()
             index = bisect.bisect(keys, endpoint.key())
@@ -212,15 +260,16 @@ class ScaleManager(Atomic):
                 # any manager that is capable of managing this endpoint.
                 index = (index+1) % len(keys)
                 if index == orig_index:
-                    logging.error("No suitable scale manager available!")
+                    self.logging.error(
+                        self.logging.NO_MANAGER_AVAILABLE, endpoint.key())
                     break
 
         # Track whether or not this endpoint is owned by us.
         self._key_to_owned[endpoint.key()] = (manager_key == self._uuid)
-
-        logging.info("Endpoint %s owned by %s (%s).",
-            endpoint.key(), manager_key,
-            self.endpoint_owned(endpoint) and "That's me!" or "Not me!")
+        self.logging.info(
+            self.logging.ENDPOINT_MANAGED,
+            endpoint.key(),
+            self.endpoint_owned(endpoint))
 
         # Check if it is one of our own.
         # Start the endpoint if necessary (now owned).
@@ -234,9 +283,6 @@ class ScaleManager(Atomic):
 
     @Atomic.sync
     def _endpoint_change(self, endpoints):
-        logging.info("Endpoints have changed: new=%s, existing=%s",
-                     endpoints, self._endpoints.keys())
-
         # Clear out the ownership cache.
         self._key_to_owned = {}
 
@@ -274,6 +320,10 @@ class ScaleManager(Atomic):
             # be excluded. So after we add it to our collection, we
             # do another reload() to ensure that it's included.
             self._endpoints[endpoint_name].reload()
+
+        self.logging.info(
+                self.logging.ENDPOINTS_CHANGED,
+                dict(map(lambda x: (x, self._endpoints[x].key()), endpoints)))
 
     def endpoint_change(self, endpoints):
         self._endpoint_change(endpoints)
@@ -385,9 +435,6 @@ class ScaleManager(Atomic):
 
     @Atomic.sync
     def _register(self):
-        # Figure out our global IPs.
-        logging.info("Manager %s has key %s.", str(self._names), self._uuid)
-
         # Read and listen to the global URL.
         # NOTE: We get the config through the update_url mechanism
         # as a convenience, the need the URL prior to running through
@@ -405,10 +452,12 @@ class ScaleManager(Atomic):
             self._uuid,
             self._names,
             info={
+                "names" : self._names,
                 "keys": keys,
                 "loadbalancers": loadbalancers,
-                "clouds": clouds
+                "clouds": clouds,
             })
+        self.logging.info(self.logging.REGISTERED)
 
     @Atomic.sync
     def _manager_change(self, managers):
@@ -517,7 +566,7 @@ class ScaleManager(Atomic):
             return active_metrics[1] > 0
         except Exception:
             # The active metric is defined but as a bad form.
-            logging.warning("Malformed metrics found: %s", active_metrics)
+            self.logging.warn(self.logging.MALFORMED_METRICS, active_metrics)
             return False
 
     @Atomic.sync
@@ -554,7 +603,7 @@ class ScaleManager(Atomic):
         collected metrics (from any number of different loadbalancers).
         """
         our_metrics = self._collect_metrics()
-        logging.debug("Loadbalancers returned metrics: %s", our_metrics)
+        self.logging.info(self.logging.LOCAL_METRICS, our_metrics)
 
         # Stuff all the metrics into Zookeeper.
         self._managers_zkobj.set_metrics(self._uuid, our_metrics)
@@ -573,7 +622,7 @@ class ScaleManager(Atomic):
                 else:
                     all_metrics[host].extend(host_metrics)
 
-        logging.debug("All metrics: %s", all_metrics)
+        self.logging.info(self.logging.ALL_METRICS, all_metrics)
         return all_metrics
 
     def update_pending(self):
@@ -581,7 +630,7 @@ class ScaleManager(Atomic):
         Same as metrics, but for pending connections.
         """
         our_pending = self._collect_pending()
-        logging.debug("Loadbalancers returned pending: %s", our_pending)
+        self.logging.info(self.logging.LOCAL_PENDING, our_pending)
 
         # Stuff all the pending counts into Zookeeper.
         self._managers_zkobj.set_pending(self._uuid, our_pending)
@@ -600,7 +649,7 @@ class ScaleManager(Atomic):
                 else:
                     all_pending[url] += pending_count
 
-        logging.debug("All pending: %s", all_pending)
+        self.logging.info(self.logging.ALL_PENDING, all_pending)
         return all_pending
 
     @Atomic.sync
@@ -646,7 +695,6 @@ class ScaleManager(Atomic):
         map(lambda (x, y): _extract_metrics(x, y), all_metrics.items())
 
         # Return the metrics.
-        logging.debug("Endpoint metrics: %s", metrics)
         return metrics, list(metric_ips), list(active_ips)
 
     def _find_endpoint(self, ip):
@@ -666,11 +714,11 @@ class ScaleManager(Atomic):
         if len(static_matches) == 1:
             return static_matches[0]
         elif len(static_matches) > 1:
-            logging.warning("Session with multiple matches: %s", ip)
+            self.logging.warn(self.logging.SESSION_MULTIPLE_MATCH, ip)
             return None
 
         # Nothing found.
-        logging.error("Session without endpoint: %s", ip)
+        self.logging.warn(self.logging.SESSION_NO_MATCH, ip)
         return None
 
     def _collect_sessions(self):
@@ -764,17 +812,13 @@ class ScaleManager(Atomic):
                         # has to treat pending with undue care and attention.
                         metrics["pending"] = metrics["pending"] / len(metric_ips)
 
-                # Update the live metrics and connections.
-                logging.debug("Metrics for endpoint %s from %s: %s",
-                              name, str(metric_ips), metrics)
-
                 # Do the endpoint update.
                 endpoint.update(metrics=metrics,
                                 metric_instances=len(metric_ips),
                                 active_ips=active_ips)
             except Exception:
                 error = traceback.format_exc()
-                logging.error("Error updating endpoint %s: %s", name, error)
+                self.logging.warn(self.logging.ENDPOINT_ERROR, name, error)
 
     def run(self):
         while self._running:
@@ -801,7 +845,7 @@ class ScaleManager(Atomic):
             except ZookeeperException:
                 # Sleep on ZooKeeper exception and retry.
                 error = traceback.format_exc()
-                logging.debug("Received ZooKeeper exception: %s", error)
+                logging.error("Received ZooKeeper exception: %s", error)
                 if self._running:
                     time.sleep(self.config.interval)
 

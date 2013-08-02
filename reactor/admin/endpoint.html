@@ -117,6 +117,7 @@
 </div>
 
 <script src="/assets/conf.js"></script>
+<script src="/assets/log.js"></script>
 <script type="text/javascript">
 
     // Graph/log update period, in ms.
@@ -188,48 +189,6 @@
         $("#delete").click(function (e) {
             e.preventDefault();
             $('#deleteModal').modal('show');
-        });
-    }
-
-    function addLogRow(ent) {
-        var ts = new Date(ent[0] * 1000).toUTCString();
-        switch (ent[1]) {
-            case 'INFO':
-                var sev = "<span class=\"label label-info\">Info</span>";
-                break;
-            case 'WARN':
-                var sev = "<span class=\"label label-warning\">Warning</span>";
-                break;
-            case 'ERROR':
-                var sev = "<span class=\"label label-error\">Error</span>";
-                break;
-            default:
-                var sev = "<span class=\"label\">" + ent[1] + "</span>";
-        }
-        var tr = "<tr><td>" + ts + "</td><td>" + sev + "</td><td>" + ent[2] + "</td></tr>";
-        $('#endpoint-log tr:last').after(tr);
-    }
-
-    function loadLog(since) {
-        if (since == null)
-            since = 0.0;
-
-        $.ajax({
-            url: "/v1.1/endpoints/${object}/log?since="+since,
-            type: 'GET',
-            dataType: 'json',
-            success: function(log) {
-                if (log.length > 0) {
-                    $.each(log, function(index, ent) {
-                        addLogRow(ent);
-                    });
-                    since = log[log.length-1][0];
-                    $('#endpoint-log-div').scrollTop($('#endpoint-log-div')[0].scrollHeight);
-                }
-                setTimeout(function() {
-                    loadLog(since);
-                }, UPDATE_PERIOD);
-            },
         });
     }
 
@@ -455,7 +414,7 @@
         "#pause" : { "action" : "PAUSE" }
     });
     loadDelete();
-    loadLog();
+    loadLog('/v1.1/endpoints/${object}/log', 'endpoint-log-div', 'endpoint-log');
     loadSessions();
     setupGraphs();
 </script>

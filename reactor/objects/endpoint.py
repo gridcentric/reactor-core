@@ -8,6 +8,7 @@ from . ip_address import IPAddresses
 from . instance import Instances
 from . session import Sessions
 from . config import ConfigObject
+from . ring import Ring
 
 # The action for an endpoint.
 STATE = "state"
@@ -82,14 +83,6 @@ class State(RawObject):
         self._set_data(new_state)
         return new_state
 
-class Log(BinObject):
-
-    def store(self, data):
-        self._set_data(data)
-
-    def retrieve(self):
-        return self._get_data()
-
 class Endpoint(ConfigObject):
 
     manager = attr(MANAGER, clazz=RawObject, ephemeral=True)
@@ -112,7 +105,7 @@ class Endpoint(ConfigObject):
         return self._set_data(config)
 
     def log(self):
-        return self._get_child(LOG, clazz=Log)
+        return self._get_child(LOG, clazz=Ring)
 
     def state(self):
         return self._state

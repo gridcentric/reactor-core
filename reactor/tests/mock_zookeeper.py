@@ -23,6 +23,7 @@ CONNECTED_STATE = 3
 
 # Flags.
 EPHEMERAL = 1
+SEQUENCE = 2
 
 # Events.
 OK = 0
@@ -72,6 +73,7 @@ class ZkNode(object):
         self._name = name
         self._handle = handle
         self._lock = threading.RLock()
+        self._seqid = 0
         self.reset(data=data)
 
     def _fire_data_callbacks(self):
@@ -108,16 +110,20 @@ class ZkNode(object):
                     raise NoNodeException()
                 return parent._children[child]
 
-    def create(self, child, data, handle):
+    def create(self, child, data, handle, sequential=False):
         if self._handle:
             # Can't create a child for an ephemeral node.
             raise BadArgumentsException()
 
         with self._lock:
+            if sequential:
+                child = "%s%d" % (child, self._seqid)
+                self._seqid += 1
             if child in self._children:
                 raise NodeExistsException()
             self._children[child] = ZkNode(name=child, parent=self, data=data, handle=handle)
             self._fire_child_callbacks()
+            return self._children[child]._abspath()
 
     def close(self, handle):
         with self._lock:
@@ -159,6 +165,7 @@ class ZkNode(object):
         with self._lock:
             self._data = data
             self._fire_data_callbacks()
+        return self._abspath()
 
     def get(self, handle, callback):
         with self._lock:
@@ -243,10 +250,9 @@ def delete(handle, path):
 
 @log
 def create(handle, path, data, acl, flags):
-    # NOTE: We don't really support ACLs in this
-    # mock, nor do we support sequential nodes.
+    # NOTE: We don't really support ACLs in this mock.
     (parent, child) = _find(path, parent=True)
-    return parent.create(child, data, (flags & EPHEMERAL) and handle)
+    return parent.create(child, data, (flags & EPHEMERAL) and handle, flags & SEQUENCE)
 
 @log
 def set(handle, path, data):

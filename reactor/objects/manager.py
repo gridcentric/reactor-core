@@ -4,6 +4,7 @@ from reactor.zookeeper.objects import RawObject
 from reactor.zookeeper.objects import JSONObject
 
 from . config import ConfigObject
+from . ring import Ring
 
 # Mapping of manager IP => uuid.
 IPS = "ips"
@@ -19,6 +20,9 @@ METRICS = "metrics"
 
 # The pending connections for a particular manager.
 PENDING = "pending"
+
+# The manager logs.
+LOGS = "logs"
 
 class Managers(DatalessObject, Atomic):
 
@@ -51,6 +55,10 @@ class Managers(DatalessObject, Atomic):
     def set_config(self, name, config):
         # Set configuration data.
         self._configured._get_child(name, clazz=ConfigObject)._set_data(config)
+
+    def log(self, name):
+        # Get the associated log object.
+        return self._get_child(LOGS)._get_child(name, clazz=Ring)
 
     def remove_config(self, name):
         # Clear configuration data.

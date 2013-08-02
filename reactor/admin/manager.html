@@ -45,9 +45,21 @@
 
 </form>
 
+<h3>Log</h3>
+<div id="manager-log-div" style="height: 200px; position: relative; overflow: auto;">
+    <table id="manager-log" class="table table-bordered">
+        <thead>
+            <tr><th>Time</th><th>Severity</th><th>Event</th></tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+</div>
+
 </div>
 
 <script src="/assets/conf.js"></script>
+<script src="/assets/log.js"></script>
 <script type="text/javascript">
 
     // Dynamically construct config UI based on spec we get back from the server.
@@ -62,7 +74,19 @@
             type: 'GET',
             dataType: 'json',
             success: function(result) {
-                 $("#uuid").val(result['uuid']);
+                $("#uuid").val(result['uuid']);
+                if (result['info']) {
+                    // NOTE: Provided the manager is online,
+                    // we pull the log as the first persistent
+                    // name used by the manager. This might not
+                    // be accurate for offline managers, but you
+                    // will be able to click until you find the
+                    // primary log used (handled below).
+                    conf_name = result['info']['names'][0];
+                } else {
+                    conf_name = "${object}";
+                }
+                loadLog('/v1.1/managers/' + conf_name + '/log', 'manager-log-div', 'manager-log');
             },
         });
     }

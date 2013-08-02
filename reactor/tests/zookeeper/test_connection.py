@@ -29,6 +29,8 @@ class FakeNoNodeException(FakeZookeeperException):
 mock_zookeeper_mod = mock.Mock(name="zookeeper")
 mock_zookeeper_mod.CONNECTED_STATE = 3
 mock_zookeeper_mod.INVALIDSTATE = -9
+mock_zookeeper_mod.EPHEMERAL = zookeeper.EPHEMERAL
+mock_zookeeper_mod.SEQUENCE = zookeeper.SEQUENCE
 mock_zookeeper_mod.ZooKeeperException  = FakeZookeeperException
 mock_zookeeper_mod.BadArgumentsException = FakeBadArgumentsException
 mock_zookeeper_mod.NodeExistsException = FakeNodeExistsException
@@ -70,8 +72,7 @@ def mock_zookeeper_create(throw_exception=None, num_exceptions=-1):
             call_counter[0] = call_counter[0] + 1
             if num_exceptions == -1 or call_counter[0] <= num_exceptions:
                 raise throw_exception()
-
-        return
+        return args[1]
 
     return _zookeeper_create
 

@@ -1,3 +1,4 @@
+import sys
 import logging
 import threading
 import traceback
@@ -105,7 +106,7 @@ class ZookeeperConnection(object):
     def silence(self):
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_ERROR)
 
-    def _write(self, path, contents, ephemeral, exclusive):
+    def _write(self, path, contents, ephemeral, exclusive, sequential):
         # We start from the second element because we do not want to inclued
         # the initial empty string before the first "/" because all paths begin
         # with "/". We also don't want to include the final node because that
@@ -119,7 +120,10 @@ class ZookeeperConnection(object):
                 except zookeeper.NodeExistsException:
                     pass
 
-        exists = zookeeper.exists(self.handle, path)
+        if sequential:
+            exists = False
+        else:
+            exists = zookeeper.exists(self.handle, path)
 
         # Don't create it if we're exclusive.
         if exists and exclusive:
@@ -137,19 +141,24 @@ class ZookeeperConnection(object):
 
         if exists:
             zookeeper.set(self.handle, path, contents)
-            return True
+            return path
         else:
-            flags = (ephemeral and zookeeper.EPHEMERAL or 0)
-            zookeeper.create(self.handle, path, contents, [self.acl], flags)
-            return True
+            flags = 0
+            if ephemeral:
+                flags = flags | zookeeper.EPHEMERAL
+            if sequential:
+                flags = flags | zookeeper.SEQUENCE
+
+            # NOTE: We return the final path created.
+            return zookeeper.create(self.handle, path, contents, [self.acl], flags)
 
     @wrap_exceptions
-    def write(self, path, contents, ephemeral=False, exclusive=False):
+    def write(self, path, contents, ephemeral=False, exclusive=False, sequential=False):
         """
         Writes the contents to the path in zookeeper. It will create the path in
         zookeeper if it does not already exist.
 
-        This method will return True if the value is written, False otherwise.
+        This method will return the path if the value is written, False otherwise.
         (The value will not be written if the exclusive is True and the node
         already exists.)
         """
@@ -158,8 +167,12 @@ class ZookeeperConnection(object):
 
         while True:
             try:
-                # Perform the write
-                return self._write(path, contents, ephemeral, exclusive)
+                # Perform the write.
+                return self._write(path=path,
+                                   contents=contents,
+                                   ephemeral=ephemeral,
+                                   exclusive=exclusive,
+                                   sequential=sequential)
             except zookeeper.NodeExistsException:
                 # If we're writing to an exclusive path, then the caller lost
                 # to another thread/writer. Else, retry.

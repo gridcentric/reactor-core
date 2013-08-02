@@ -1,6 +1,4 @@
 import hashlib
-import logging
-import traceback
 import socket
 import sys
 
@@ -8,8 +6,8 @@ from . atomic import Atomic
 from . config import Config
 from . submodules import cloud_submodules, cloud_options
 from . submodules import loadbalancer_submodules, loadbalancer_options
-from . binlog import BinaryLog, BinaryLogRecord
-from . utils import inet_ntoa, inet_aton, sha_hash
+from . eventlog import EventLog, Event
+from . utils import sha_hash
 from . cloud import connection as cloud_connection
 from . loadbalancer import connection as lb_connection
 from . loadbalancer import backend as lb_backend
@@ -85,8 +83,6 @@ class EndpointConfig(Config):
                 if static_instance != '':
                     ip_addresses += [socket.gethostbyname(static_instance)]
             except Exception:
-                logging.warn("Failed to determine the ip address "
-                             "for the static instance %s.", static_instance)
                 if validate:
                     raise
         return ip_addresses
@@ -165,70 +161,47 @@ class ScalingConfig(Config):
     url = Config.string(label="Metrics URL", order=3,
         description="The source url for metrics.")
 
-class EndpointLog(BinaryLog):
+class EndpointLog(EventLog):
+
+    # The log size (# of entries).
+    LOG_SIZE = 100
+
     # Log entry types.
-    ENDPOINT_STARTED = BinaryLogRecord(
+    ENDPOINT_STARTED = Event(
         lambda args: "Endpoint marked as Started")
-    ENDPOINT_STOPPED = BinaryLogRecord(
+    ENDPOINT_STOPPED = Event(
         lambda args: "Endpoint marked as Stopped")
-    ENDPOINT_PAUSED = BinaryLogRecord(
+    ENDPOINT_PAUSED = Event(
         lambda args: "Endpoint marked as Paused")
-    SCALE_UPDATE = BinaryLogRecord(
+    SCALE_UPDATE = Event(
         lambda args: "Target number of instances has changed: %d => %d" % (args[0], args[1]))
-    METRICS_CONFLICT = BinaryLogRecord(
+    METRICS_CONFLICT = Event(
         lambda args: "Scaling rules conflict detected")
-    CONFIG_UPDATED = BinaryLogRecord(
+    CONFIG_UPDATED = Event(
         lambda args: "Configuration reloaded")
-    RECOMMISSION_INSTANCE = BinaryLogRecord(
+    RECOMMISSION_INSTANCE = Event(
         lambda args: "Recommissioning formerly decommissioned instance")
-    DECOMMISION_INSTANCE = BinaryLogRecord(
+    DECOMMISION_INSTANCE = Event(
         lambda args: "Decommissioning instance")
-    LAUNCH_INSTANCE = BinaryLogRecord(
+    LAUNCH_INSTANCE = Event(
         lambda args: "Launching instance")
-    LAUNCH_FAILURE = BinaryLogRecord(
+    LAUNCH_FAILURE = Event(
         lambda args: "Failure launching instance")
-    DELETE_INSTANCE = BinaryLogRecord(
+    DELETE_INSTANCE = Event(
         lambda args: "Deleting instance")
-    DELETE_FAILURE = BinaryLogRecord(
+    DELETE_FAILURE = Event(
         lambda args: "Failure deleting instance")
-    CONFIRM_IP = BinaryLogRecord(
-        lambda args: "Confirmed instance with IP %s" % (inet_ntoa(args[0])))
-    DROP_IP = BinaryLogRecord(
-        lambda args: "Dropped instance with IP %s" % (inet_ntoa(args[0])))
-    RELOADED = BinaryLogRecord(
+    CONFIRM_IP = Event(
+        lambda args: "Confirmed instance with IP %s" % args[0])
+    DROP_IP = Event(
+        lambda args: "Dropped instance with IP %s" % args[0])
+    UPDATE_ERROR = Event(
+        lambda args: "Error updating endpoint: %s" % args[0])
+    RELOADED = Event(
         lambda args: "Loadbalancer updated")
 
-    def __init__(self, store_cb=None, retrieve_cb=None):
-        # Note: if adding new log entry types, they must be added above
-        # as well as in the array below, and must be added to the end
-        # of the array, or else older binary logs may become unreadable.
-        record_types = [
-            EndpointLog.ENDPOINT_STARTED,
-            EndpointLog.ENDPOINT_STOPPED,
-            EndpointLog.ENDPOINT_PAUSED,
-            EndpointLog.SCALE_UPDATE,
-            EndpointLog.METRICS_CONFLICT,
-            EndpointLog.CONFIG_UPDATED,
-            EndpointLog.RECOMMISSION_INSTANCE,
-            EndpointLog.DECOMMISION_INSTANCE,
-            EndpointLog.LAUNCH_INSTANCE,
-            EndpointLog.LAUNCH_FAILURE,
-            EndpointLog.DELETE_INSTANCE,
-            EndpointLog.CONFIRM_IP,
-            EndpointLog.DROP_IP,
-            EndpointLog.DELETE_FAILURE,
-            EndpointLog.RELOADED,
-        ]
-
-        # Zookeeper objects are limited to 1MB in size. Since we write
-        # the log out every time we log something (an unfortunate
-        # necessity until we put in some sort of caching mechanism)
-        # we limit the size of the log to 16kB, which we then double
-        # by converting to a hex string before storing. At the current
-        # log record size, this gives enough room for 1024 log entries.
-        super(EndpointLog, self).__init__(
-                size=(16*1024), record_types=record_types,
-                store_cb=store_cb, retrieve_cb=retrieve_cb)
+    def __init__(self, *args):
+        super(EndpointLog, self).__init__(*args, size=EndpointLog.LOG_SIZE)
 
 class Endpoint(Atomic):
 
@@ -251,9 +224,7 @@ class Endpoint(Atomic):
         self._find_loadbalancer_connection = find_loadbalancer_connection
 
         # Initialize endpoint-specific logging.
-        self.logging = EndpointLog(
-            store_cb=zkobj.log().store,
-            retrieve_cb=zkobj.log().retrieve)
+        self.logging = EndpointLog(zkobj.log())
 
         # Endpoint state.
         self.state = State.default
@@ -395,8 +366,8 @@ class Endpoint(Atomic):
                                 metrics=metrics,
                                 metric_instances=metric_instances)
 
-        except Exception:
-            logging.error("Error updating endpoint: %s", traceback.format_exc())
+        except Exception, e:
+            self.logging.error(self.logging.UPDATE_ERROR, str(e))
             return False
 
     def _determine_target_instances_range(self, metrics, num_instances):
@@ -481,7 +452,6 @@ class Endpoint(Atomic):
             ramp_limit = sys.maxint
 
         else:
-            logging.error("Unknown state '%s' ?!?", self.state)
             return
 
         if target != num_instances:
@@ -820,7 +790,7 @@ class Endpoint(Atomic):
                 # NOTE: We only add the IP to the set of confirmed IPs.
                 # The reload of the loadbalancer, etc. will be handled
                 # out of the band when the confirmed IPs cache is updated.
-                self.logging.info(self.logging.CONFIRM_IP, inet_aton(ip))
+                self.logging.info(self.logging.CONFIRM_IP, ip)
                 self.confirmed_ips.add(ip, instance_id)
                 return True
         return False
@@ -831,7 +801,7 @@ class Endpoint(Atomic):
             # confirmed IPs. Eventually, the backing machine
             # will fail a health check (marks, etc.) and be
             # purged from the system.
-            self.logging.info(self.logging.DROP_IP, inet_aton(ip))
+            self.logging.info(self.logging.DROP_IP, ip)
             self.confirmed_ips.remove(ip)
             return True
         return False
