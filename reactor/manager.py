@@ -369,7 +369,11 @@ class ScaleManager(Atomic):
         for cloud in self.clouds.values():
             config = cloud._manager_config()
             if hasattr(config, 'reactor'):
-                config.reactor = self._url or self._names[0]
+                # We use the URL if it's provided, otherwise
+                # it's gonna be a best guess scenario. We set
+                # it to the current name and the default port.
+                config.reactor = self._url or \
+                    "http://%s:8080" % self._names[0]
 
         # Return the set of supported clouds.
         return self.clouds.keys()

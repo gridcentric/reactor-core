@@ -10,6 +10,7 @@ from pyramid.authentication import AuthTktAuthenticationPolicy
 from pyramid.authorization import ACLAuthorizationPolicy
 
 from . import utils
+from . import ips as ips_mod
 from . log import log
 from . config import fromstr
 from . manager import ManagerConfig
@@ -267,7 +268,7 @@ class ReactorApi(object):
         # but if we've been forwarded from an active manager then we can assume
         # that this header has been placed by a trusted middleman.
         if forwarded_for and \
-            (ip_address == "127.0.0.1" or \
+            (ips_mod.is_local(ip_address) or \
             ip_address in self.zkobj.managers().list()):
             ip_address = forwarded_for
 
@@ -599,10 +600,15 @@ class ReactorApi(object):
 
     @log
     @connected
-    @authorized(allow_endpoint=True)
     def register_ip_implicit(self, context, request):
         """
         Publish a new IP from an instance.
+
+        NOTE: This does not require authorization.
+        Since we don't have this IP registered yet,
+        it won't belong to any particular endpoint.
+        We therefore allow posting from any IP, and
+        will let the managers sort it out.
         """
         if request.method == "POST" or request.method == "PUT":
             ip_address = self._extract_remote_ip(context, request)
@@ -628,15 +634,15 @@ class ReactorApi(object):
 
     @log
     @connected
-    @authorized(allow_endpoint=True)
     def unregister_ip_implicit(self, context, request):
         """
         Unregister the given IP.
+
+        See NOTE above in register_ip_implicit().
         """
         if request.method == "POST" or request.method == "PUT":
             ip_address = self._extract_remote_ip(context, request)
-            if ip_address is not None:
-                self.zkobj.drop_ips().add(ip_address)
+            self.zkobj.drop_ips().add(ip_address)
             return Response()
         else:
             return Response(status=403)
