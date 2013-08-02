@@ -6,6 +6,7 @@ import re
 
 import ldap
 import ldap.modlist as modlist
+ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
 
 from reactor.config import Config
 
@@ -75,25 +76,34 @@ def _wrap_and_retry(fn):
 
 class LdapConnection:
 
-    def __init__(self, domain, username, password, orgunit='', host=None):
-        self.domain   = domain
+    def __init__(self,
+                 domain,
+                 username,
+                 password,
+                 orgunit='',
+                 host=None,
+                 use_ssl=False):
+        self.domain = domain
         self.username = username
         self.password = password
-        self.orgunit  = orgunit
+        self.orgunit = orgunit
         if not host:
             self.host = domain
         else:
             self.host = host
-        self.con      = None
+        self.use_ssl = use_ssl
+        self.con = None
 
     def open(self):
         if not(self.con):
-            ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
-            self.con = ldap.initialize("ldaps://%s:636" % self.host)
+            if self.use_ssl:
+                self.con = ldap.initialize("ldaps://%s:636" % self.host)
+                self.con.set_option(ldap.OPT_X_TLS, ldap.OPT_X_TLS_DEMAND)
+                self.con.set_option(ldap.OPT_X_TLS_DEMAND, True)
+            else:
+                self.con = ldap.initialize("ldap://%s:389" % self.host)
             self.con.set_option(ldap.OPT_REFERRALS, 0)
             self.con.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
-            self.con.set_option(ldap.OPT_X_TLS, ldap.OPT_X_TLS_DEMAND)
-            self.con.set_option(ldap.OPT_X_TLS_DEMAND, True)
             self.con.simple_bind_s("%s@%s" % (self.username, self.domain), self.password)
         return self.con
 
@@ -119,8 +129,8 @@ class LdapConnection:
         return ",".join(map(lambda x: 'dc=%s' % x, self.domain.split(".")))
 
     def machine_description(self, name=None):
-        dom      = self.dom_from_domain()
-        ou       = self.orgpath_from_ou()
+        dom = self.dom_from_domain()
+        ou = self.orgpath_from_ou()
         if name:
             return "cn=%s,%s,%s" % (name, ou, dom)
         else:
@@ -131,10 +141,10 @@ class LdapConnection:
         if attrs is None:
             attrs = COMPUTER_ATTRS
 
-        filter   = '(objectclass=computer)'
-        desc     = self.machine_description(name)
+        filter = '(objectclass=computer)'
+        desc = self.machine_description(name)
         machines = self.open().search_s(desc, ldap.SCOPE_SUBTREE, filter, attrs)
-        rval     = {}
+        rval = {}
 
         # Synthesize the machines into a simple form.
         for machine in machines:
@@ -279,14 +289,41 @@ class LdapConnection:
                     str('RestrictedKrbHost/%s' % name.upper()),
                     str('RestrictedKrbHost/%s.%s' % (name, self.domain))
                     ]
-                new_record['unicodePwd'] = str(utf_quoted_password)
-                new_record['userAccountControl'] = str('4096') # Enable account.
 
                 descr = self.machine_description(name)
                 connection = self.open()
 
-                # Create the new account.
-                connection.add_s(descr, modlist.addModlist(new_record))
+                try:
+                    # Create the new account.
+                    full_record = dict(new_record.items())
+                    full_record['unicodePwd'] = str(utf_quoted_password)
+                    full_record['userAccountControl'] = '4096' # Enable account.
+                    connection.add_s(descr, modlist.addModlist(full_record))
+
+                except ldap.UNWILLING_TO_PERFORM:
+                    # On some ADs, they refues to add an account
+                    # with the password set and account enabled.
+                    # Although it's not as clean -- we are forced
+                    # to do it in try stages here.
+
+                    # Create the new account.
+                    # NOTE: If this throws an exception we let it
+                    # raise up and it'll be handled by the caller.
+                    connection.add_s(descr, modlist.addModlist(new_record))
+
+                    try:
+                        # Set the account password.
+                        password_change_attr = [
+                            (ldap.MOD_REPLACE, 'unicodePwd', str(utf_quoted_password))]
+                        connection.modify_s(descr, password_change_attr)
+
+                        # Enable the computer account.
+                        account_enabled_attr = [
+                            (ldap.MOD_REPLACE, 'userAccountControl', '4096')]
+                        connection.modify_s(descr, account_enabled_attr)
+                    except:
+                        self.remove_machine(name)
+
             except ldap.ALREADY_EXISTS:
                 machines[name.lower()] = name.lower()
                 continue # repeat the process, optimistically.
@@ -327,6 +364,9 @@ class RdpEndpointConfig(TcpEndpointConfig):
         validate=lambda self: self.check_connection(),
         description="The network address (hostname or IP) of the AD server to contact.")
 
+    use_ssl = Config.boolean(label="Use SSL", order=6,
+        description="Whether or not to use SSL for Ldap communication.")
+
     def ldap_connection(self):
         if not(self.domain):
             return None
@@ -334,8 +374,9 @@ class RdpEndpointConfig(TcpEndpointConfig):
             self._connection = LdapConnection(self.domain,
                                               self.username,
                                               self.password,
-                                              self.orgunit,
-                                              self.host)
+                                              orgunit=self.orgunit,
+                                              host=self.host,
+                                              use_ssl=self.use_ssl)
         return self._connection
 
     def check_credentials(self):
