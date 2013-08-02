@@ -11,6 +11,7 @@ Requires: python-netifaces, python-ldap
 Requires: python-httplib2, python-webob
 Requires: python-zookeeper zookeeper
 Requires: python-novaclient, cobalt-novaclient
+Requires: socat
 BuildRoot: %{_tmppath}/%{name}.%{version}-buildroot
 AutoReq: no
 AutoProv: no

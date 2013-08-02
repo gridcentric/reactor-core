@@ -6,6 +6,7 @@ Depends: python-paste, python-pyramid, python-mako,
     python-netifaces, python-ldap,
     python-webob, python-httplib2,
     zookeeperd, python-zookeeper,
-    python-novaclient, cobalt-novaclient
+    python-novaclient, cobalt-novaclient,
+    socat
 Maintainer: Gridcentric Inc. <support@gridcentric.com>
 Description: Reactor server
