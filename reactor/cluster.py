@@ -85,7 +85,7 @@ class Cluster(ReactorApiExtension):
         if zk_servers is None:
             zk_servers = self.api.client.servers()
         hosts = list(set(managers + zk_servers))
-        iptables.setup(hosts, extra_ports=[8080])
+        iptables.setup(hosts)
 
     def check_zookeeper(self, zk_servers):
         is_local = ips.any_local(zk_servers)
