@@ -307,7 +307,7 @@ class Endpoint(Atomic):
         # We just ignore this and populate() will get
         # recalled or whatever at a more appropriate moment.
         if len(instances) == 0:
-            return None
+            return []
 
         # Return the current set of IPs. Note that if this
         # is an empty list (which will happen at the beginning)
