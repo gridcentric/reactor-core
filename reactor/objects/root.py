@@ -51,9 +51,12 @@ class URLObject(RawObject):
         # a very simple validation that will happen on the
         # set side (and throw an exception to whatever API
         # caller happens to originate this request).
-        if not re.match(self.VALID_REGEX, value):
+        if not value:
+            self._delete()
+        elif not re.match(self.VALID_REGEX, value):
             raise NotImplementedError()
-        return self._set_data(value)
+        else:
+            return self._set_data(value)
 
 class Reactor(DatalessObject):
 
