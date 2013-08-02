@@ -613,10 +613,10 @@ class Endpoint(Atomic):
 
             # Drop old decommission state.
             # Here we readd this instance to our regular instances.
-            data = self.decommissioned.get(instance_id)
+            name = self.decommissioned.get(instance_id)
             self.decommissioned.remove(instance_id)
             self.zkobj.marked_instances().remove(instance_id)
-            self.instances.add(instance_id, data)
+            self.instances.add(instance_id, name)
 
             for ip in self.instance_ips.get(instance_id):
                 # Reconfirm all ip addresses.
@@ -640,15 +640,16 @@ class Endpoint(Atomic):
 
             # Write the instance id to decommission.
             # (NOTE: Our update hooks will take care of the rest).
-            ips = self.instance_ips.get(instance_id)
+            name = self.instances.get(instance_id)
             self.instances.remove(instance_id)
-            self.decommissioned.add(instance_id, ips)
+            self.decommissioned.add(instance_id, name)
 
             # Unconfirm the address.
             # NOTE: We don't clear out the IP metrics here.
             # If we end up recommissioning this instance, we want
             # the same set of IP metrics to be effect, so they will
             # only be cleared out when the actual instance is deleted.
+            ips = self.instance_ips.get(instance_id)
             for ip in ips:
                 self.zkobj.confirmed_ips().remove(ip)
 
@@ -667,6 +668,10 @@ class Endpoint(Atomic):
                 logging.error(self.logging.DELETE_FAILURE)
                 return
 
+        # Cleanup the leftover state from the instance.
+        self._clean_instance(instance_id, decommissioned=decommissioned)
+
+    def _clean_instance(self, instance_id, decommissioned=False):
         if decommissioned:
             name = self.decommissioned.get(instance_id)
         else:
@@ -734,10 +739,10 @@ class Endpoint(Atomic):
         # (The internet is a series of tubes).
         for instance_id in self.instances.list():
             if not(instance_id in instance_ids):
-                self.instances.remove(instance_id)
+                self._clean_instance(instance_id)
         for instance_id in self.decommissioned.list():
             if not(instance_id in instance_ids):
-                self.decommissioned.remove(instance_id)
+                self._clean_instance(instance_id, decommissioned=True)
         for instance_id in self.zkobj.marked_instances().list():
             if not(instance_id in instance_ids):
                 self.zkobj.marked_instances().remove(instance_id)
