@@ -273,7 +273,10 @@ class Connection(BaseOsConnection):
             }
             return config.novaclient().servers.list(search_opts=search_opts)
         else:
-            return [config.novaclient().servers.get(instance_id)]
+            try:
+                return [config.novaclient().servers.get(instance_id)]
+            except novaclient.exceptions.NotFound:
+                return []
 
     def _start_instance(self, config, params):
         config = self._endpoint_config(config)
