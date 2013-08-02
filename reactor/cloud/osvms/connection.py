@@ -1,5 +1,6 @@
-from reactor.config import Config
+import novaclient.exceptions
 
+from reactor.config import Config
 from reactor.cloud.osapi.connection import BaseOsEndpointConfig
 from reactor.cloud.osapi.connection import BaseOsConnection
 
@@ -25,7 +26,10 @@ class Connection(BaseOsConnection):
             server = config.novaclient().cobalt.get(config.instance_id)
             return server.list_launched()
         else:
-            return [config.novaclient().servers.get(instance_id)]
+            try:
+                return [config.novaclient().servers.get(instance_id)]
+            except novaclient.exceptions.NotFound:
+                return []
 
     def _start_instance(self, config, params):
         config = self._endpoint_config(config)

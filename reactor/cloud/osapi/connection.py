@@ -1,4 +1,5 @@
 import logging
+import time
 
 from novaclient import shell
 from novaclient.v1_1.client import Client as NovaClient
@@ -45,6 +46,12 @@ class BaseOsEndpointConfig(Config):
         order=4,
         description="The region (OS_REGION_NAME).")
 
+    list_rate_limit = Config.integer(label="Rate limit",
+        default=120, order=1,
+        validate=lambda self: self.list_rate_limit >= 0 or \
+            Config.error("Rate limit must be non-negative."),
+        description="Limit list requests to this often.")
+
     # Elements common to launching and booting.
     security_groups = Config.list(label="Security Groups",
         order=5, description="Security groups for new instances.")
@@ -85,6 +92,11 @@ class BaseOsConnection(CloudConnection):
     _MANAGER_CONFIG_CLASS = BaseOsManagerConfig
     _ENDPOINT_CONFIG_CLASS = BaseOsEndpointConfig
 
+    def __init__(self, *args, **kwargs):
+        super(BaseOsConnection, self).__init__(*args, **kwargs)
+        self._list_cache = []
+        self._last_refresh = None
+
     def _list_instances(self, config, instance_id):
         """
         Returns a list of instances from the endpoint.
@@ -97,7 +109,20 @@ class BaseOsConnection(CloudConnection):
         Lists the instances related to a endpoint. The identifier is used to
         identify the related instances in the respective clouds.
         """
-        instances = self._list_instances(config, instance_id=instance_id)
+        list_rate_limit = self._endpoint_config(config).list_rate_limit
+
+        if instance_id is not None:
+            instances = self._list_instances(config, instance_id)
+
+        elif self._last_refresh is not None and \
+            (self._last_refresh + list_rate_limit) > time.time():
+            instances = self._list_cache
+
+        else:
+            instances = self._list_instances(config, None)
+            self._list_cache = instances
+            self._last_refresh = time.time()
+
         instances = sorted(instances, key=lambda x: x._info.get("created", ""))
 
         def _sanitize(instance):
@@ -140,6 +165,11 @@ class BaseOsConnection(CloudConnection):
         # Inject the manager parameters.
         params.update({ "reactor" : self._manager_config().reactor })
 
+        # Reset the refresh so no matter what happens,
+        # when we next call list() we will have an up
+        # to date view of what's running on the cloud.
+        self._last_refresh = None
+
         # Finally, do the start.
         # NOTE: We don't catch any exceptions here,
         # they will be caught in the endpoint so that
@@ -162,6 +192,15 @@ class BaseOsConnection(CloudConnection):
         # them reach the endpoint so that they
         # can be logged.
         self._delete_instance(config, instance_id)
+
+        # NOTE: Unlike launch_instance we only
+        # reset the cache if the delete is successful.
+        # When the launch fails, it's unclear what
+        # state the system is in, and it's important
+        # to establish truth. If the delete fails,
+        # we don't need the instance so it's less
+        # critical to get an immediate update.
+        self._last_refresh = None
 
 class OsApiEndpointConfig(BaseOsEndpointConfig):
 
@@ -234,7 +273,10 @@ class Connection(BaseOsConnection):
             }
             return config.novaclient().servers.list(search_opts=search_opts)
         else:
-            return [config.novaclient().servers.get(instance_id)]
+            try:
+                return [config.novaclient().servers.get(instance_id)]
+            except novaclient.exceptions.NotFound:
+                return []
 
     def _start_instance(self, config, params):
         config = self._endpoint_config(config)
