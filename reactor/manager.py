@@ -609,24 +609,25 @@ class ScaleManager(Atomic):
     def _find_endpoint(self, ip):
         # Try looking it up.
         endpoint_name = self.zkobj.endpoint_ips().get(ip)
+        if endpoint_name is not None:
+            return endpoint_name
 
         # Try static addresses.
         # NOTE: This isn't really safe, it's more of
         # a best guess. This is why we return None if
         # we've got multiple matches.
-        if not endpoint_name:
-            static_matches = []
-            for (name, endpoint) in self._endpoints.items():
-                if ip in endpoint.config.static_ips():
-                    static_matches.append(name) 
-            if len(static_matches) == 1:
-                return static_matches[0]
-            elif len(static_matches) > 1:
-                logging.warning("Session with multiple matches: %s", ip)
-                return None
+        static_matches = []
+        for (name, endpoint) in self._endpoints.items():
+            if ip in endpoint.config.static_ips():
+                static_matches.append(name) 
+        if len(static_matches) == 1:
+            return static_matches[0]
+        elif len(static_matches) > 1:
+            logging.warning("Session with multiple matches: %s", ip)
+            return None
 
         # Nothing found.
-        logging.error("Ssession without endpoint: %s", ip)
+        logging.error("Session without endpoint: %s", ip)
         return None
 
     def _collect_sessions(self):
