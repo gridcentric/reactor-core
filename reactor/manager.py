@@ -601,7 +601,7 @@ class ScaleManager(Atomic):
 
         # Read all available ip-specific metrics.
         ip_metrics = endpoint.zkobj.ip_metrics().as_map()
-        map(lambda (x, y): _extract_metrics(x, y), ip_metrics.items())
+        map(lambda (x, y): _extract_metrics(x, [y]), ip_metrics.items())
 
         # Read from all metrics.
         map(lambda (x, y): _extract_metrics(x, y), all_metrics.items())
