@@ -1,19 +1,16 @@
-function beginMakeConfig(container_id, name_map, spec_path, save_path, template) {
+function beginMakeConfig(container_id, name_map, spec_path, save_path) {
     var context = new Object();
     context["container_id"] = container_id;
     context["name_map"] = name_map;
     context["spec_path"] = spec_path;
     context["save_path"] = save_path;
 
-    // Begin ajax request to fetch template from backend and populate the config
-    // form. If the backend fails to respond with a template, we'll try to fall
-    // back to the template provided to us by the 'template' argument. If these
-    // both fail, we throw up a generic error message and leave the form in a
-    // reasonable state.
-    fetchConfig(context, template);
+    // Begin ajax request to fetch spec from backend and populate the config
+    // form.
+    fetchConfig(context);
 }
 
-function fetchConfig(context, template) {
+function fetchConfig(context) {
     $.ajax({
         url: context["spec_path"],
         type: "GET",
@@ -22,29 +19,11 @@ function fetchConfig(context, template) {
             $("div#" + context["container_id"] + " > div")
                 .attr("class", "alert alert-error")
                 .html("<strong>Error:</strong> Couldn't fetch configuration format.");
-
-            if (typeof(template) !== "undefined") {
-                $("#prompt-modal").find("#prompt-modal-label")
-                    .html("Falling back to built-in format");
-                $("#prompt-modal").find("#prompt-modal-body")
-                    .html("Couldn't fetch the configuration format from reactor. " +
-                          "Falling back to built-in format.");
-
-                // Create a deep copy of the template object given to us, just in case the
-                // caller modifies it later. We store references and page stage in the
-                // template and can't handle the template unexpectedly chaning from
-                // underneath us.
-                context["template"] = $.extend(true, {}, template);
-                makeConfig(context);
-            } else {
-                $("#prompt-modal").find("#prompt-modal-label")
-                    .html("Configuration populate failed");
-                $("#prompt-modal").find("#prompt-modal-body")
-                    .html("Couldn't fetch the configuration format from reactor.");
-            }
-
+            $("#prompt-modal").find("#prompt-modal-label")
+                .html("Configuration populate failed");
+            $("#prompt-modal").find("#prompt-modal-body")
+                .html("Couldn't fetch the configuration format from reactor.");
             $("#prompt-modal").modal("show");
-
         },
         success: function(result) {
             fetchValues(context, result);
@@ -52,7 +31,15 @@ function fetchConfig(context, template) {
     });
 }
 
-function fetchValues(context, template) {
+function getConfigTemplate(config) {
+    if ("endpoint" in config && "template" in config["endpoint"]) {
+        return config.endpoint.template;
+    }
+
+    return null;
+}
+
+function fetchValues(context, spec) {
     $.ajax({
         url: context["save_path"],
         type: "GET",
@@ -60,19 +47,70 @@ function fetchValues(context, template) {
         error: function(req, error, htmlError) {
         },
         success: function(result) {
-            mergeConfig(context, template, result);
-            context["template"] = template;
-            makeConfig(context);
+            template_name = getConfigTemplate(result);
+            if (template_name &&
+                template_name in ENDPOINT_TEMPLATES) {
+                makeTemplateConfig(context, spec, result,
+                    ENDPOINT_TEMPLATES[template_name]);
+            } else {
+                makeCustomConfig(context, spec, result);
+            }
         }
     });
 }
 
-function mergeConfig(context, template, values) {
+// Make a config without a template.
+function makeCustomConfig(context, spec, values) {
+    mergeConfig(context, spec, values);
+    makeConfig(context);
+}
+
+// Make a config with a template.
+function makeTemplateConfig(context, spec, values, template) {
+    spec.template = template;
+    $.each(template.components, function(index, section) {
+        if (section.name && section.description) {
+            context.name_map[section.name] = section.description;
+        }
+    });
+    mergeConfig(context, spec, values);
+    makeConfig(context);
+}
+
+function templateItemToConfig(item) {
+    var secdiv = item.lastIndexOf(":");
+    var section = item.slice(0, secdiv);
+    var key = item.slice(secdiv + 1);
+    return [ section, key ];
+}
+
+function mergeConfig(context, spec, values) {
+    // First fill in from template, if present.
+    if (spec.template != null) {
+        $.each(spec.template.components, function(index, section) {
+            $.each(section.items, function(index, item) {
+                if (item.default != null) {
+                    var path = templateItemToConfig(item.item);
+                    var spec_section = path[0];
+                    var key = path[1];
+                    if (!(key in spec[spec_section]))
+                        spec[spec_section][key] = Object();
+                    spec[spec_section][key]["value"] = item.default;
+                    if (section.name == null) {
+                        spec[spec_section][key]["present"] = true;
+                        spec[spec_section][key]["type"] = "hidden";
+                    }
+                }
+            });
+        });
+    }
+
+    // Then fill in from config values.
     $.each(values, function(section, params) {
-        if (section in template) {
+        if (section in spec) {
             $.each(params, function(key, value) {
-                if (key in template[section])
-                    template[section][key]["value"] = value;
+                if (key in spec[section])
+                    spec[section][key]["value"] = value;
                 else
                     console.error("Key '" + key + "' is present in the current config, but not in the spec.");
             });
@@ -81,11 +119,11 @@ function mergeConfig(context, template, values) {
             console.debug("Section '" + section + "' is present in the current config, but not in the spec.");
         }
     });
-    return template;
+    context["spec"] = spec;
 }
 
 function makeConfig(context) {
-    var template = context["template"];
+    var spec = context["spec"];
 
     // We internally work with jquery objects instead of DOM elements.
     var container_elt = $("#" + context["container_id"]);
@@ -93,17 +131,18 @@ function makeConfig(context) {
     // Start with a clean slate, unlink subtree from container_elt.
     container_elt.children().remove();
 
-    // Walk through template and mark all fields as unmodified. This guards
-    // against the edge case where we're passed in the same template object to
+    // Walk through spec and mark all fields as unmodified. This guards
+    // against the edge case where we're passed in the same spec object to
     // multiple calls to this function. Note that it's quite possible for the
     // modified attribute to be undefined, in which case we simply leave it
     // undefined.
     function markUnmodified(root_node) {
         $.each(root_node, function(key, value) {
             // Filter out nodes we don't want to recurse into. These include
-            // arrays, pointers to the DOM elements we stash in the template and
+            // arrays, pointers to the DOM elements we stash in the spec and
             // leaf values.
             if (key === "ref" ||
+                key === "header" ||
                 typeof(value) !== "object" ||
                 value instanceof Array || value === null)
                 return true;
@@ -118,72 +157,96 @@ function makeConfig(context) {
         });
     }
 
-    markUnmodified(template);
+    markUnmodified(spec);
 
-    // Construct sub templates.
-    var sub_template_set = new Object();
-    $.each(template, function(section_name, section) {
+    // Construct sub specs.
+    var sub_spec_set = new Object();
+    $.each(spec, function(section_name, section) {
         if (contains(section_name, ":")) {
-            sub_template_set[section_name.split(":")[0]] =
-                sub_template_set[section_name.split(":")[0]] + 1 || 1;
+            sub_spec_set[section_name.split(":")[0]] =
+                sub_spec_set[section_name.split(":")[0]] + 1 || 1;
         }
     });
-    var sub_template_list = Object.keys(sub_template_set);
+    var sub_spec_list = Object.keys(sub_spec_set);
 
-    context["sub_templates"] = new Object();
-    $.each(sub_template_list, function(idx, sub_template_name) {
-        context["sub_templates"][sub_template_name] = new Object();
-        $.each(template, function(section_name, section) {
-            if (startsWith(section_name, sub_template_name + ":"))
-                context["sub_templates"][sub_template_name][section_name.split(":")[1]] = section;
+    context["sub_specs"] = new Object();
+    $.each(sub_spec_list, function(idx, sub_spec_name) {
+        context["sub_specs"][sub_spec_name] = new Object();
+        $.each(spec, function(section_name, section) {
+            if (startsWith(section_name, sub_spec_name + ":"))
+                context["sub_specs"][sub_spec_name][section_name.split(":")[1]] = section;
         });
     });
 
     // Build toplevel sections list.
     context["toplevel_sections"] = new Array();
-    $.each(template, function(section_name, section) {
+    $.each(spec, function(section_name, section) {
         if (!contains(section_name, ":"))
             context["toplevel_sections"].push(section_name);
     });
 
     // Add subconfig names as toplevel sections.
     context["toplevel_sections"].push.apply(context["toplevel_sections"],
-                                            Object.keys(context["sub_templates"]));
+                                            Object.keys(context["sub_specs"]));
 
-    // Build toplevel scaffolding.
-    context["toplevel_folds"] = constructScaffolding(context,
-                                                     container_elt,
-                                                     context["toplevel_sections"],
-                                                     false,
-                                                     false);
-
-    // Build sub template scaffolding.
-    context["nested_folds"] = new Object();
-    $.each(context["sub_templates"], function(sub_template_name, sub_template) {
-        context["nested_folds"][sub_template_name] =
-            constructScaffolding(context,
-                                 context["toplevel_folds"][sub_template_name],
-                                 Object.keys(sub_template),
-                                 false,
-                                 true);
-    });
-
-    // Populate toplevel config.
-    $.each(template, function(section_name, section) {
-        if ($.inArray(section_name, context["toplevel_sections"]) !== -1)
-            generateTemplate(context["toplevel_folds"][section_name],
-                             section_name,
-                             section);
-    });
-
-    // Populate sub template configs.
-    $.each(context["sub_templates"], function(sub_template_name, sub_template) {
-        $.each(sub_template, function(section_name, section) {
-            generateTemplate(context["nested_folds"][sub_template_name][section_name],
-                             section_name,
-                             section);
+    if (spec.template != null) {
+        // Construct the scaffolding for the form.
+        sections = $.map(spec.template.components, function(section, index) {
+            return section.name;
         });
-    });
+        context["toplevel_folds"] = constructScaffolding(context,
+                                        container_elt, sections, false, false);
+        $.each(spec.template.components, function(index, section) {
+            if (section.name != null) {
+                // Construct the section.
+                generateSection(context["toplevel_folds"][section.name],
+                                section.name, spec, section);
+
+                // Generate backlinks to section headers.
+                $.each(section.items, function(index, item) {
+                    path = templateItemToConfig(item.item);
+                    section_name = path[0];
+                    config = path[1];
+                    spec[section_name][config].header = section.name;
+                });
+            }
+        });
+    } else {
+        // Build toplevel scaffolding.
+        context["toplevel_folds"] = constructScaffolding(context,
+                                                         container_elt,
+                                                         context["toplevel_sections"],
+                                                         false,
+                                                         false);
+
+        // Build sub spec scaffolding.
+        context["nested_folds"] = new Object();
+        $.each(context["sub_specs"], function(sub_spec_name, sub_spec) {
+            context["nested_folds"][sub_spec_name] =
+                constructScaffolding(context,
+                                     context["toplevel_folds"][sub_spec_name],
+                                     Object.keys(sub_spec),
+                                     false,
+                                     true);
+        });
+
+        // Populate toplevel config.
+        $.each(spec, function(section_name, section) {
+            if ($.inArray(section_name, context["toplevel_sections"]) !== -1)
+                generateSection(context["toplevel_folds"][section_name],
+                                 section_name,
+                                 section);
+        });
+
+        // Populate sub spec configs.
+        $.each(context["sub_specs"], function(sub_spec_name, sub_spec) {
+            $.each(sub_spec, function(section_name, section) {
+                generateSection(context["nested_folds"][sub_spec_name][section_name],
+                                 section_name,
+                                 section);
+            });
+        });
+    }
 
     context["save_task"] = function() {
         disableButtons(context);
@@ -204,8 +267,8 @@ function makeConfig(context) {
 }
 
 function readConfig(context) {
-    var template = context["template"];
-    var sub_templates = context["sub_templates"];
+    var spec = context["spec"];
+    var sub_specs = context["sub_specs"];
     var toplevel_sections = context["toplevel_sections"];
 
     // If 'obj' does not have the property 'attr', initialize 'attr' with 'initval'.
@@ -235,6 +298,9 @@ function readConfig(context) {
                     });
                 include = (val.length !== 0);
                 break;
+            case "hidden":
+                val = config["value"];
+                break;
             default:
                 val = config["ref"].val();
                 include = (val.length !== 0);
@@ -247,15 +313,15 @@ function readConfig(context) {
     var repr = new Object();
 
     // Grab values from toplevel sections.
-    $.each(template, function(section_name, section) {
+    $.each(spec, function(section_name, section) {
         if ($.inArray(section_name, toplevel_sections) !== -1)
             intern_section(repr, section_name, section);
     });
 
     // Grab values from sub sections.
-    $.each(sub_templates, function(template_name, sub_template) {
-        $.each(sub_template, function(sub_section_name, sub_section) {
-            intern_section(repr, template_name + ":" + sub_section_name, sub_section);
+    $.each(sub_specs, function(spec_name, sub_spec) {
+        $.each(sub_spec, function(sub_section_name, sub_section) {
+            intern_section(repr, spec_name + ":" + sub_section_name, sub_section);
         });
     });
 
@@ -266,17 +332,19 @@ function readConfig(context) {
 function stripAnnotations(context) {
     function removeAnnotation(section) {
         $.each(section, function(key, field) {
-            field["ref"].closest(".control-group").attr("class", "control-group")
-                .find("span.help-block").slideUp(150, function() { this.remove() });
+            if (field.hasOwnProperty("ref")) {
+                field["ref"].closest(".control-group").attr("class", "control-group")
+                    .find("span.help-block").slideUp(150, function() { this.remove() });
+            }
         });
     }
 
-    $.each(context["template"], function(section_name, section) {
+    $.each(context["spec"], function(section_name, section) {
         removeAnnotation(section);
     });
 
-    $.each(context["sub_templates"], function(sub_template_name, sub_template) {
-        $.each(sub_template, function(section_name, section) {
+    $.each(context["sub_specs"], function(sub_spec_name, sub_spec) {
+        $.each(sub_spec, function(section_name, section) {
             removeAnnotation(section);
         });
     });
@@ -286,17 +354,17 @@ function stripAnnotations(context) {
 
 function annotateFields(context, messages) {
     // Transform messages object a bit so we can stick some metadata in it.
-    messages_template = Object();
+    messages_spec = Object();
     $.each(messages, function(section_name, section) {
-        messages_template[section_name] = { "count": 0, "section" : {} };
+        messages_spec[section_name] = { "count": 0, "section" : {} };
         $.each(section, function(key, value) {
-            messages_template[section_name]["section"][key] = value;
-            messages_template[section_name]["count"]++;
+            messages_spec[section_name]["section"][key] = value;
+            messages_spec[section_name]["count"]++;
         });
     });
 
-    var template = context["template"];
-    var sub_templates = context["sub_templates"];
+    var spec = context["spec"];
+    var sub_specs = context["sub_specs"];
 
     // The meta_sections object is used to keep track of the number of
     // annotations under a nested folds header.
@@ -342,40 +410,71 @@ function annotateFields(context, messages) {
     context["errors"] = 0;
 
     // Add in new annotations and update the fold headers for sections with messages.
-    $.each(messages_template, function(section_name, section) {
-        if (contains(section_name, ":")) {
-            var components = section_name.split(":")
-            var sub_template = sub_templates[components[0]]
-            var section_name = components[1];
+    $.each(messages_spec, function(section_name, section) {
+        if (spec.template != null) {
+            // Annotate elements in section.
+            addAnnotation(spec[section_name], section);
 
-            section["header"] = context["nested_folds"][components[0]][section_name]
-                .closest(".accordion-group").find(".accordion-toggle");
+            // Collate fold errors.
+            $.each(section["section"], function(field, message) {
+                header = spec[section_name][field].header;
+                if (!(header in meta_sections)) {
+                    meta_sections[header] = Object();
+                    meta_sections[header].header =
+                        context["toplevel_folds"][header]
+                            .closest(".accordion-group")
+                            .find(".accordion-toggle");
+                }
 
-            if (typeof(meta_sections[components[0]]) === "undefined") {
-                meta_sections[components[0]] = {
-                    "header": context["toplevel_folds"][components[0]]
-                        .closest(".accordion-group")
-                        .children()
-                        .children(".accordion-toggle"),
-                    "count": 0
-                };
+                if (meta_sections[header].count) {
+                    meta_sections[header].count += 1;
+                } else {
+                    meta_sections[header].count = 1;
+                }
+            });
+        }
+        else {
+            if (contains(section_name, ":")) {
+                var components = section_name.split(":")
+                var sub_spec = sub_specs[components[0]]
+                var section_name = components[1];
+
+                section["header"] = context["nested_folds"][components[0]][section_name]
+                    .closest(".accordion-group").find(".accordion-toggle");
+
+                if (typeof(meta_sections[components[0]]) === "undefined") {
+                    meta_sections[components[0]] = {
+                        "header": context["toplevel_folds"][components[0]]
+                            .closest(".accordion-group")
+                            .children()
+                            .children(".accordion-toggle"),
+                        "count": 0
+                    };
+                }
+                meta_sections[components[0]]["count"] += section["count"];
+                section["meta"] = meta_sections[components[0]];
+
+                annotateFoldHeader(section);
+                annotateFoldHeader(meta_sections[components[0]]);
+
+                addAnnotation(sub_spec[section_name], section);
+            } else {
+                section["header"] = context["toplevel_folds"][section_name]
+                    .closest(".accordion-group")
+                    .find(".accordion-toggle");
+
+                annotateFoldHeader(section);
+
+                addAnnotation(spec[section_name], section);
             }
-            meta_sections[components[0]]["count"] += section["count"];
-            section["meta"] = meta_sections[components[0]];
-
-            addAnnotation(sub_template[section_name], section);
-
-            annotateFoldHeader(section);
-            annotateFoldHeader(meta_sections[components[0]]);
-        } else {
-            section["header"] = context["toplevel_folds"][section_name]
-                .closest(".accordion-group")
-                .find(".accordion-toggle");
-
-            addAnnotation(template[section_name], section);
-            annotateFoldHeader(section);
         }
     });
+
+    if (spec.template != null) {
+        $.each(meta_sections, function(ref, section) {
+            annotateFoldHeader(section);
+        });
+    }
 
     // Display the overall error count.
     updateErrorCount(context).clearQueue().fadeIn(200);
@@ -487,32 +586,47 @@ function constructScaffolding(context, root, sections, exclusive, open) {
 }
 
 // Generates a config section based on the description provided by the
-// 'template' object, rooted at the div 'root'.
-function generateTemplate(root, name, template) {
+// 'spec' object, rooted at the div 'root'.
+function generateSection(root, name, spec, template) {
     // Get rid of any old elements to prevent duplicates.
     root.find("form#form-" + name).remove();
     var fs = $("<fieldset/>")
         .appendTo(
             $("<form/>").attr("class", "form-inline").appendTo(root));
 
-    // Sort using the 'order' key so that all the config params show
-    // up in a consistent order.
     var configs = new Array();
-    $.each(template, function(config_name, config) {
-        configs.push([ config_name, config ]);
-    });
+    if (typeof(template) === "undefined") {
+        // Sort using the 'order' key so that all the config params show
+        // up in a consistent order.
+        $.each(spec, function(config_name, config) {
+            configs.push([ config_name, config ]);
+        });
 
-    configs.sort(function(a, b) {
-        order_a = a[1]["order"] || 0;
-        order_b = b[1]["order"] || 0;
-        name_a = a[0];
-        name_b = b[0];
+        configs.sort(function(a, b) {
+            order_a = a[1]["order"] || 0;
+            order_b = b[1]["order"] || 0;
+            name_a = a[0];
+            name_b = b[0];
 
-        if (order_a === order_b)
-            return name_a > name_b ? 1 : -1;
-        else
-            return order_a > order_b ? 1 : -1;
-    });
+            if (order_a === order_b)
+                return name_a > name_b ? 1 : -1;
+            else
+                return order_a > order_b ? 1 : -1;
+        });
+    } else {
+        // Pop config items into list in order that they exist in the
+        // template.
+        $.each(template.items, function(idx, item) {
+            // First dig out the config spec.
+            path = templateItemToConfig(item.item);
+            section = path[0];
+            config_name = path[1];
+            config = spec[section][config_name];
+
+            // Pop it into the list.
+            configs.push([ config_name, config ]);
+        });
+    }
 
     $.each(configs, function(idx, config) {
         generateSingleConfig(fs, config[0], config[1]);
@@ -637,7 +751,7 @@ function generateSingleConfig(root, config_name, config)
         // Register an onchange callback to mark field as modified on change.
         input_elt.change(function() { config["modified"] = true; });
 
-        // Save reference to HTML element in config template.
+        // Save reference to HTML element in config spec.
         config["ref"] = input_elt;
     }
 }

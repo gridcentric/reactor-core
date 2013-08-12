@@ -18,8 +18,101 @@
 <%include file="/list.html" args="id='#managersActiveList',name=manager_name,path='/v1.1/managers',field='active',key=True,link='/managers/'"/>
 <%include file="/list.html" args="id='#managersConfiguredList',name=manager_name,path='/v1.1/managers',field='configured',link='/managers/'"/>
 
-<%include file="/new.html" args="type='endpoint',path='/v1.1/endpoints',field='endpoints'"/>
-<%include file="/new.html" args="type='manager',path='/v1.1/managers',field='configured'"/>
+<!-- New endpoint form -->
+<div class="row">
+<div class="span10 offset2">
+<form class="form-inline">
+<div class="input-append">
+<input id="endpointname" class="input-small" placeholder="New endpoint" type="text">
+  <div class="btn-group">
+    <button class="btn dropdown-toggle" data-toggle="dropdown" required=" ">
+          Create<span class="caret"></span></button>
+    <ul id="endpoint-create-dropdown" class="dropdown-menu">
+      <li><a id="endpointcreate" typehref="#">Custom endpoint</a></li>
+    </ul>
+  </div>
+</div>
+</form>
+</div>
+</div>
 
+<div id="endpoint-prompt-modal" class="modal hide fade" role="dialog"
+     aria-labelledby="prompt-modal-label" aria-hidden="true">
+  <div class="modal-header">
+    <button class="close" type="button" data-dismiss="modal" aria-hidden="true">&times;</button>
+    <h3>Invalid Input</h3>
+  </div>
+  <div class="modal-body">
+    The new endpoint name is invalid. It cannot be empty and
+    may only contain the following characters: alphanumeric, '-', and
+    '_'.
+  </div>
+  <div class="modal-footer">
+    <button class="btn" data-dismiss="modal" aria-hidden="true">Close</button>
+  </div>
+</div>
+
+<script type="text/javascript">
+    $("#endpointcreate").click(function (e) {
+        e.preventDefault();
+        var name = $("#endpointname").val();
+        if (name.match(/^[\w-]+$/g) === null) {
+            $("#endpoint-prompt-modal").modal("show");
+        } else {
+            $.ajax({
+                url: "/v1.1/endpoints/" + name,
+                type: 'POST',
+                dataType: 'json',
+                data: JSON.stringify({}),
+                processData: false,
+                contentType: 'application/json',
+                complete: function() {
+                    window.location = "/endpoints/" + name;
+                },
+            });
+        }
+    });
+
+    function template_postback(template, name) {
+        // Just ping-pong it back to the server
+        $.ajax({
+            url: "/v1.1/endpoints/" + name,
+            type: 'POST',
+            dataType: 'json',
+            data: JSON.stringify({ "endpoint" : { "template" : template } }),
+            processData: false,
+            contentType: 'application/json',
+            complete: function() {
+                window.location = "/endpoints/" + name;
+            },
+        });
+    }
+
+    function populate_templates() {
+        templates = [];
+        $.each(ENDPOINT_TEMPLATES, function(key, _) {
+            templates.push(key);
+        });
+        templates.sort().reverse();
+        $.each(templates, function(index, key) {
+            template = ENDPOINT_TEMPLATES[key];
+            $("#endpoint-create-dropdown").prepend(
+                '<li><a id="endpoint-template-' + key +
+                '" typehref="#">New ' + template.description + ' endpoint</a></li>');
+            $("#endpoint-template-" + key).click(function (e) {
+                e.preventDefault();
+                var name = $("#endpointname").val();
+                if (name.match(/^[\w-]+$/g) === null) {
+                    $("#endpoint-prompt-modal").modal("show");
+                } else {
+                    template_postback(key, name);
+                }
+            });
+        });
+    }
+
+    populate_templates();
+
+</script>
 </div>
 
