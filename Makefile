@@ -57,6 +57,14 @@ ifneq ($(INIT),)
 endif
 	@$(INSTALL_DIR) $(DESTDIR)/etc/logrotate.d
 	@$(INSTALL_DATA) etc/logrotate.d/reactor $(DESTDIR)/etc/logrotate.d
+	@$(INSTALL_DIR) $(DESTDIR)/etc/reactor
+	@$(INSTALL_DIR) $(DESTDIR)/etc/reactor/example
+	@$(INSTALL_DIR) $(DESTDIR)/etc/reactor/default
+	@rsync -ruav example/ $(DESTDIR)/etc/reactor/example
+	@rsync -ruav default/ $(DESTDIR)/etc/reactor/default
+	@$(INSTALL_DIR) $(DESTDIR)/usr/bin
+	@$(INSTALL_BIN) bin/reactor-setup $(DESTDIR)/usr/bin
+	@$(INSTALL_BIN) bin/reactor-defaults $(DESTDIR)/usr/bin
 endif
 
 cache_clean:
@@ -146,5 +154,11 @@ cobaltclient.deb:
 	@mv cobalt-novaclient*.deb $(CURDIR)/extra/
 .PHONY: cobaltclient.deb
 
-packages: agent.deb agent.rpm server.deb server.rpm cobaltclient.rpm cobaltclient.deb
+packages: deb-packages rpm-packages
 .PHONY: packages
+
+deb-packages: agent.deb server.deb cobaltclient.deb
+.PHONY: deb-packages
+
+rpm-packages: agent.rpm server.rpm cobaltclient.rpm
+.PHONY: rpm-packages

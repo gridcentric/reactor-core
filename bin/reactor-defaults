@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# Wait for reactor to start.
+echo -n "Waiting for Reactor to start..."
+while ! reactor list >/dev/null 2>/dev/null; do
+    echo -n "."
+done
+echo "started."
+
+# Load the example endpoints.
+for endpoint in /etc/reactor/default/*.conf; do
+    reactor manage $(basename $endpoint .conf) < $endpoint
+done

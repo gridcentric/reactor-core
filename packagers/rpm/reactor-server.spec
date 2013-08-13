@@ -6,6 +6,7 @@ Group: System
 License: Copyright 2012 GridCentric Inc.
 URL: http://www.gridcentric.com
 Packager: GridCentric Inc. <support@gridcentric.com>
+Requires: iptables, curl, openssh-clients
 Requires: python-paste, python-pyramid, python-mako
 Requires: python-netifaces, python-ldap
 Requires: python-httplib2, python-webob
@@ -31,6 +32,7 @@ true
 /usr/
 /etc/init.d/reactor
 /etc/logrotate.d/reactor
+/etc/reactor/
 
 %post
 if [ "$1" = "1" ]; then

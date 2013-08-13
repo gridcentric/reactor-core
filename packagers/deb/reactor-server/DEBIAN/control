@@ -2,7 +2,8 @@ Package: reactor-server
 Section: extra
 Version: VERSION
 Architecture: all
-Depends: python-paste, python-pyramid, python-mako,
+Depends: iptables, curl, openssh-client,
+    python-paste, python-pyramid, python-mako,
     python-netifaces, python-ldap,
     python-webob, python-httplib2,
     zookeeperd, python-zookeeper,
