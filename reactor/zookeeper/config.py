@@ -39,6 +39,10 @@ ZOOKEEPER_DATA_PORT = 2888
 ZOOKEEPER_ELECTION_PORT = 3888
 ZOOKEEPER_PID_FILE = os.path.join(ZOOKEEPER_RUN_DIR, "zookeeper.pid")
 
+ZOOKEEPER_DATA_DIR = "/var/lib/zookeeper/version-2"
+ZOOKEEPER_LOG_DIR = "/var/lib/zookeeper/version-2"
+ZOOKEEPER_BACKUP_COUNT = 3
+
 def generate_config(myid, servers):
     # Write out the ID file.
     f = open(ZOOKEEPER_ID_FILE, 'w')
@@ -84,6 +88,15 @@ def ensure_stopped():
 def ensure_started():
     if not(is_running()):
         subprocess.call(["/etc/init.d/zookeeper", "start"])
+
+def clean_logs():
+    subprocess.call([
+        "java", "-cp", "zookeeper.jar",
+        "org.apache.zookeeper.server.PurgeTxnLog",
+        ZOOKEEPER_DATA_DIR,
+        ZOOKEEPER_LOG_DIR,
+        "-n", str(ZOOKEEPER_BACKUP_COUNT)],
+        cwd="/usr/share/java")
 
 def compute_id(servers):
     try:

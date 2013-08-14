@@ -2,6 +2,7 @@ import threading
 import traceback
 import logging
 import json
+import time
 
 from pyramid.response import Response
 
@@ -12,6 +13,29 @@ from . api import authorized
 from . api import ReactorApiExtension
 from . manager import ScaleManager
 from . zookeeper import config
+
+class CleanerThread(threading.Thread):
+
+    def __init__(self):
+        super(CleanerThread, self).__init__()
+        self.daemon = True
+        self.running = True
+
+    def run(self):
+        while self.running:
+            # Without pruning, the zookeeper snapshots
+            # and log files can grow unbounded. It's the
+            # admin's responsibility to prune these logs
+            # according to whatever policy they have in 
+            # place. Instead of relying on a cron job or
+            # other external configs, we call the built-in
+            # helper to prune these logs as frequently
+            # we reasonably can.
+            time.sleep(60.0)
+            config.clean_logs()
+
+    def stop(self):
+        self.running = False
 
 class Cluster(ReactorApiExtension):
 
@@ -24,6 +48,10 @@ class Cluster(ReactorApiExtension):
         self._manager_running = False
         self._manager_thread = None
 
+        # Add a Zookeeper cleaner.
+        self._cleaner_thread = CleanerThread()
+        self._clenaer_thread.start()
+
         # Add route for changing the API servers.
         api.config.add_route('api-servers', '/api_servers')
         api.config.add_view(self.set_api_servers, route_name='api-servers')
@@ -31,6 +59,10 @@ class Cluster(ReactorApiExtension):
         # Check that everything is up and running.
         self.check_zookeeper(api.client.servers())
         self.check_manager(api.client.servers())
+
+    def __del__(self):
+        self.stop_manager()
+        self._cleaner_thread.stop()
 
     @connected
     @authorized()
