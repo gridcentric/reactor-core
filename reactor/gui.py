@@ -4,7 +4,7 @@ import json
 from pyramid.httpexceptions import HTTPFound
 from pyramid.response import Response
 from pyramid.security import authenticated_userid
-from pyramid.url import route_url
+from pyramid.url import route_url as _route_url
 
 from mako.template import Template
 from mako.lookup import TemplateLookup
@@ -15,6 +15,21 @@ from . api import authorized
 from . api import ReactorApiExtension
 from . endpoint import EndpointConfig
 from . manager import ManagerConfig
+
+# Because we are typically operating behind a reverse proxy,
+# and wsgi/pyramid aren't able to determine what scheme the client
+# is actually accessing us by, we need to fix up any links and
+# redirections we produce by reading the X-Forwarded-Proto header
+# sent to us by the proxy and substituting it for the default (http).
+# This prevents us from, say, having the login form post to the HTTP
+# port.
+def fixup_url(url, request):
+    scheme = request.headers.get('X-Forwarded-Proto', 'http') + '://'
+    return url.replace('http://', scheme)
+
+def route_url(route, request, **kw):
+    url = _route_url(route, request, **kw)
+    return fixup_url(url, request)
 
 class ReactorGui(ReactorApiExtension):
 
@@ -82,9 +97,9 @@ class ReactorGui(ReactorApiExtension):
         Logs the admin user in.
         """
         login_url = route_url('admin-login', request)
-        referrer = request.url
+        referrer = fixup_url(request.url, request)
         if referrer == login_url:
-            referrer = '/'
+            referrer = route_url('admin-page', request, page_name='')
         came_from = request.params.get('came_from', referrer)
         message = ''
 
