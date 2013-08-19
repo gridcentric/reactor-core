@@ -8,7 +8,7 @@ URL: http://www.gridcentric.com
 Packager: GridCentric Inc. <support@gridcentric.com>
 Requires: iptables, curl, openssh-clients
 Requires: python-paste, python-pyramid, python-mako
-Requires: python-netifaces, python-ldap
+Requires: python-netifaces, python-ldap, python-netaddr
 Requires: python-httplib2, python-webob
 Requires: python-zookeeper zookeeper
 Requires: python-novaclient, cobalt-novaclient

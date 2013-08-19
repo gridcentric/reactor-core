@@ -9,7 +9,8 @@ ENDPOINT_TEMPLATES = {
                         { "item" : "loadbalancer:rdp:domain" },
                         { "item" : "loadbalancer:rdp:host" },
                         { "item" : "loadbalancer:rdp:template" },
-                        { "item" : "loadbalancer:rdp:reconnect" }
+                        { "item" : "loadbalancer:rdp:reconnect" },
+                        { "item" : "loadbalancer:rdp:client_subnets" }
                     ]
                 },
                 {

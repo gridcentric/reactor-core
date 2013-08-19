@@ -25,6 +25,7 @@ setup(
         "PasteDeploy>=1.5",
         "zookeeper",
         "netifaces",
+        "netaddr",
         "python-ldap",
     ],
     test_require=[

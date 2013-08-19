@@ -4,7 +4,7 @@ Version: VERSION
 Architecture: all
 Depends: iptables, curl, openssh-client,
     python-paste, python-pyramid, python-mako,
-    python-netifaces, python-ldap,
+    python-netifaces, python-ldap, python-netaddr,
     python-webob, python-httplib2,
     zookeeperd, python-zookeeper,
     python-novaclient, cobalt-novaclient,

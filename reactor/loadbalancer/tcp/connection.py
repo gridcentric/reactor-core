@@ -7,6 +7,7 @@ import Queue
 import random
 import select
 import logging
+import netaddr
 
 from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
@@ -134,13 +135,13 @@ class ConnectionConsumer(threading.Thread):
         self.execute = True
         self.locks = locks
         self.producer = producer
-        self.ports = {}
+        self.portmap = {}
         self.children = {}
         self.cond = threading.Condition()
 
-    def set(self, ports):
+    def set(self, portmap):
         self.cond.acquire()
-        self.ports = ports
+        self.portmap = portmap
         self.cond.release()
 
     def stop(self):
@@ -152,15 +153,27 @@ class ConnectionConsumer(threading.Thread):
         try:
             # Index by the destination port.
             port = connection.dst[1]
-            if not(self.ports.has_key(port)):
+            if not(self.portmap.has_key(port)):
                 connection.drop()
                 return True
 
             # Create a map of the IPs.
-            (exclusive, reconnect, backends) = self.ports[port]
+            (exclusive, reconnect, backends, client_subnets) = self.portmap[port]
             ipmap = {}
             ipmap.update(backends)
             ips = ipmap.keys()
+
+            # Check the subnet.
+            if client_subnets:
+                subnet_okay = False
+                for subnet in client_subnets:
+                    if netaddr.ip.IPAddress(str(connection.src[0])) in \
+                       netaddr.ip.IPNetwork(str(subnet)):
+                        subnet_okay = True
+                        break
+                if not subnet_okay:
+                    connection.drop()
+                    return True
 
             # Find a backend IP (exclusive or not).
             ip = None
@@ -392,6 +405,9 @@ class TcpEndpointConfig(Config):
         description="Amount of time a disconnected client has to reconnect before" \
                     + " the VM is returned to the pool.")
 
+    client_subnets = Config.list(label="Client Subnets", order=7,
+        description="Only allow connections from these client subnets.")
+
 class Connection(LoadBalancerConnection):
     """ Raw TCP """
 
@@ -453,21 +469,26 @@ class Connection(LoadBalancerConnection):
         if len(backends) == 0:
             return
 
-        # Update the portmap (including exclusive info).
+        # Build our list of backends.
         config = self._endpoint_config(config)
-        self.portmap[listen] = (config.exclusive, config.reconnect, [])
+        portmap_backends = []
         for backend in backends:
             if not(backend.port):
                 port = listen
             else:
                 port = backend.port
+            portmap_backends.append((backend.ip, port))
 
-            # NOTE: We save some extra metadata about these backends in the
-            # portmap. These are used to later on cleanup backend machines
-            # and correctly assign connections (i.e. either exclusively or
-            # not exclusively).
-            (_, _, backends) = self.portmap[listen]
-            backends.append((backend.ip, port))
+        # Update the portmap (including exclusive info).
+        # NOTE: The reconnect/exclusive/client_subnets parameters
+        # control how backends are mapped by the consumer, how machines
+        # are cleaned up, etc. See the Consumer class and the metrics()
+        # function below to understand the interactions there.
+        self.portmap[listen] = (
+            config.exclusive,
+            config.reconnect,
+            portmap_backends,
+            config.client_subnets)
 
     def save(self):
         self.producer.set(self.portmap.keys())
@@ -483,7 +504,7 @@ class Connection(LoadBalancerConnection):
         locked_ips = self.locks.list() or []
         now = time.time()
 
-        for (exclusive, reconnect, backends) in self.portmap.values():
+        for (exclusive, reconnect, backends, _) in self.portmap.values():
             for (ip, port) in backends:
                 active = active_connections.get((ip, port), 0)
 
