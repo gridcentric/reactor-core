@@ -50,7 +50,7 @@ class Cluster(ReactorApiExtension):
 
         # Add a Zookeeper cleaner.
         self._cleaner_thread = CleanerThread()
-        self._clenaer_thread.start()
+        self._cleaner_thread.start()
 
         # Add route for changing the API servers.
         api.config.add_route('api-servers', '/api_servers')
