@@ -7,6 +7,7 @@ import re
 import ldap
 import ldap.modlist as modlist
 ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
+from ldap.controls import SimplePagedResultsControl
 
 from reactor.config import Config
 
@@ -143,14 +144,34 @@ class LdapConnection:
 
         filter = '(objectclass=computer)'
         desc = self.machine_description(name)
-        machines = self.open().search_s(desc, ldap.SCOPE_SUBTREE, filter, attrs)
+        page_size = 64
+        lc = SimplePagedResultsControl(
+            ldap.LDAP_CONTROL_PAGE_OID, True, (page_size,''))
+        conn = self.open()
+        msgid = conn.search_ext(
+            desc, ldap.SCOPE_SUBTREE, filter, attrs, serverctrls=[lc])
         rval = {}
 
-        # Synthesize the machines into a simple form.
-        for machine in machines:
-            if machine[0]:
-                for cn in machine[1]['cn']:
-                    rval[cn.lower()] = machine[1]
+        while True:
+            rtype, rdata, rmsgid, serverctrls = conn.result3(msgid)
+
+            # Synthesize the machines into a simple form.
+            for machine in rdata:
+                if machine[0]:
+                    for cn in machine[1]['cn']:
+                        rval[cn.lower()] = machine[1]
+
+            # Read the next page of the result.
+            pctrls = [ c for c in serverctrls if c.controlType == ldap.LDAP_CONTROL_PAGE_OID ]
+            if pctrls:
+                est, cookie = pctrls[0].controlValue
+                if cookie:
+                    lc.controlValue = (page_size, cookie)
+                    msgid = conn.search_ext(
+                        desc, ldap.SCOPE_SUBTREE, filter, attrs, serverctrls=[lc])
+                else:
+                    break
+
         return rval
 
     def check_logged_on(self, machine):
