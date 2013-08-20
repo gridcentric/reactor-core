@@ -352,48 +352,90 @@
         }
     }
 
-    function updateLiveMetrics(metric) {
-        function doUpdate(result, timestamp, data, metrics) {
-            value = result[metric];
-            if( !metrics[metric] ) {
-                metrics[metric] = {
-                    "name" : metric,
-                    "data" : [] };
-                data.push(metrics[metric]);
+    // Tracked metrics
+    var METRICS = {};
+    var NUM_METRICS = 0;
 
-                // Initialize data
-                for ( var i = 0; i < NUM_TIMESLICES; i++ ) {
-                    ts = timestamp - ((NUM_TIMESLICES - i) * UPDATE_PERIOD);
-                    metrics[metric]["data"].push([ts , null]);
-                }
-            }
+    function initMetricData(metric, init_timestamp, color) {
+        metric_data = {
+            "name"  : metric,
+            "data"  : [],
+            "color" : color
+        };
 
-            // Normalize the metrics.
-            normalize(metrics[metric], timestamp, value);
-
-            // Limit the size.
-            while( metrics[metric]["data"].length > NUM_TIMESLICES ) {
-                metrics[metric]["data"].shift();
-            }
+        // Initialize data
+        for ( var i = 0; i < NUM_TIMESLICES; i++ ) {
+            var ts = init_timestamp - ((NUM_TIMESLICES - i) * UPDATE_PERIOD);
+            metric_data.data.push([ts , null]);
         }
 
-        return doUpdate;
+        return metric_data;
     }
 
-    function setupMetricsGraphs(result) {
-        // For each metric,
-        $.each(result, function(metric, dontcare) {
-            // Create a div for the graph and append it
-            var outerDiv = $('#graph-templates .metric-graph-template').clone();
-            outerDiv.find(".metric-graph-inner").attr("id", "livemetrics_" + metric);
-            $("#livemetrics").append(outerDiv);
+    function updateMetricData(metric_data, timestamp, value) {
+        // Push the data and normalize
+        normalize(metric_data, timestamp, value);
 
-            // Set up the graph for it
-            setupGraph($("#livemetrics_" + metric),
-                       "endpoints/${object}/metrics",
-                       updateLiveMetrics(metric),
-                       UPDATE_PERIOD);
+        // Limit the size
+        while( metric_data.data.length > NUM_TIMESLICES ) {
+            metric_data.data.shift();
+        }
+    }
+
+    function updateMetrics(result) {
+        // Generate a timestamp
+        var timestamp = new Date().getTime();
+
+        // Loop through point-in-time metrics
+        $.each(result, function(metric, value) {
+            // If we haven't seen this metric,
+            if (!(metric in METRICS)) {
+                // Create a div for the graph and append it
+                var outerDiv = $('#graph-templates .metric-graph-template').clone();
+                outerDiv.find(".metric-graph-inner").attr("id", "livemetrics_" + metric);
+                $("#livemetrics").append(outerDiv);
+
+                // Set up the graph for it
+                setupGraph($("#livemetrics_" + metric), null, null, null);
+
+                // Add to map
+                METRICS[metric] = initMetricData(metric, timestamp, NUM_METRICS + 1);
+                NUM_METRICS++;
+            }
+
+            // Update metric data
+            updateMetricData(METRICS[metric], timestamp, value);
         });
+
+        // For each tracked metric,
+        $.each(METRICS, function(metric, metric_data) {
+            // If we didn't receive an update,
+            if (!(metric in result)) {
+                // Push a null value
+                updateMetricData(metric_data, timestamp, null);
+            }
+
+            // Update metric graph
+            updateGraph($("#livemetrics_" + metric), [ metric_data ]);
+        });
+
+        // Kick off another metric poll
+        setTimeout(pollMetrics, UPDATE_PERIOD);
+    }
+
+    function pollMetrics() {
+        // Poll metrics
+        $.ajax({
+            url: "/v1.0/endpoints/${object}/metrics",
+            type: 'GET',
+            dataType: 'json',
+            success: updateMetrics,
+        });
+    }
+
+    function setupMetricsGraphs() {
+        // Start polling metrics
+        pollMetrics();
     }
 
     function setupGraphs() {
@@ -401,12 +443,7 @@
         setupGraph($("#servers"), "endpoints/${object}/ips", updateServers,
                UPDATE_PERIOD);
         // Get the metrics available for graphing
-        $.ajax({
-            url: "/v1.0/endpoints/${object}/metrics",
-            type: 'GET',
-            dataType: 'json',
-            success: setupMetricsGraphs,
-        });
+        setupMetricsGraphs();
     }
 
     // Set everything up.

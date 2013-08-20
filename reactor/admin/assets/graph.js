@@ -18,7 +18,7 @@ function isInDOM(elem) {
     }
 }
 
-function try_plot(elem, data) {
+function updateGraph(elem, data) {
 
     if( elem.plot ) {
         elem.plot.setData(data);
@@ -28,9 +28,11 @@ function try_plot(elem, data) {
     } else if( elem.is(":visible") ) {
         elem.plot = $.plot(elem, data, options);
     }
+
+    return isInDOM(elem);
 }
 
-function updateGraph(elem, path, data, metrics, callback, period) {
+function autoUpdateGraph(elem, path, data, metrics, callback, period) {
     function onData(result) {
         var timestamp = new Date().getTime();
 
@@ -38,12 +40,9 @@ function updateGraph(elem, path, data, metrics, callback, period) {
         callback(result, timestamp, data, metrics);
 
         // Plot if the element is on screen.
-        try_plot(elem, data);
-
-        // Reschedule a callback if we're still open.
-        if( isInDOM(elem) ) {
+        if (updateGraph(elem, data)) {
             setTimeout(function() {
-                updateGraph(elem, path, data, metrics, callback, period);
+                autoUpdateGraph(elem, path, data, metrics, callback, period);
             }, period);
         }
     }
@@ -59,11 +58,12 @@ function setupGraph(elem, path, callback, period) {
     var data = [];
 
     // Do an initial plot on screen.
-    try_plot(elem, data);
+    updateGraph(elem, data);
 
     // Replot when a resize occurs.
-    elem.resize(function() { elem.plot = false; try_plot(elem, data); });
+    elem.resize(function() { elem.plot = false; updateGraph(elem, data); });
 
     // Start the update cycle.
-    updateGraph(elem, path, data, {}, callback, period);
+    if (path !== null)
+        autoUpdateGraph(elem, path, data, {}, callback, period);
 }
