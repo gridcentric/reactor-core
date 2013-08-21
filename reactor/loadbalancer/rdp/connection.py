@@ -313,15 +313,23 @@ class LdapConnection:
 
                 descr = self.machine_description(name)
                 connection = self.open()
+                machine_added = False
 
                 try:
-                    # Create the new account.
-                    full_record = dict(new_record.items())
-                    full_record['unicodePwd'] = str(utf_quoted_password)
-                    full_record['userAccountControl'] = '4096' # Enable account.
-                    connection.add_s(descr, modlist.addModlist(full_record))
+                    if self.use_ssl:
+                        # Create the new account.
+                        full_record = dict(new_record.items())
+                        full_record['unicodePwd'] = str(utf_quoted_password)
+                        full_record['userAccountControl'] = '4096' # Enable account.
+                        connection.add_s(descr, modlist.addModlist(full_record))
+                        machine_added = True
 
                 except ldap.UNWILLING_TO_PERFORM:
+                    # NOTE: machine_added will be false at this point,
+                    # so we will fall through to the below attempt.
+                    pass
+
+                if not machine_added:
                     # On some ADs, they refues to add an account
                     # with the password set and account enabled.
                     # Although it's not as clean -- we are forced
@@ -342,6 +350,7 @@ class LdapConnection:
                         account_enabled_attr = [
                             (ldap.MOD_REPLACE, 'userAccountControl', '4096')]
                         connection.modify_s(descr, account_enabled_attr)
+
                     except:
                         self.remove_machine(name)
 
