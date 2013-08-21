@@ -15,11 +15,13 @@ ENDPOINT_TEMPLATES = {
                 {
                     "name" : "cloud", "description" : "Cloud Settings", "items" : [
                         { "item" : "cloud:osvms:auth_url" },
+                        { "item" : "cloud:osvms:region_name" },
                         { "item" : "cloud:osvms:username" },
                         { "item" : "cloud:osvms:tenant_name" },
                         { "item" : "cloud:osvms:password" },
                         { "item" : "cloud:osvms:instance_id" },
                         { "item" : "cloud:osvms:security_groups"},
+                        { "item" : "cloud:osvms:availability_zone" },
                     ]
                 },
                 {
