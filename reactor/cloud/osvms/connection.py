@@ -18,7 +18,7 @@ class Connection(BaseOsConnection):
     _ENDPOINT_CONFIG_CLASS = OsVmsEndpointConfig
 
     def _list_instances(self, config, instance_id):
-        """ 
+        """
         Returns a list of instances from the endpoint.
         """
         config = self._endpoint_config(config)

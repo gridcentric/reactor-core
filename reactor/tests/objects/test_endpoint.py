@@ -22,7 +22,7 @@ def test_log(endpoint):
     assert isinstance(endpoint.log(), Log)
 
 def test_manager(endpoint):
-    assert not endpoint.manager 
+    assert not endpoint.manager
     endpoint.manager = "foo"
     assert endpoint.manager == "foo"
 
@@ -31,7 +31,7 @@ def test_metrics(endpoint):
     endpoint.metrics = { "metric1" : [0.0, 1] }
     assert endpoint.metrics == { "metric1" : [0.0, 1] }
     assert not endpoint.custom_metrics
- 
+
 def test_custom_metrics(endpoint):
     assert not endpoint.custom_metrics
     endpoint.custom_metrics = { "metric1" : [0.0, 1] }

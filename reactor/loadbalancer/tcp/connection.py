@@ -44,7 +44,7 @@ def fork_and_exec(cmd, child_fds=None):
     if pid != 0:
         # Close writing end of the pipe.
         os.close(w)
-        
+
         # Wait for the child to exit.
         while True:
             (rpid, status) = os.waitpid(pid, 0)

@@ -86,7 +86,7 @@ class Config(object):
 
             # Remember the validation rules and save the property.
             # NOTE: We don't do any validation on set, because the
-            # validation could have some side-effects (and may not 
+            # validation could have some side-effects (and may not
             # necessarily be ultra quick -- it could reach out and
             # try network connections, etc.)
             self._getters[k] = getx

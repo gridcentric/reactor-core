@@ -81,7 +81,7 @@ class Managers(DatalessObject, Atomic):
 
     def key_map(self, **kwargs):
         # This is a function used by the API to provide a quick and easy
-        # mapping from active IPs to uuids. Note that it's generally not 
+        # mapping from active IPs to uuids. Note that it's generally not
         # necessary, as internally the managers only care about IPs.
         return dict(map(
             lambda x: (x, self.key(x)),

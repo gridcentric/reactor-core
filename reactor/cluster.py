@@ -26,7 +26,7 @@ class CleanerThread(threading.Thread):
             # Without pruning, the zookeeper snapshots
             # and log files can grow unbounded. It's the
             # admin's responsibility to prune these logs
-            # according to whatever policy they have in 
+            # according to whatever policy they have in
             # place. Instead of relying on a cron job or
             # other external configs, we call the built-in
             # helper to prune these logs as frequently

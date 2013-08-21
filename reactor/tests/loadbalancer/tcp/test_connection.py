@@ -434,7 +434,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_consumer.children = { FAKE_GRANDCHILD_PID : [ FAKE_BACKEND_IP, mock_accept ] }
             mock_kill.side_effect = OSError()
             connection.ConnectionConsumer.reap_children(mock_consumer)
-            self.assertNotIn(FAKE_GRANDCHILD_PID, mock_consumer.children) 
+            self.assertNotIn(FAKE_GRANDCHILD_PID, mock_consumer.children)
 
     def test_reap_children_no_children(self):
         with mock.patch('os.kill') as mock_kill:
@@ -717,7 +717,7 @@ class ConnectionTests(unittest.TestCase):
     def test_save(self):
         # No logic in save.
         pass
-    
+
     # Connection.metrics tests:
     #
     # - connection_count returns a mapping of (ip, port) -> (active), where

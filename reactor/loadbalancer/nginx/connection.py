@@ -267,7 +267,7 @@ class Connection(LoadBalancerConnection):
             # Remove the connection from our tracking list.
             if uniq_id in self.tracked:
                 del self.tracked[uniq_id]
-            
+
             try:
                 full_conf_file = os.path.join(
                     self._manager_config().site_path, conf_filename)

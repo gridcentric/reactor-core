@@ -661,7 +661,7 @@ function generateSingleConfig(root, config_name, config)
     var input_elt = null;
 
     // Setup the generic scaffolding for a config variable.
-    var slot = buildConfigSlot(root, 
+    var slot = buildConfigSlot(root,
             config["label"] || config_name.replace("_", " "));
 
     config["present"] = ("value" in config);

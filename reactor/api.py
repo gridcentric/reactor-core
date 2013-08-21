@@ -250,7 +250,7 @@ class ReactorApi(object):
                     auth_key, auth_salt, auth_algo)
                 return (auth_hash == auth_token)
 
-        # We were not able to authenticate using the 
+        # We were not able to authenticate using the
         # credentials from any endpoint associated with
         # this ip address.
         return False

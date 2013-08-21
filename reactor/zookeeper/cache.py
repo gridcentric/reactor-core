@@ -67,7 +67,7 @@ class Cache(Atomic):
 
     def _default_populate(self, name, **kwargs):
         # The default implementation here is to
-        # simply fetch the associated value in the 
+        # simply fetch the associated value in the
         # zkobj. This is fine, it can be overriden
         # by subclasses.
         return self.zkobj.get(name)
@@ -86,7 +86,7 @@ class Cache(Atomic):
             return True
         else:
             return False
- 
+
     def update(self, values):
         if self._update(values):
             self._update_hook()

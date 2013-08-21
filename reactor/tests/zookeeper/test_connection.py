@@ -305,7 +305,7 @@ class ConnectionTests(unittest.TestCase):
             mock_init.side_effect = mock_zookeeper_init()
             conn = connection.ZookeeperConnection(FAKE_SERVERS)
             mock_exists.return_value = False
-            val = conn.read(FAKE_ZK_PATH, GARBAGE) 
+            val = conn.read(FAKE_ZK_PATH, GARBAGE)
             self.assertEquals(val, GARBAGE)
             self.assertEquals(mock_exists.call_count, 1)
             self.assertEquals(mock_exists.call_args_list[0][0], (FAKE_ZK_HANDLE, FAKE_ZK_PATH))
@@ -319,7 +319,7 @@ class ConnectionTests(unittest.TestCase):
             conn = connection.ZookeeperConnection(FAKE_SERVERS)
             mock_exists.return_value = True
             mock_get.return_value = (FAKE_ZK_CONTENTS, GARBAGE)
-            val = conn.read(FAKE_ZK_PATH, GARBAGE) 
+            val = conn.read(FAKE_ZK_PATH, GARBAGE)
             self.assertEquals(val, FAKE_ZK_CONTENTS)
             self.assertEquals(mock_exists.call_count, 1)
             self.assertEquals(mock_exists.call_args_list[0][0], (FAKE_ZK_HANDLE, FAKE_ZK_PATH))
@@ -334,7 +334,7 @@ class ConnectionTests(unittest.TestCase):
             conn = connection.ZookeeperConnection(FAKE_SERVERS)
             mock_exists.return_value = True
             mock_get.side_effect = FakeNoNodeException()
-            val = conn.read(FAKE_ZK_PATH, GARBAGE) 
+            val = conn.read(FAKE_ZK_PATH, GARBAGE)
             self.assertEquals(val, GARBAGE)
             self.assertEquals(mock_exists.call_count, 1)
             self.assertEquals(mock_exists.call_args_list[0][0], (FAKE_ZK_HANDLE, FAKE_ZK_PATH))
@@ -355,7 +355,7 @@ class ConnectionTests(unittest.TestCase):
             mock_init.side_effect = mock_zookeeper_init()
             conn = connection.ZookeeperConnection(FAKE_SERVERS)
             mock_exists.return_value = False
-            val = conn.list_children(FAKE_ZK_PATH) 
+            val = conn.list_children(FAKE_ZK_PATH)
             self.assertEquals(val, [])
             self.assertEquals(mock_exists.call_count, 1)
             self.assertEquals(mock_exists.call_args_list[0][0], (FAKE_ZK_HANDLE, FAKE_ZK_PATH))
@@ -369,7 +369,7 @@ class ConnectionTests(unittest.TestCase):
             conn = connection.ZookeeperConnection(FAKE_SERVERS)
             mock_exists.return_value = True
             mock_get.return_value = FAKE_ZK_CHILDREN
-            val = conn.list_children(FAKE_ZK_PATH) 
+            val = conn.list_children(FAKE_ZK_PATH)
             self.assertEquals(val, FAKE_ZK_CHILDREN)
             self.assertEquals(mock_exists.call_count, 1)
             self.assertEquals(mock_exists.call_args_list[0][0], (FAKE_ZK_HANDLE, FAKE_ZK_PATH))
@@ -384,7 +384,7 @@ class ConnectionTests(unittest.TestCase):
             conn = connection.ZookeeperConnection(FAKE_SERVERS)
             mock_exists.return_value = True
             mock_get.side_effect = FakeNoNodeException()
-            val = conn.list_children(FAKE_ZK_PATH) 
+            val = conn.list_children(FAKE_ZK_PATH)
             self.assertEquals(val, [])
             self.assertEquals(mock_exists.call_count, 1)
             self.assertEquals(mock_exists.call_args_list[0][0], (FAKE_ZK_HANDLE, FAKE_ZK_PATH))
@@ -406,7 +406,7 @@ class ConnectionTests(unittest.TestCase):
             mock_init.side_effect = mock_zookeeper_init()
             conn = connection.ZookeeperConnection(FAKE_SERVERS)
             mock_exists.return_value = False
-            conn.delete(FAKE_ZK_PATH) 
+            conn.delete(FAKE_ZK_PATH)
             self.assertEquals(mock_exists.call_count, 1)
             self.assertEquals(mock_exists.call_args_list[0][0], (FAKE_ZK_HANDLE, FAKE_ZK_PATH))
             self.assertEquals(mock_get.call_count, 0)
@@ -422,7 +422,7 @@ class ConnectionTests(unittest.TestCase):
             conn = connection.ZookeeperConnection(FAKE_SERVERS)
             mock_exists.return_value = True
             mock_get.return_value = []
-            conn.delete(FAKE_ZK_PATH) 
+            conn.delete(FAKE_ZK_PATH)
             self.assertEquals(mock_exists.call_count, 1)
             self.assertEquals(mock_exists.call_args_list[0][0], (FAKE_ZK_HANDLE, FAKE_ZK_PATH))
             self.assertEquals(mock_get.call_count, 1)
@@ -438,7 +438,7 @@ class ConnectionTests(unittest.TestCase):
             conn = connection.ZookeeperConnection(FAKE_SERVERS)
             mock_exists.return_value = True
             mock_get.side_effect = (FAKE_ZK_CHILDREN, [], [])
-            conn.delete(FAKE_ZK_PATH) 
+            conn.delete(FAKE_ZK_PATH)
             self.assertEquals(mock_delete.call_count, 1 + len(FAKE_ZK_CHILDREN))
             self.assertEquals(mock_delete.call_args_list[0][0], (FAKE_ZK_HANDLE, FAKE_ZK_PATH + "/" + FAKE_ZK_CHILDREN[0]))
             self.assertEquals(mock_delete.call_args_list[1][0], (FAKE_ZK_HANDLE, FAKE_ZK_PATH + "/" + FAKE_ZK_CHILDREN[1]))
@@ -453,7 +453,7 @@ class ConnectionTests(unittest.TestCase):
             conn = connection.ZookeeperConnection(FAKE_SERVERS)
             mock_exists.return_value = True
             mock_delete.side_effect = FakeNoNodeException()
-            conn.delete(FAKE_ZK_PATH) 
+            conn.delete(FAKE_ZK_PATH)
             self.assertEquals(mock_delete.call_count, 1)
             self.assertEquals(mock_delete.call_args_list[0][0], (FAKE_ZK_HANDLE, FAKE_ZK_PATH))
 
@@ -617,7 +617,7 @@ class ConnectionTests(unittest.TestCase):
             mock_get.return_value = FAKE_ZK_CHILDREN
             mock_fn = mock.Mock()
             val = conn.watch_children(FAKE_ZK_PATH, mock_fn)
-            self.assertEquals(val, FAKE_ZK_CHILDREN) 
+            self.assertEquals(val, FAKE_ZK_CHILDREN)
             self.assertTrue(mock_exists.call_count >= 1)
             self.assertEquals(mock_create.call_count, 0)
             self.assertEquals(mock_get.call_count, 1)
@@ -637,7 +637,7 @@ class ConnectionTests(unittest.TestCase):
             conn.child_watches[FAKE_ZK_PATH] = [mock_fn_old]
             mock_fn = mock.Mock()
             val = conn.watch_children(FAKE_ZK_PATH, mock_fn, clean=True)
-            self.assertEquals(val, FAKE_ZK_CHILDREN) 
+            self.assertEquals(val, FAKE_ZK_CHILDREN)
             self.assertTrue(mock_exists.call_count >= 1)
             self.assertEquals(mock_create.call_count, 0)
             self.assertEquals(mock_get.call_count, 1)

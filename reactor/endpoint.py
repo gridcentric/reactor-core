@@ -290,7 +290,7 @@ class Endpoint(Atomic):
 
     def __del__(self):
         self.zkobj.unwatch()
- 
+
     def break_refs(self):
         # See NOTE above.
         self.zkobj.unwatch()
@@ -319,7 +319,7 @@ class Endpoint(Atomic):
         return instances[0].ips
 
     # This method is a hook used to update the loadbalancer when
-    # the confirmed cache changes. This will be automatically 
+    # the confirmed cache changes. This will be automatically
     # called by the cache whenever the confirmed IPs change.
     def _update_confirmed(self):
         self.reload()
@@ -351,7 +351,7 @@ class Endpoint(Atomic):
         # NOTE: This is really for informational
         # purposes only, we don't make any decisions
         # internally on whether or not we will call
-        # update() based on this uuid etc. 
+        # update() based on this uuid etc.
         self.zkobj.manager = uuid
 
     def update(self,
@@ -831,7 +831,7 @@ class Endpoint(Atomic):
         return False
 
     def inactive_ips(self):
-        # These IPs belong to decomissioned instances and 
+        # These IPs belong to decomissioned instances and
         # specifically should not be doing anything. Note,
         # if ever change the decomissioned map to hold something
         # other than the set of IPs (as it is redunent), then

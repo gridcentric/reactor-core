@@ -21,7 +21,7 @@ def configure(level, logfile=None):
     else:
         handler = logging.StreamHandler(sys.stdout)
     formatter = logging.Formatter('%(asctime)s [%(thread)d] %(levelname)s %(name)s: %(message)s')
-    handler.setFormatter(formatter) 
+    handler.setFormatter(formatter)
     logger.addHandler(handler)
 
 def log(fn):

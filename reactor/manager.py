@@ -662,7 +662,7 @@ class ScaleManager(Atomic):
         static_matches = []
         for (name, endpoint) in self._endpoints.items():
             if ip in endpoint.config.static_ips():
-                static_matches.append(name) 
+                static_matches.append(name)
         if len(static_matches) == 1:
             return static_matches[0]
         elif len(static_matches) > 1:

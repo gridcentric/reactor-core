@@ -9,7 +9,7 @@ class ZookeeperClient(Atomic):
     """ A simple wrapper around connections that allows for reconnection, etc. """
 
     def __init__(self, zk_servers):
-        super(ZookeeperClient, self).__init__() 
+        super(ZookeeperClient, self).__init__()
         self._zk_conn = None
         self._zk_servers = zk_servers
         self._lock = threading.Lock()
