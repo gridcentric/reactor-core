@@ -784,9 +784,19 @@ class ScaleManager(Atomic):
 
                 # Perform continuous health checks.
                 while self._running:
+                    start_time = time.time()
                     self.update()
-                    if self._running:
-                        time.sleep(self.config.interval)
+
+                    # We only sleep for the part of the interval that
+                    # we were not active for. This allows us to actually
+                    # pace reasonable intervals at the specified time.
+                    # I.e., if the health_check interval is 10 seconds,
+                    # and we have a few dozens endpoints we could do a
+                    # decent job of calling in to each endpoint every ten
+                    # seconds.
+                    elapsed = (time.time() - start_time)
+                    if self._running and elapsed < self.config.interval:
+                        time.sleep(float(self.config.interval) - elapsed)
 
             except ZookeeperException:
                 # Sleep on ZooKeeper exception and retry.
