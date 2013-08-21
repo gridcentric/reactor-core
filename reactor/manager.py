@@ -664,17 +664,18 @@ class ScaleManager(Atomic):
         old_sessions = self._sessions
 
         # Write out our sessions.
-        for endpoint in my_sessions:
-            for (client, backend) in my_sessions[endpoint].items():
-                endpoint = self._endpoints.get(endpoint)
-                if endpoint:
-                    endpoint.session_opened(client, backend)
+        for endpoint_name in my_sessions:
+            for (client, backend) in my_sessions[endpoint_name].items():
+                if old_sessions.get(client, None) != backend:
+                    endpoint = self._endpoints.get(endpoint_name)
+                    if endpoint:
+                        endpoint.session_opened(client, backend)
 
         # Cull old sessions.
-        for endpoint in old_sessions:
-            for (client, backend) in old_sessions[endpoint].items():
-                if my_sessions.get(endpoint, {}).get(client) != backend:
-                    endpoint = self._endpoints.get(endpoint)
+        for endpoint_name in old_sessions:
+            for (client, backend) in old_sessions[endpoint_name].items():
+                if my_sessions.get(endpoint_name, {}).get(client, None) != backend:
+                    endpoint = self._endpoints.get(endpoint_name)
                     if endpoint:
                         endpoint.session_closed(client, backend)
 
