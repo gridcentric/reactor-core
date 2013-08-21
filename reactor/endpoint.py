@@ -589,11 +589,10 @@ class Endpoint(Atomic):
             self.lb_conn = self._find_loadbalancer_connection(
                 new_config.loadbalancer)
 
-        if old_url != new_url or \
-           old_static_addresses != new_static_addresses or \
-           old_port != new_port or \
-           old_weight != new_weight:
-            self.reload()
+        # We can't really know if loadbalancer settings
+        # have changed in the backend, so we really need
+        # to *always* do a loadbalancer reload.
+        self.reload()
 
     def update_config(self, config_val):
         self._update_config(config_val)
