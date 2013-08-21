@@ -838,7 +838,8 @@ class Endpoint(Atomic):
         # we will need to update this code.
         ips = []
         for inactive in self.decommissioned.as_map().values():
-            ips.extend(inactive)
+            if inactive:
+                ips.extend(inactive)
         return ips
 
     def active_ips(self):
