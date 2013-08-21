@@ -86,6 +86,3 @@ class Connection(LoadBalancerConnection):
         dnsmasq_pid = self._determine_dnsmasq_pid()
         if dnsmasq_pid:
             os.kill(dnsmasq_pid, signal.SIGHUP)
-
-    def metrics(self):
-        return {}

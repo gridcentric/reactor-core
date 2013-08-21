@@ -365,8 +365,8 @@ class LdapConnection:
 
 class RdpEndpointConfig(TcpEndpointConfig):
 
-    def __init__(self, **kwargs):
-        super(RdpEndpointConfig, self).__init__(**kwargs)
+    def __init__(self, *args, **kwargs):
+        super(RdpEndpointConfig, self).__init__(*args, **kwargs)
         self._connection = None
 
     domain = Config.string(label="Active Directory Domain", order=0,

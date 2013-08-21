@@ -520,6 +520,7 @@ class ScaleManager(Atomic):
             logging.warning("Malformed metrics found: %s", active_metrics)
             return False
 
+    @Atomic.sync
     def _collect_metrics(self):
         # Collect all metrics from loadbalancers.
         results = {}
@@ -532,6 +533,17 @@ class ScaleManager(Atomic):
         return results
 
     @Atomic.sync
+    def _collect_pending(self):
+        # Collect all pending metrics from loadbalancers.
+        results = {}
+        for lb in self.loadbalancers.values():
+            for (url, pending_count) in lb.pending().items():
+                if not url in results:
+                    results[url] = pending_count
+                else:
+                    results[url] += pending_count
+        return results
+
     def update_metrics(self):
         """
         Collects the metrics from the loadbalancer, updates zookeeper and
@@ -563,6 +575,33 @@ class ScaleManager(Atomic):
 
         logging.debug("All metrics: %s", all_metrics)
         return all_metrics
+
+    def update_pending(self):
+        """
+        Same as metrics, but for pending connections.
+        """
+        our_pending = self._collect_pending()
+        logging.debug("Loadbalancers returned pending: %s", our_pending)
+
+        # Stuff all the pending counts into Zookeeper.
+        self._managers_zkobj.set_pending(self._uuid, our_pending)
+
+        # Load all pending (from other managers).
+        all_pending = {}
+        pending_map = self._managers_zkobj.pending_map()
+
+        # Read the keys for all managers.
+        for (_, manager_pending) in pending_map.items():
+            if not manager_pending:
+                continue
+            for (url, pending_count) in manager_pending.items():
+                if not url in all_pending:
+                    all_pending[url] = pending_count
+                else:
+                    all_pending[url] += pending_count
+
+        logging.debug("All pending: %s", all_pending)
+        return all_pending
 
     @Atomic.sync
     def _load_metrics(self, endpoint, all_metrics):
@@ -693,6 +732,7 @@ class ScaleManager(Atomic):
         # slightly delayed version of the metrics, but only by as much
         # as our healthcheck interval.
         all_metrics = self.update_metrics()
+        all_pending = self.update_pending()
 
         # Does a health check on all the endpoints that are being managed.
         for (name, endpoint) in self._endpoints.items():
@@ -713,6 +753,16 @@ class ScaleManager(Atomic):
 
                 # Compute the globally weighted averages.
                 metrics = calculate_weighted_averages(metrics)
+
+                # Add in a count of pending connections.
+                if endpoint.config.url in all_pending:
+                    metrics["pending"] = float(all_pending[endpoint.config.url])
+                    if len(metric_ips) > 1:
+                        # NOTE: We may have no instances with pending connections,
+                        # but we still do a best effort attempt to scale this by
+                        # the number of available instances. Otherwise, the user
+                        # has to treat pending with undue care and attention.
+                        metrics["pending"] = metrics["pending"] / len(metric_ips)
 
                 # Update the live metrics and connections.
                 logging.debug("Metrics for endpoint %s from %s: %s",

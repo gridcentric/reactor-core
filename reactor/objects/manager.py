@@ -17,8 +17,8 @@ KEYS = "keys"
 # The metrics for a particular manager.
 METRICS = "metrics"
 
-# The mappings of endpoint to ip address that have active connections.
-ACTIVE_CONNECTIONS = "active_connections"
+# The pending connections for a particular manager.
+PENDING = "pending"
 
 class Managers(DatalessObject, Atomic):
 
@@ -58,6 +58,10 @@ class Managers(DatalessObject, Atomic):
 
     def set_metrics(self, uuid, value):
         return self._get_child(METRICS)._get_child(
+                uuid, clazz=JSONObject)._set_data(value, ephemeral=True)
+
+    def set_pending(self, uuid, value):
+        return self._get_child(PENDING)._get_child(
                 uuid, clazz=JSONObject)._set_data(value, ephemeral=True)
 
     def register(self, uuid, ips, info):
@@ -114,10 +118,10 @@ class Managers(DatalessObject, Atomic):
             self._get_child(
                 METRICS, clazz=JSONObject)._list_children()))
 
-    def active_connections_map(self):
+    def pending_map(self):
         # Same as metric_map().
         return dict(map(
             lambda x: (x, self._get_child(
-                ACTIVE_CONNECTIONS, clazz=JSONObject)._get_child(x)._get_data()),
+                PENDING, clazz=JSONObject)._get_child(x)._get_data()),
             self._get_child(
-                ACTIVE_CONNECTIONS, clazz=JSONObject)._list_children()))
+                PENDING, clazz=JSONObject)._list_children()))

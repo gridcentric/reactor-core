@@ -55,9 +55,6 @@ class LoadBalancerConnection(Connection):
         # This URL is not supported.
         raise Exception("Invalid URL for loadbalancer.")
 
-    def clear(self):
-        pass
-
     def change(self, url, backends, config=None):
         if len(backends) != 0:
             raise NotImplementedError()
@@ -67,6 +64,11 @@ class LoadBalancerConnection(Connection):
 
     def metrics(self):
         # Returns { host : (weight, value) }
+        return {}
+
+    def pending(self):
+        # Returns { url : count }
+        # See loadbalancer/tcp/connection.py for a complete example.
         return {}
 
     def sessions(self):
