@@ -81,7 +81,7 @@ class Reactor(DatalessObject):
         return self._get_child(IP_ADDRESSES, clazz=ip_address.IPAddresses)
 
     def drop_ips(self):
-        return self._get_child(NEW_IPS, clazz=ip_address.IPAddresses)
+        return self._get_child(DROP_IPS, clazz=ip_address.IPAddresses)
 
     def new_ips(self):
-        return self._get_child(DROP_IPS, clazz=ip_address.IPAddresses)
+        return self._get_child(NEW_IPS, clazz=ip_address.IPAddresses)

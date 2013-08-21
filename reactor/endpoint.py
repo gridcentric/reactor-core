@@ -195,6 +195,8 @@ class EndpointLog(BinaryLog):
         lambda args: "Confirmed instance with IP %s" % (inet_ntoa(args[0])))
     DROP_IP = BinaryLogRecord(
         lambda args: "Dropped instance with IP %s" % (inet_ntoa(args[0])))
+    RELOADED = BinaryLogRecord(
+        lambda args: "Loadbalancer updated")
 
     def __init__(self, store_cb=None, retrieve_cb=None):
         # Note: if adding new log entry types, they must be added above
@@ -215,6 +217,7 @@ class EndpointLog(BinaryLog):
             EndpointLog.CONFIRM_IP,
             EndpointLog.DROP_IP,
             EndpointLog.DELETE_FAILURE,
+            EndpointLog.RELOADED,
         ]
 
         # Zookeeper objects are limited to 1MB in size. Since we write
@@ -890,3 +893,4 @@ class Endpoint(Atomic):
             ips = self.backends()
         self.lb_conn.change(self.config.url, ips, config=self.config)
         self.lb_conn.save()
+        self.logging.info(self.logging.RELOADED)

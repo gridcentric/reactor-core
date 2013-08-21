@@ -34,7 +34,7 @@ class Cache(Atomic):
         self.as_map = zkobj.as_map
 
         # Start the watch.
-        self._update(zkobj._list_children(watch=self._update))
+        self._update(zkobj._list_children(watch=self.update))
 
     def __del__(self):
         self.zkobj.unwatch()
