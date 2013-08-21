@@ -660,6 +660,13 @@ class Endpoint(Atomic):
         # Delete the instance from the cloud.
         self.logging.info(self.logging.DELETE_INSTANCE)
 
+        # NOTE: Because we're going to lose this instance from
+        # the cloud, we do our best to populate the caches here.
+        # The only real state that we rely on coming from the cloud
+        # is the list of IP addresses, and if we've just *restarted*
+        # reactor, it's possible that it hasn't been populate yet.
+        self.instance_ips.get(instance_id)
+
         if cloud:
             try:
                 # Try the cloud call first thing.
