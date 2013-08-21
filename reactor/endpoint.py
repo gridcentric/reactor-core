@@ -844,9 +844,8 @@ class Endpoint(Atomic):
         # other than the set of IPs (as it is redunent), then
         # we will need to update this code.
         ips = []
-        for inactive in self.decommissioned.as_map().values():
-            if inactive:
-                ips.extend(inactive)
+        for instance_id in self.decommissioned.list():
+            ips.extend(self.instance_ips.get(instance_id))
         return ips
 
     def active_ips(self):
