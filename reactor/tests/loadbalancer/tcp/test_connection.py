@@ -264,7 +264,7 @@ class ConnectionConsumerTests(unittest.TestCase):
         self.assertTrue(handled)
         self.assertEquals(mock_accept.redirect.call_count, 1)
         self.assertIn(FAKE_GRANDCHILD_PID, mock_consumer.children)
-        self.assertEquals(mock_consumer.children[FAKE_GRANDCHILD_PID], [FAKE_BACKEND_IP, mock_accept])
+        self.assertEquals(mock_consumer.children[FAKE_GRANDCHILD_PID], [FAKE_BACKEND_IP, mock_accept, FAKE_RECONNECT])
 
     def test_handle_exclusive_unlocked(self):
         mock_accept = mock.Mock(spec=connection.Accept)
@@ -284,7 +284,7 @@ class ConnectionConsumerTests(unittest.TestCase):
         self.assertTrue(handled)
         self.assertEquals(mock_accept.redirect.call_count, 1)
         self.assertIn(FAKE_GRANDCHILD_PID, mock_consumer.children)
-        self.assertEquals(mock_consumer.children[FAKE_GRANDCHILD_PID], [FAKE_BACKEND_IP, mock_accept])
+        self.assertEquals(mock_consumer.children[FAKE_GRANDCHILD_PID], [FAKE_BACKEND_IP, mock_accept, FAKE_RECONNECT])
 
     def test_handle_exclusive_no_hosts(self):
         mock_accept = mock.Mock(spec=connection.Accept)
@@ -318,7 +318,7 @@ class ConnectionConsumerTests(unittest.TestCase):
         self.assertTrue(handled)
         self.assertEquals(mock_accept.redirect.call_count, 1)
         self.assertIn(FAKE_GRANDCHILD_PID, mock_consumer.children)
-        self.assertEquals(mock_consumer.children[FAKE_GRANDCHILD_PID], [FAKE_BACKEND_IP, mock_accept])
+        self.assertEquals(mock_consumer.children[FAKE_GRANDCHILD_PID], [FAKE_BACKEND_IP, mock_accept, False])
 
     def test_handle_unexclusive_no_hosts(self):
         mock_accept = mock.Mock(spec=connection.Accept)
@@ -371,6 +371,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_consumer.producer.next.side_effect = [ mock_accept, None ]
             mock_consumer.postponed = []
             mock_consumer.cond = mock.Mock()
+            mock_consumer.locks = mock.Mock()
             type(mock_consumer).execute = mock.PropertyMock(side_effect = [True, True, False])
             mock_consumer.children = {}
             connection.ConnectionConsumer.run(mock_consumer)
@@ -405,7 +406,7 @@ class ConnectionConsumerTests(unittest.TestCase):
         mock_accept.src = FAKE_CLIENT_SOCKNAME
         mock_accept.dst = FAKE_SOCKNAME
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.children = { FAKE_GRANDCHILD_PID : [ FAKE_BACKEND_IP, mock_accept ] }
+        mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, mock_accept, 0 ) }
         mock_consumer.producer = mock_producer
         mock_consumer.cond = mock.Mock()
         connection.ConnectionConsumer.stop(mock_consumer)
@@ -418,7 +419,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.src = FAKE_CLIENT_SOCKNAME
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-            mock_consumer.children = { FAKE_GRANDCHILD_PID : [ FAKE_BACKEND_IP, mock_accept ] }
+            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, mock_accept, 0 ) }
             connection.ConnectionConsumer.kill_children(mock_consumer)
             self.assertEquals(mock_kill.call_count, 1)
             self.assertEquals(mock_kill.call_args_list[0][0][0], FAKE_GRANDCHILD_PID)
@@ -431,7 +432,8 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
             mock_consumer.cond = mock.Mock()
-            mock_consumer.children = { FAKE_GRANDCHILD_PID : [ FAKE_BACKEND_IP, mock_accept ] }
+            mock_consumer.locks = mock.Mock()
+            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, mock_accept, 0 ) }
             mock_kill.side_effect = OSError()
             connection.ConnectionConsumer.reap_children(mock_consumer)
             self.assertNotIn(FAKE_GRANDCHILD_PID, mock_consumer.children)
@@ -440,6 +442,7 @@ class ConnectionConsumerTests(unittest.TestCase):
         with mock.patch('os.kill') as mock_kill:
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
             mock_consumer.cond = mock.Mock()
+            mock_consumer.locks = mock.Mock()
             mock_consumer.children = {}
             connection.ConnectionConsumer.reap_children(mock_consumer)
             self.assertEquals(mock_kill.call_count, 0)
@@ -452,7 +455,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
             mock_consumer.cond = mock.Mock()
-            mock_consumer.children = { FAKE_GRANDCHILD_PID : [ FAKE_BACKEND_IP, mock_accept ] }
+            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, mock_accept, 0 ) }
             mock_ac.return_value = FAKE_CLIENT_SESSION
             sessions = connection.ConnectionConsumer.sessions(mock_consumer)
             self.assertIn(FAKE_BACKEND_IP, sessions)
@@ -474,7 +477,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
             mock_consumer.cond = mock.Mock()
-            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, mock_accept ) }
+            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, mock_accept, 0 ) }
             mock_ac.return_value = FAKE_CLIENT_SESSION
             connection.ConnectionConsumer.drop_session(mock_consumer, FAKE_CLIENT_SESSION, FAKE_BACKEND_IP)
             self.assertEquals(mock_kill.call_count, 1)
@@ -489,7 +492,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
             mock_consumer.cond = mock.Mock()
-            mock_consumer.children = { FAKE_GRANDCHILD_PID : [ FAKE_BACKEND_IP, mock_accept ] }
+            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, mock_accept, 0 ) }
             mock_ac.return_value = FAKE_CLIENT_SESSION
             connection.ConnectionConsumer.drop_session(mock_consumer, FAKE_CLIENT_SESSION_BOGUS, FAKE_BACKEND_IP)
             self.assertEquals(mock_kill.call_count, 0)
@@ -717,151 +720,6 @@ class ConnectionTests(unittest.TestCase):
     def test_save(self):
         # No logic in save.
         pass
-
-    # Connection.metrics tests:
-    #
-    # - connection_count returns a mapping of (ip, port) -> (active), where
-    #   active is the number of active connections to the backend at ip:port.
-    # - portmap is a mapping of (port) -> (exclusive, reconnect, [(ip, port), ...]),
-    #   where port is the frontend port and exclusive, reconnect, and the list of
-    #   (ip, port) tuples are the configuration characteristics of the endpoint
-    #   and list of backends.
-    #
-    # Connection.metrics returns a mapping of ((ip) -> ((metric) -> (weight, value))).
-    # In the case of the TCP loadbalancer, we only report the metric "active",
-    # always with the weight 1.0. If the "exclusive" option is selected, we
-    # cap the number of active connections reported at 1, to prevent stale
-    # connections from polluting the metric.
-    #
-    # The metrics method also has the following side-effects:
-    # - Active backends are placed in the active set. If the backends
-    #   were on the standby mapping (see below) they are removed from that
-    #   mapping. Likewise, newly inactive backends are removed from
-    #   the active set.
-    # - If backends are exclusive, and reconnect timeout is nonzero,
-    #   newly inactive backends are placed in the standby mapping,
-    #   (ip) -> (expiration), which indicates when the backend should
-    #   be moved to the list of available backends. Likewise, newly
-    #   expired backends are removed from the standby mapping.
-    # - Backends which are no longer in the active set or standby mappings
-    #   have their lock (if any) removed.
-    def test_metrics_no_backends(self):
-        with mock.patch('reactor.loadbalancer.netstat.connection_count') as mock_cc:
-            mock_cc.return_value = {}
-            mock_conn = mock.Mock(spec=connection.Connection)
-            mock_conn.portmap = {}
-            mock_conn.active = set()
-            mock_conn.standby = {}
-            mock_conn.locks = mock.Mock()
-            mock_conn.locks.list.return_value = []
-            val = connection.Connection.metrics(mock_conn)
-            self.assertEquals(val, {})
-
-    def test_metrics_no_connections(self):
-        with mock.patch('reactor.loadbalancer.netstat.connection_count') as mock_cc:
-            mock_cc.return_value = {}
-            mock_conn = mock.Mock(spec=connection.Connection)
-            mock_conn.portmap = { FAKE_PORT : (FAKE_URL, True, FAKE_RECONNECT, [(FAKE_BACKEND_IP, FAKE_BACKEND_PORT)], []) }
-            mock_conn.active = set()
-            mock_conn.standby = {}
-            mock_conn.locks = mock.Mock()
-            mock_conn.locks.list.return_value = []
-            val = connection.Connection.metrics(mock_conn)
-            self.assertEquals(val, {FAKE_BACKEND_IP : {"active" : (1, 0)}})
-
-    def test_metrics_new_connection(self):
-        with mock.patch('reactor.loadbalancer.netstat.connection_count') as mock_cc:
-            mock_cc.return_value = { (FAKE_BACKEND_IP, FAKE_BACKEND_PORT) : 1 }
-            mock_conn = mock.Mock(spec=connection.Connection)
-            mock_conn.portmap = { FAKE_PORT : (FAKE_URL, True, FAKE_RECONNECT, [(FAKE_BACKEND_IP, FAKE_BACKEND_PORT)], []) }
-            mock_conn.active = set()
-            mock_conn.standby = {}
-            mock_conn.locks = mock.Mock()
-            mock_conn.locks.list.return_value = []
-            val = connection.Connection.metrics(mock_conn)
-            self.assertEquals(val, {FAKE_BACKEND_IP : {"active" : (1, 1)}})
-            self.assertIn(FAKE_BACKEND_IP, mock_conn.active)
-            self.assertNotIn(FAKE_BACKEND_IP, mock_conn.standby)
-
-    def test_metrics_existing_connection_unexclusive(self):
-        with mock.patch('reactor.loadbalancer.netstat.connection_count') as mock_cc:
-            mock_cc.return_value = { (FAKE_BACKEND_IP, FAKE_BACKEND_PORT) : 10 }
-            mock_conn = mock.Mock(spec=connection.Connection)
-            mock_conn.portmap = { FAKE_PORT : (FAKE_URL, False, 0, [(FAKE_BACKEND_IP, FAKE_BACKEND_PORT)], []) }
-            mock_conn.active = set([FAKE_BACKEND_IP])
-            mock_conn.standby = {}
-            mock_conn.locks = mock.Mock()
-            mock_conn.locks.list.return_value = []
-            val = connection.Connection.metrics(mock_conn)
-            self.assertEquals(val, {FAKE_BACKEND_IP : {"active" : (1, 10)}})
-            self.assertIn(FAKE_BACKEND_IP, mock_conn.active)
-            self.assertNotIn(FAKE_BACKEND_IP, mock_conn.standby)
-
-    def test_metrics_existing_connection_exclusive(self):
-        with mock.patch('reactor.loadbalancer.netstat.connection_count') as mock_cc:
-            mock_cc.return_value = { (FAKE_BACKEND_IP, FAKE_BACKEND_PORT) : 10 }
-            mock_conn = mock.Mock(spec=connection.Connection)
-            mock_conn.portmap = { FAKE_PORT : (FAKE_URL, True, FAKE_RECONNECT, [(FAKE_BACKEND_IP, FAKE_BACKEND_PORT)], []) }
-            mock_conn.active = set([FAKE_BACKEND_IP])
-            mock_conn.standby = {}
-            mock_conn.locks = mock.Mock()
-            mock_conn.locks.list.return_value = []
-            val = connection.Connection.metrics(mock_conn)
-            self.assertEquals(val, {FAKE_BACKEND_IP : {"active" : (1, 1)}})
-            self.assertIn(FAKE_BACKEND_IP, mock_conn.active)
-            self.assertNotIn(FAKE_BACKEND_IP, mock_conn.standby)
-
-    def test_metrics_inactive_connection_exclusive(self):
-        with mock.patch('reactor.loadbalancer.netstat.connection_count') as mock_cc,\
-                mock.patch('time.time') as mock_time:
-            mock_cc.return_value = {}
-            mock_time.return_value = FAKE_NOW
-            mock_conn = mock.Mock(spec=connection.Connection)
-            mock_conn.portmap = { FAKE_PORT : (FAKE_URL, True, FAKE_RECONNECT, [(FAKE_BACKEND_IP, FAKE_BACKEND_PORT)], []) }
-            mock_conn.active = set([FAKE_BACKEND_IP])
-            mock_conn.standby = {}
-            mock_conn.locks = mock.Mock()
-            mock_conn.locks.list.return_value = [ FAKE_BACKEND_IP ]
-            val = connection.Connection.metrics(mock_conn)
-            self.assertEquals(val, {FAKE_BACKEND_IP : {"active" : (1, 1)}})
-            self.assertNotIn(FAKE_BACKEND_IP, mock_conn.active)
-            self.assertIn(FAKE_BACKEND_IP, mock_conn.standby)
-            self.assertEquals(mock_conn.standby[FAKE_BACKEND_IP], FAKE_NOW + FAKE_RECONNECT)
-            self.assertEquals(mock_conn.locks.drop.call_count, 0)
-
-    def test_metrics_inactive_connection_unexclusive(self):
-        with mock.patch('reactor.loadbalancer.netstat.connection_count') as mock_cc:
-            mock_cc.return_value = {}
-            mock_conn = mock.Mock(spec=connection.Connection)
-            mock_conn.portmap = { FAKE_PORT : (FAKE_URL, False, 0, [(FAKE_BACKEND_IP, FAKE_BACKEND_PORT)], []) }
-            mock_conn.active = set([FAKE_BACKEND_IP])
-            mock_conn.standby = {}
-            mock_conn.locks = mock.Mock()
-            mock_conn.locks.list.return_value = []
-            val = connection.Connection.metrics(mock_conn)
-            self.assertEquals(val, {FAKE_BACKEND_IP : {"active" : (1, 0)}})
-            self.assertNotIn(FAKE_BACKEND_IP, mock_conn.active)
-            self.assertNotIn(FAKE_BACKEND_IP, mock_conn.standby)
-
-    def test_metrics_inactive_connection_expired(self):
-        with mock.patch('reactor.loadbalancer.netstat.connection_count') as mock_cc,\
-                mock.patch('time.time') as mock_time:
-            mock_cc.return_value = {}
-            mock_time.return_value = FAKE_NOW + FAKE_RECONNECT + 1
-            mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-            mock_conn = mock.Mock(spec=connection.Connection)
-            mock_conn.portmap = { FAKE_PORT : (FAKE_URL, True, FAKE_RECONNECT, [(FAKE_BACKEND_IP, FAKE_BACKEND_PORT)], []) }
-            mock_conn.active = set()
-            mock_conn.standby = { FAKE_BACKEND_IP : FAKE_NOW + FAKE_RECONNECT }
-            mock_conn.consumer = mock_consumer
-            mock_conn.locks = mock.Mock()
-            mock_conn.locks.return_value = []
-            val = connection.Connection.metrics(mock_conn)
-            self.assertEquals(val, {FAKE_BACKEND_IP : {"active" : (1, 0)}})
-            self.assertNotIn(FAKE_BACKEND_IP, mock_conn.active)
-            self.assertNotIn(FAKE_BACKEND_IP, mock_conn.standby)
-            self.assertEquals(mock_consumer.forget.call_count, 1)
-            self.assertEquals(mock_consumer.forget.call_args[0], (FAKE_BACKEND_IP,))
 
     def test_handle_no_subnet(self):
         mock_accept = mock.Mock(spec=connection.Accept)
