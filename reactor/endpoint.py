@@ -272,8 +272,11 @@ class Endpoint(Atomic):
         # parties. This means that they can stop updating
         # and basically ensure that the delete goes through
         # cleanly without a bunch of trashing.
-        if val and self._delete_hook:
-            self._delete_hook(self)
+        if val:
+            self.zkobj.unwatch()
+            self.reload(exclude=True)
+            if self._delete_hook:
+                self._delete_hook(self)
 
     def break_refs(self):
         # See NOTE above.
