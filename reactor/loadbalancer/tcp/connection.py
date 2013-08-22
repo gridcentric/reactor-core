@@ -208,9 +208,6 @@ class ConnectionConsumer(threading.Thread):
                     connection.drop()
                     return True
 
-            # Clear any standby IPs.
-            self.clear_standby()
-
             # Find a backend IP (exclusive or not).
             ip = None
             if exclusive:
@@ -244,6 +241,7 @@ class ConnectionConsumer(threading.Thread):
                 removed.append(ip)
         for ip in removed:
             self.standby.remove(ip)
+        return len(removed)
 
     def run(self):
         self.cond.acquire()
@@ -269,6 +267,10 @@ class ConnectionConsumer(threading.Thread):
                     # on our list of postponed connections and continue.
                     new_postponed.append(connection)
             self.postponed = new_postponed
+
+            # Clear any standby IPs.
+            if self.clear_standby():
+                continue
 
             # Reap children.
             if self.reap_children():

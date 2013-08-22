@@ -376,7 +376,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_consumer.children = {}
             connection.ConnectionConsumer.run(mock_consumer)
             self.assertEquals(mock_consumer.handle.call_count, 1)
-            self.assertEquals(mock_consumer.reap_children.call_count, 1)
+            self.assertEquals(mock_consumer.reap_children.call_count, 0)
             self.assertEquals(mock_consumer.producer.next.call_count, 2)
             self.assertEquals(len(mock_consumer.postponed), 0)
 
