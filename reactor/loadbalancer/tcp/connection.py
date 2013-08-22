@@ -138,10 +138,13 @@ class ConnectionConsumer(threading.Thread):
         super(ConnectionConsumer, self).__init__()
         self.daemon = True
         self.execute = True
+
         self.locks = locks
         self.producer = producer
+
         self.portmap = {}
         self.postponed = []
+        self.standby = {}
         self.children = {}
         self.cond = threading.Condition()
 
@@ -165,12 +168,13 @@ class ConnectionConsumer(threading.Thread):
         self.cond.release()
         self.join()
 
+        # Unsubscribe from notifications.
+        self.producer.unsubscribe(self.notify)
+
         # Clean up leftover children.
         self.kill_children()
         self.reap_children()
-
-        # Unsubscribe from notifications.
-        self.producer.unsubscribe(self.notify)
+        self.clear_standby(force=True)
 
     def notify(self):
         self.cond.acquire()
@@ -204,6 +208,9 @@ class ConnectionConsumer(threading.Thread):
                     connection.drop()
                     return True
 
+            # Clear any standby IPs.
+            self.clear_standby()
+
             # Find a backend IP (exclusive or not).
             ip = None
             if exclusive:
@@ -220,20 +227,23 @@ class ConnectionConsumer(threading.Thread):
             if ip:
                 # Either redirect or drop the connection.
                 child = connection.redirect(ip, ipmap[ip])
+                standby_time = (exclusive and reconnect)
                 if child:
-                    self.children[child] = [ip, connection]
+                    self.children[child] = [ip, connection, standby_time]
                     return True
             return False
         finally:
             self.cond.release()
 
-    def forget(self, ip):
-        self.cond.acquire()
-        try:
-            self.locks.remove(ip)
-            self.cond.notify()
-        finally:
-            self.cond.release()
+    def clear_standby(self, force=False):
+        removed = []
+        now = time.time()
+        for (ip, timeout) in self.standby.items():
+            if force or timeout < now:
+                self.locks.remove(ip)
+                removed.append(ip)
+        for ip in removed:
+            self.standby.remove(ip)
 
     def run(self):
         self.cond.acquire()
@@ -261,13 +271,16 @@ class ConnectionConsumer(threading.Thread):
             self.postponed = new_postponed
 
             # Reap children.
-            self.reap_children()
+            if self.reap_children():
+                continue
 
-            # Wait for ten seconds.
+            # Wait for a second.
             # This will be waken by either producer events,
             # or by more backends appearing that may make
             # available new backends for us to schedule.
-            self.cond.wait(10.0)
+            # The only event that won't wake this is an
+            # existing connection expiring.
+            self.cond.wait(1.0)
         self.cond.release()
 
     def kill_children(self):
@@ -280,6 +293,8 @@ class ConnectionConsumer(threading.Thread):
                 pass
 
     def reap_children(self):
+        reaped = 0
+
         # Reap dead children.
         for child in self.children.keys():
             try:
@@ -287,7 +302,31 @@ class ConnectionConsumer(threading.Thread):
                 os.kill(child, 0)
             except OSError:
                 # Not alive - remove from children list.
+                (ip, conn, standby_time) = self.children[child]
                 del self.children[child]
+                reaped += 1
+
+                # If reconnect and exclusive is on, then
+                # we add this connection to the standby list.
+                # NOTE: At this point, you only get on the standby
+                # list if the IP is exclusive and with reconnect.
+                # This means that it will *not* get selected again
+                # and the only necessary means of removing the IP
+                # is through the clear_standby() hook.
+                if standby_time:
+                    self.standby[ip] = time.time() + standby_time
+                else:
+                    self.locks.remove(ip)
+
+        # Return the number of children reaped.
+        # This means that callers can do if self.reap_children().
+        return reaped
+
+    def sessions(self):
+        return self.consumer.sessions()
+
+    def drop_session(self, client, backend):
+        self.consumer.drop_session(client, backend)
 
     def pending(self):
         pending = {}
@@ -307,10 +346,26 @@ class ConnectionConsumer(threading.Thread):
         self.cond.release()
         return pending
 
+    def metrics(self):
+        metric_map = {}
+        self.cond.acquire()
+        ips = [ip for (ip, _, _) in self.children.values()]
+        ips.extend(self.standby.keys())
+        for ip in ips:
+            if not ip in metric_map:
+                # Set the current active count to one.
+                metric_map[ip] = { "active" : (1, 1) }
+            else:
+                # Add one to our current active count.
+                cur_count = metric_map[ip]["active"][1]
+                metric_map[ip]["active"] = (1, cur_count+1)
+        self.cond.release()
+        return metric_map
+
     def sessions(self):
         session_map = {}
         self.cond.acquire()
-        for (ip, conn) in self.children.values():
+        for (ip, conn, _) in self.children.values():
             (src_ip, src_port) = conn.src
             # We store clients as ip:port pairs.
             # This matters for below, where we must match
@@ -324,7 +379,7 @@ class ConnectionConsumer(threading.Thread):
     def drop_session(self, client, backend):
         self.cond.acquire()
         for child in self.children.keys():
-            (ip, conn) = self.children[child]
+            (ip, conn, _) = self.children[child]
             (src_ip, src_port) = conn.src
             if client == _as_client(src_ip, src_port) and backend == ip:
                 try:
@@ -348,6 +403,7 @@ class ConnectionProducer(threading.Thread):
         super(ConnectionProducer, self).__init__()
         self.daemon = True
         self.execute = True
+
         self.epoll = None
         self.queue = Queue.Queue()
         self.sockets = {}
@@ -355,6 +411,7 @@ class ConnectionProducer(threading.Thread):
         self.cond = threading.Condition()
         self.notifiers = []
         self.set()
+
         self._update_epoll()
 
         # Start the thread.
@@ -486,7 +543,6 @@ class Connection(LoadBalancerConnection):
 
         self.portmap = {}
         self.active = set()
-        self.standby = {}
 
         self.producer = ConnectionProducer()
         self.consumer = ConnectionConsumer(self.locks, self.producer)
@@ -546,68 +602,7 @@ class Connection(LoadBalancerConnection):
         self.producer.set(self.portmap.keys())
 
     def metrics(self):
-        records = {}
-
-        # Grab the active connections.
-        active_connections = netstat.connection_count()
-        forget_active = []
-        locked_ips = self.locks.list() or []
-
-        for (_, exclusive, reconnect, backends, _) in self.portmap.values():
-            for (ip, port) in backends:
-                active = active_connections.get((ip, port), 0)
-
-                # Cap at 1.0 if we are exclusive.
-                if exclusive:
-                    active = min(active, 1)
-
-                # Record the metrics.
-                records[ip] = { "active" : (1, active) }
-
-                if active and not ip in self.active:
-                    # Record this server as active.
-                    self.active.add(ip)
-
-                    # Clear the standby record.
-                    if ip in self.standby:
-                        del self.standby[ip]
-
-                elif not active and ip in self.active:
-                    # Forget that this server was active.
-                    self.active.remove(ip)
-
-                    # Check the reconnect timer.
-                    # We will remove the lock at a later time, but for
-                    # now we just put the IP on the standby list.
-                    # This is a simple state transition:
-                    #   active -> standby -> free
-                    # The middle state is optional here.
-
-                    if ip in locked_ips:
-                        if exclusive and reconnect > 0:
-                            # Add to the standby list if we are not there.
-                            self.standby[ip] = time.time() + reconnect
-                        else:
-                            forget_active.append(ip)
-
-                elif not active and ip in self.standby:
-
-                    if time.time() < self.standby[ip]:
-                        # We've still got time left to wait.
-                        continue
-                    else:
-                        # Drop it as per usual.
-                        del self.standby[ip]
-                        forget_active.append(ip)
-
-                if ip in self.standby:
-                    # Simulate an active connection.
-                    records[ip] = { "active" : (1, 1) }
-
-        for ip in forget_active:
-            self.consumer.forget(ip)
-
-        return records
+        return self.consumer.metrics()
 
     def sessions(self):
         return self.consumer.sessions()
