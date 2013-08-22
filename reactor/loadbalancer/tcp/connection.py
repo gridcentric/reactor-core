@@ -216,6 +216,10 @@ class ConnectionConsumer(threading.Thread):
                     existing = self.locks.find(connection.src[0])
                     if len(existing) > 0:
                         ip = existing[0]
+                        if ip in self.standby:
+                            # NOTE: We will have a lock representing
+                            # this connection, but is it already held.
+                            del self.standby[ip]
                 if not ip:
                     ip = self.locks.lock(ips, value=connection.src[0])
             else:
@@ -226,7 +230,7 @@ class ConnectionConsumer(threading.Thread):
                 child = connection.redirect(ip, ipmap[ip])
                 standby_time = (exclusive and reconnect)
                 if child:
-                    self.children[child] = [ip, connection, standby_time]
+                    self.children[child] = (ip, connection, standby_time)
                     return True
             return False
         finally:
@@ -240,7 +244,7 @@ class ConnectionConsumer(threading.Thread):
                 self.locks.remove(ip)
                 removed.append(ip)
         for ip in removed:
-            self.standby.remove(ip)
+            del self.standby[ip]
         return len(removed)
 
     def run(self):
