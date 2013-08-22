@@ -156,7 +156,7 @@ def main():
     opts, args = getopt.getopt(sys.argv[1:], "",
         [
             "help",
-            "api_server=",
+            "api=",
             "password=",
             "zookeeper=",
             "debug",
