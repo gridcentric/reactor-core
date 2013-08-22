@@ -12,6 +12,7 @@ from . config import Config
 from . eventlog import EventLog, Event
 from . zookeeper.client import ZookeeperClient
 from . zookeeper.connection import ZookeeperException
+from . zookeeper.cache import Cache
 from . objects.root import Reactor
 from . utils import random_key
 from . endpoint import Endpoint
@@ -150,6 +151,7 @@ class ScaleManager(Atomic):
         self._endpoints_zkobj = self.zkobj.endpoints()
         self._new_ips_zkobj = self.zkobj.new_ips()
         self._drop_ips_zkobj = self.zkobj.drop_ips()
+        self.endpoint_ips = Cache(self.zkobj.endpoint_ips())
 
         # Our configuration.
         self.config = ManagerConfig()
@@ -283,6 +285,18 @@ class ScaleManager(Atomic):
 
     @Atomic.sync
     def _endpoint_change(self, endpoints):
+        # NOTE: We play a little bit of trickery and
+        # remove endpoints from our local list (to prevent
+        # updates) before they may actually be removed from
+        # Zookeeper. So it's possible that we'll have a 
+        # spurious event fire in this case, and we'd like to
+        # avoid doing a bunch of extra work.
+        endpoints.sort()
+        current_endpoints = self._endpoints.keys()
+        current_endpoints.sort()
+        if endpoints == current_endpoints:
+            return
+
         # Clear out the ownership cache.
         self._key_to_owned = {}
 
@@ -313,7 +327,8 @@ class ScaleManager(Atomic):
                     self.zkobj.endpoints().get(endpoint_name),
                     collect=self.collect,
                     find_cloud_connection=self._find_cloud_connection,
-                    find_loadbalancer_connection=self._find_loadbalancer_connection)
+                    find_loadbalancer_connection=self._find_loadbalancer_connection,
+                    delete_hook=self._endpoint_deleted)
 
             # The endpoint will generally reload the loadbalancer
             # on startup. But we aren't tracking it yet, so it will
@@ -321,13 +336,32 @@ class ScaleManager(Atomic):
             # do another reload() to ensure that it's included.
             self._endpoints[endpoint_name].reload()
 
+        # Log the change.
         self.logging.info(
                 self.logging.ENDPOINTS_CHANGED,
                 dict(map(lambda x: (x, self._endpoints[x].key()), endpoints)))
 
+        # If we've lost endpoints, we need to make sure that
+        # we clean up the leftover endpoint IPs. This is done
+        # on regular basis, but we know it's likely out of date
+        # right at this point.
+        self.check_endpoint_ips()
+
     def endpoint_change(self, endpoints):
         self._endpoint_change(endpoints)
         self._watch_ips()
+
+    @Atomic.sync
+    def _endpoint_deleted(self, endpoint):
+        # This will remove the endpoint locally.
+        # We will do this immediately following doing
+        # the actual removing in Zookeeper, since we
+        # don't want to continue updating this endpoint.
+        new_endpoints = []
+        for (endpoint_name, local_endpoint) in self._endpoints.items():
+            if local_endpoint != endpoint:
+                new_endpoints.append(endpoint_name)
+        self._endpoint_change(new_endpoints)
 
     def update_config(self, config):
         # If the config changes, then we may no longer
@@ -505,11 +539,11 @@ class ScaleManager(Atomic):
                     break
 
             if endpoint_name:
-                # We're done with the IP.
-                self._new_ips_zkobj.remove(ip)
-
                 # Write out the set of matching endpoints.
-                self.zkobj.endpoint_ips().add(ip, endpoint_name)
+                self.endpoint_ips.add(ip, endpoint_name)
+
+            # Always remove the IP.
+            self._new_ips_zkobj.remove(ip)
 
     @Atomic.sync
     def drop_ip(self, ips):
@@ -526,20 +560,15 @@ class ScaleManager(Atomic):
                     break
 
             if endpoint_name:
-                # We're done with the IP.
-                self._drop_ips_zkobj.remove(ip)
-
                 # Remove the ip from the ip address set.
-                self.zkobj.endpoint_ips().remove(ip)
+                self.endpoint_ips.remove(ip)
 
                 # Drop it from any locks that may hold it.
                 for lock in self.locks.values():
                     lock.remove(ip)
-            else:
-                # Unknown? Just make sure it's not in new_ips.
-                self._new_ips_zkobj.remove(ip)
-                self._drop_ips_zkobj.remove(ip)
-                self.zkobj.endpoint_ips().remove(ip)
+
+            # Always remove the IP.
+            self._drop_ips_zkobj.remove(ip)
 
     @Atomic.sync
     def collect(self, endpoint, exclude=False):
@@ -699,7 +728,7 @@ class ScaleManager(Atomic):
 
     def _find_endpoint(self, ip):
         # Try looking it up.
-        endpoint_name = self.zkobj.endpoint_ips().get(ip)
+        endpoint_name = self.endpoint_ips.get(ip)
         if endpoint_name is not None:
             return endpoint_name
 
@@ -770,6 +799,22 @@ class ScaleManager(Atomic):
         self._sessions = my_sessions
 
     @Atomic.sync
+    def check_endpoint_ips(self):
+        # Ensure that there are no stale endpoint IPs.
+        endpoint_ips = self.endpoint_ips.as_map()
+        for (ip, endpoint_name) in endpoint_ips.items():
+            if not endpoint_name in self._endpoints or \
+               not ip in self._endpoints[endpoint_name].endpoint_ips():
+                self.endpoint_ips.remove(ip)
+
+        # Ensure existing endpoints are correctly represented.
+        for (endpoint_name, endpoint) in self._endpoints.items():
+            ips = endpoint.endpoint_ips()
+            for ip in ips:
+                if not endpoint_ips.get(ip) == endpoint_name:
+                    self.endpoint_ips.add(ip, endpoint_name)
+
+    @Atomic.sync
     def update(self):
         # Update the list of sessions.
         self.update_sessions()
@@ -829,6 +874,7 @@ class ScaleManager(Atomic):
                 # Perform continuous health checks.
                 while self._running:
                     start_time = time.time()
+                    self.check_endpoint_ips()
                     self.update()
 
                     # We only sleep for the part of the interval that

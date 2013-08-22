@@ -46,6 +46,9 @@ DECOMMISSIONED_INSTANCES = "decommissioned"
 # The current sessions.
 SESSIONS = "sessions"
 
+# Whether this endpoint is being deleted.
+DELETING = "deleting"
+
 class Endpoints(DatalessObject):
 
     def get(self, name):
@@ -55,7 +58,7 @@ class Endpoints(DatalessObject):
         return self._list_children(**kwargs)
 
     def unmanage(self, name):
-        self._get_child(name)._delete()
+        self.get(name).delete()
 
 class State(RawObject):
 
@@ -93,9 +96,18 @@ class Endpoint(ConfigObject):
     def __init__(self, *args, **kwargs):
         super(Endpoint, self).__init__(*args, **kwargs)
         self._state = self._get_child(STATE, clazz=State)
+        self._deleting = self._get_child(DELETING, clazz=JSONObject)
+
+    def is_deleting(self, **kwargs):
+        return self._deleting._get_data(**kwargs)
+
+    def delete(self):
+        self._deleting._set_data(True)
+        self._delete()
 
     def unwatch(self):
         self._state.unwatch()
+        self._deleting.unwatch()
         super(Endpoint, self).unwatch()
 
     def get_config(self, **kwargs):
