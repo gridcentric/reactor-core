@@ -355,16 +355,26 @@ class ConnectionConsumer(threading.Thread):
     def metrics(self):
         metric_map = {}
         self.cond.acquire()
+
+        # Set the active metric for all known backends to zero.
+        for (_, _, _, backends, _) in self.portmap.values():
+            for (ip, port) in backends:
+                metric_map[ip] = { "active" : (1, 0) }
+
+        # Add 1 for every active connection we're tracking.
         ips = [ip for (ip, _, _) in self.children.values()]
         ips.extend(self.standby.keys())
         for ip in ips:
             if not ip in metric_map:
                 # Set the current active count to one.
+                # NOTE: This must be an ip that is no longer
+                # in the portmap, but we can still report it.
                 metric_map[ip] = { "active" : (1, 1) }
             else:
                 # Add one to our current active count.
                 cur_count = metric_map[ip]["active"][1]
                 metric_map[ip]["active"] = (1, cur_count+1)
+
         self.cond.release()
         return metric_map
 
