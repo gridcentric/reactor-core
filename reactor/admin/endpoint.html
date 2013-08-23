@@ -84,6 +84,23 @@
     </table>
 </div>
 
+<h3>Active Servers</h3>
+<div id="servers-div" style="max-height: 200px; position: relative; overflow: auto;">
+    <table id="servers-list" class="table table-bordered">
+        <thead>
+            <tr>
+                <th>IP</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+</div>
+<div id="servers-templates" style="display:none">
+    <button class="btn btn-small btn-danger drop-ip">Drop</button>
+</div>
+
 <h3>Active Connections</h3>
 <div id="sessions-div" style="max-height: 200px; position: relative; overflow: auto;">
     <table id="session-list" class="table table-bordered">
@@ -100,11 +117,6 @@
 </div>
 <div id="sessions-templates" style="display:none">
     <button class="btn btn-small btn-danger drop-session">Drop</button>
-</div>
-
-<h3>Servers</h3>
-<div style="min-height: 200px; position: relative;">
-<div id="servers" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"></div>
 </div>
 
 <h3>Live Metrics</h3>
@@ -192,6 +204,27 @@
         });
     }
 
+    function addServerRow(ip) {
+        var tr = $('<tr></tr>').attr({ class : "servers-list-row" });
+        var td = $('<td></td>');
+        td.clone().text(ip).appendTo(tr);
+        var button = $('#servers-templates .drop-ip').clone();
+        button.click(function(e) {
+            e.preventDefault();
+            $.ajax({
+                url: "/v1.1/unregister/" + ip,
+                type: 'POST',
+                dataType: 'json',
+                complete: function() {
+                    button.attr("disabled", true);
+                },
+                processData: false
+            });
+        });
+        td.clone().append(button).appendTo(tr);
+        $('#servers-list tr:last').after(tr);
+    }
+
     function addSessionRow(client, backend) {
         var tr = $('<tr></tr>').attr({ class : "session-list-row" });
         var td = $('<td></td>');
@@ -214,6 +247,28 @@
         $('#session-list tr:last').after(tr);
     }
 
+    // The server count (for metrics)
+    var SERVERS = [null];
+    var SERVERS_METRIC_NAME = "server count";
+
+    function loadServers() {
+        $.ajax({
+            url: "/v1.1/endpoints/${object}/ips",
+            type: 'GET',
+            dataType: 'json',
+            success: function(result) {
+                SERVERS[0] = result['ip_addresses'].length;
+                $('.servers-list-row').remove();
+                $.each(result['ip_addresses'], function(idx, ip) {
+                    addServerRow(ip);
+                });
+                setTimeout(function() {
+                    loadServers();
+                }, UPDATE_PERIOD);
+            },
+        });
+    }
+
     function loadSessions() {
         $.ajax({
             url: "/v1.1/endpoints/${object}/sessions",
@@ -226,7 +281,7 @@
                 });
                 setTimeout(function() {
                     loadSessions();
-                }, UPDATE_PERIOD * 10);
+                }, UPDATE_PERIOD);
             },
         });
     }
@@ -291,26 +346,6 @@
     // Number of timeslices to graph.
     var NUM_TIMESLICES = 60;
 
-    function updateServers(result, timestamp, data, metrics) {
-        if( !metrics["count"] ) {
-            metrics["count"] = { "label" : "count", "data" : [] };
-            data.push(metrics["count"]);
-            // Initialize data
-            for ( var i = 0; i < NUM_TIMESLICES; i++ ) {
-                ts = timestamp - ((NUM_TIMESLICES - i) * UPDATE_PERIOD);
-                metrics["count"]["data"].push([ts , null]);
-            }
-        }
-        $("#ips").html("");
-        $.each(result["ip_addresses"], function(index, value) {
-            $("#ips").append("<li><a href='//" + value + "/'>" + value + "</a></li>");
-        });
-        metrics["count"]["data"].push([timestamp, result["ip_addresses"].length]);
-        while( metrics["count"]["data"].length > NUM_TIMESLICES ) {
-            metrics["count"]["data"].shift();
-        }
-    }
-
     // Tracked metrics
     var METRICS = {};
     var NUM_METRICS = 0;
@@ -345,10 +380,15 @@
         // Generate a timestamp
         var timestamp = new Date().getTime();
 
+        // Add the server to our metrics
+        result[SERVERS_METRIC_NAME] = SERVERS[0];
+
         // Loop through point-in-time metrics
-        $.each(result, function(metric, value) {
+        $.each(result, function(metric, value, is_servers) {
+
             // If we haven't seen this metric,
             if (!(metric in METRICS)) {
+
                 // Create a div for the graph and append it
                 var outerDiv = $('#graph-templates .metric-graph-template').clone();
                 outerDiv.find(".metric-graph-inner").attr("id", "livemetrics_" + metric);
@@ -368,6 +408,7 @@
 
         // For each tracked metric,
         $.each(METRICS, function(metric, metric_data) {
+
             // If we didn't receive an update,
             if (!(metric in result)) {
                 // Push a null value
@@ -392,19 +433,6 @@
         });
     }
 
-    function setupMetricsGraphs() {
-        // Start polling metrics
-        pollMetrics();
-    }
-
-    function setupGraphs() {
-        // Set up the servers graph
-        setupGraph($("#servers"), "endpoints/${object}/ips", updateServers,
-               UPDATE_PERIOD);
-        // Get the metrics available for graphing
-        setupMetricsGraphs();
-    }
-
     // Set everything up.
     loadConfig();
     loadState();
@@ -415,8 +443,10 @@
     });
     loadDelete();
     loadLog('/v1.1/endpoints/${object}/log', 'endpoint-log-div', 'endpoint-log');
+    loadServers();
     loadSessions();
-    setupGraphs();
+    updateMetrics({});
+    pollMetrics();
 </script>
 
 <%include file="/footer.html"/>
