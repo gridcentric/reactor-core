@@ -19,42 +19,23 @@ function isInDOM(elem) {
 }
 
 function updateGraph(elem, data) {
-
     if( elem.plot ) {
         elem.plot.setData(data);
         elem.plot.setupGrid();
         elem.plot.draw();
-
-    } else if( elem.is(":visible") ) {
+    } else if( isInDOM(elem) && elem.is(":visible") ) {
         elem.plot = $.plot(elem, data, options);
+    } else {
+        // Retry again in a second.
+        // It's possible that this div has not made
+        // it into the DOM or is not visible yet.
+        setTimeout(function() {
+            updateGraph(elem, data);
+        }, 1.0);
     }
-
-    return isInDOM(elem);
 }
 
-function autoUpdateGraph(elem, path, data, metrics, callback, period) {
-    function onData(result) {
-        var timestamp = new Date().getTime();
-
-        // Hit the callback.
-        callback(result, timestamp, data, metrics);
-
-        // Plot if the element is on screen.
-        if (updateGraph(elem, data)) {
-            setTimeout(function() {
-                autoUpdateGraph(elem, path, data, metrics, callback, period);
-            }, period);
-        }
-    }
-    $.ajax({
-        url: "/v1.1/" + path,
-        type: 'GET',
-        dataType: 'json',
-        success: onData,
-    });
-}
-
-function setupGraph(elem, path, callback, period) {
+function setupGraph(elem) {
     var data = [];
 
     // Do an initial plot on screen.
@@ -62,8 +43,4 @@ function setupGraph(elem, path, callback, period) {
 
     // Replot when a resize occurs.
     elem.resize(function() { elem.plot = false; updateGraph(elem, data); });
-
-    // Start the update cycle.
-    if (path !== null)
-        autoUpdateGraph(elem, path, data, {}, callback, period);
 }

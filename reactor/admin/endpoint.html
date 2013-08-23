@@ -4,6 +4,17 @@
 
 <h3>${object}</h3>
 
+<ul class="nav nav-tabs" id="tabs">
+    <li><a href="#config" data-toggle="tab">Config</a></li>
+    <li><a href="#log" data-toggle="tab">Log</a></li>
+    <li><a href="#servers" data-toggle="tab">Servers</a></li>
+    <li><a href="#sessions" data-toggle="tab">Sessions</a></li>
+    <li><a href="#metrics" data-toggle="tab">Metrics</a></li>
+</ul>
+
+<div class="tab-content">
+
+<div class="tab-pane active" id="config">
 <form class="form-horizontal">
 
 <div class="control-group">
@@ -17,17 +28,6 @@
                 <li><a id="start" href="#">Start</a></li>
                 <li><a id="stop" href="#">Stop</a></li>
                 <li><a id="pause" href="#">Pause</a></li>
-            </ul>
-        </div>
-    </div>
-</div>
-<div class="control-group">
-    <div class="controls">
-        <div class="dropdown">
-            <a class="btn dropdown-toggle" data-toggle="dropdown">
-                IPs&nbsp;<span class="caret"></span>
-            </a>
-            <ul id="ips" class="dropdown-menu" role="menu" aria-labelledby="dLabel">
             </ul>
         </div>
     </div>
@@ -72,9 +72,9 @@
 </div>
 
 </form>
+</div>
 
-<h3>Log</h3>
-<div id="endpoint-log-div" style="height: 200px; position: relative; overflow: auto;">
+<div class="tab-pane" id="log">
     <table id="endpoint-log" class="table table-bordered">
         <thead>
             <tr><th>Time</th><th>Severity</th><th>Event</th></tr>
@@ -84,8 +84,7 @@
     </table>
 </div>
 
-<h3>Active Servers</h3>
-<div id="servers-div" style="max-height: 200px; position: relative; overflow: auto;">
+<div class="tab-pane" id="servers">
     <table id="servers-list" class="table table-bordered">
         <thead>
             <tr>
@@ -101,8 +100,7 @@
     <button class="btn btn-small btn-danger drop-ip">Drop</button>
 </div>
 
-<h3>Active Connections</h3>
-<div id="sessions-div" style="max-height: 200px; position: relative; overflow: auto;">
+<div class="tab-pane" id="sessions">
     <table id="session-list" class="table table-bordered">
         <thead>
             <tr>
@@ -119,14 +117,16 @@
     <button class="btn btn-small btn-danger drop-session">Drop</button>
 </div>
 
-<h3>Live Metrics</h3>
-<div id="livemetrics"></div>
-
+<div class="tab-pane" id="metrics" style="overflow:hidden">
+</div>
 <div id="graph-templates" style="display:none">
     <div class="metric-graph-template" style="min-height: 200px; position: relative;">
         <div class="metric-graph-inner" style="position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px;"></div>
     </div>
 </div>
+
+</div> <!-- tab content -->
+</div> <!-- span9 -->
 
 <script src="/assets/conf.js"></script>
 <script src="/assets/log.js"></script>
@@ -248,8 +248,14 @@
     }
 
     // The server count (for metrics)
-    var SERVERS = [null];
-    var SERVERS_METRIC_NAME = "server count";
+    // This is referenced below by the metric code,
+    // and basically serves a single 'pseudo-metric'.
+    // This was done this way to ensure that the server
+    // graph is updated at the same instant as all the
+    // other graphs, even those data may be fetched at
+    // a slightly different moment.
+    var NUM_SERVERS = null;
+    var SERVERS_METRIC_NAME = "server-count";
 
     function loadServers() {
         $.ajax({
@@ -257,7 +263,7 @@
             type: 'GET',
             dataType: 'json',
             success: function(result) {
-                SERVERS[0] = result['ip_addresses'].length;
+                NUM_SERVERS = result['ip_addresses'].length;
                 $('.servers-list-row').remove();
                 $.each(result['ip_addresses'], function(idx, ip) {
                     addServerRow(ip);
@@ -381,7 +387,7 @@
         var timestamp = new Date().getTime();
 
         // Add the server to our metrics
-        result[SERVERS_METRIC_NAME] = SERVERS[0];
+        result[SERVERS_METRIC_NAME] = NUM_SERVERS;
 
         // Loop through point-in-time metrics
         $.each(result, function(metric, value, is_servers) {
@@ -392,10 +398,10 @@
                 // Create a div for the graph and append it
                 var outerDiv = $('#graph-templates .metric-graph-template').clone();
                 outerDiv.find(".metric-graph-inner").attr("id", "livemetrics_" + metric);
-                $("#livemetrics").append(outerDiv);
+                $("#metrics").append(outerDiv);
 
                 // Set up the graph for it
-                setupGraph($("#livemetrics_" + metric), null, null, null);
+                setupGraph($("#livemetrics_" + metric));
 
                 // Add to map
                 METRICS[metric] = initMetricData(metric, timestamp, NUM_METRICS + 1);
@@ -442,11 +448,11 @@
         "#pause" : { "action" : "PAUSE" }
     });
     loadDelete();
-    loadLog('/v1.1/endpoints/${object}/log', 'endpoint-log-div', 'endpoint-log');
+    loadLog('/v1.1/endpoints/${object}/log', 'log', 'endpoint-log');
     loadServers();
     loadSessions();
     updateMetrics({});
-    pollMetrics();
+    $('#tabs a:first').tab('show');
 </script>
 
 <%include file="/footer.html"/>
