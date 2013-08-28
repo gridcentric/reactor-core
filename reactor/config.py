@@ -260,6 +260,23 @@ class Config(object):
                           alternates=alternates)
 
     @staticmethod
+    def text(label=None,
+             default='',
+             order=1,
+             validate=None,
+             description="No description.",
+             alternates=None):
+        return ConfigSpec(type="text",
+                          label=label,
+                          default=default,
+                          options=None,
+                          normalize=lambda s: s and str(s) or None,
+                          validate=validate,
+                          order=order,
+                          description=description,
+                          alternates=alternates)
+
+    @staticmethod
     def boolean(label=None,
                 default=False,
                 order=1,

@@ -157,10 +157,10 @@ class NginxEndpointConfig(Config):
     ssl = Config.boolean(label="Use SSL", default=False,
         description="Configures nginx to handle SSL.")
 
-    ssl_certificate = Config.string(label="SSL Certificate", default=None,
+    ssl_certificate = Config.text(label="SSL Certificate", default=None,
         description="An SSL certification in PEM format.")
 
-    ssl_key = Config.string(label="SSL Key", default=None,
+    ssl_key = Config.text(label="SSL Key", default=None,
         description="An SSL key (not password protected).")
 
     redirect = Config.string(label="Redirect", default=None,

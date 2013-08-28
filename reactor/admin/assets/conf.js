@@ -679,9 +679,12 @@ function generateSingleConfig(root, config_name, config)
         config["skip-init"]["value"] = true;
         break;
     case "string":
-        input_elt = $("#conf-input-text").clone().appendTo(slot);
+        input_elt = $("#conf-input-string").clone().appendTo(slot);
         if (contains(config_name.toLowerCase(), "password"))
             input_elt.attr("type", "password");
+        break;
+    case "text":
+        input_elt = $("#conf-input-text").clone().appendTo(slot);
         break;
     case "select":
         span_elt = $("#conf-input-select").clone().appendTo(slot);
