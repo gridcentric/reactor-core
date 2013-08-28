@@ -14,7 +14,7 @@ function addLogRow(table, ent) {
             var sev = "<span class=\"label\">" + ent[1] + "</span>";
     }
     var tr = "<tr><td>" + ts + "</td><td>" + sev + "</td><td>" + ent[2] + "</td></tr>";
-    $('#' + table + ' tr:last').after(tr);
+    $('#' + table + ' tr:first').after(tr);
 }
 
 function loadLog(url, div, table, since) {
@@ -31,7 +31,6 @@ function loadLog(url, div, table, since) {
                     addLogRow(table, ent);
                 });
                 since = log[log.length-1][0];
-                $('#' + div).scrollTop($('#' + div)[0].scrollHeight);
             }
             setTimeout(function() {
                 loadLog(url, div, table, since);
