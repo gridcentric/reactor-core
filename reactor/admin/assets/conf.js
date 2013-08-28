@@ -1,16 +1,18 @@
-function beginMakeConfig(container_id, name_map, spec_path, save_path) {
+function beginMakeConfig(container_id, name_map, spec_path, save_path, template_info) {
     var context = new Object();
     context["container_id"] = container_id;
     context["name_map"] = name_map;
     context["spec_path"] = spec_path;
     context["save_path"] = save_path;
 
-    // Begin ajax request to fetch spec from backend and populate the config
-    // form.
-    fetchConfig(context);
+    // Begin ajax request to fetch spec from backend and populate the
+    // config form. Note that template_info is an object, and it has
+    // multiple attributes that control how templates are interpreted.
+    // See fetchValues() for details of how this works.
+    fetchConfig(context, template_info);
 }
 
-function fetchConfig(context) {
+function fetchConfig(context, template_info) {
     $.ajax({
         url: context["spec_path"],
         type: "GET",
@@ -26,20 +28,54 @@ function fetchConfig(context) {
             $("#prompt-modal").modal("show");
         },
         success: function(result) {
-            fetchValues(context, result);
+            fetchValues(context, result, template_info);
         }
     });
 }
 
-function getConfigTemplate(config) {
-    if ("endpoint" in config && "template" in config["endpoint"]) {
-        return config.endpoint.template;
+function getConfigTemplate(config, section) {
+    if (section in config && "template" in config[section]) {
+        return config[section]["template"];
     }
 
     return null;
 }
 
-function fetchValues(context, spec) {
+function setConfigTemplate(config, section, template_name) {
+    if (!(section in config)) {
+        config[section] = {};
+    }
+    config[section]["template"] = template_name;
+}
+
+function reloadConfig(context, spec, values, template_info) {
+    var template_name = null;
+
+    if (template_info) {
+        template_name = getConfigTemplate(values, template_info.section);
+
+        var set = function(template_name) {
+            // Simply rebuild the entire config.
+            // Note that using the set_fn below, it's possible
+            // that the underlying configuration has been changed
+            // (including the template value).
+            values = readConfig(context);
+            setConfigTemplate(values, template_info.section, template_name);
+            reloadConfig(context, spec, values, template_info);
+        }
+        makeTemplateSelect(template_info, template_name || "", set);
+    }
+
+    if (template_name &&
+        template_name in template_info.available) {
+        makeTemplateConfig(context, spec, values,
+                           template_info.available[template_name]);
+    } else {
+        makeCustomConfig(context, spec, values);
+    }
+}
+
+function fetchValues(context, spec, template_info) {
     $.ajax({
         url: context["save_path"],
         type: "GET",
@@ -47,34 +83,33 @@ function fetchValues(context, spec) {
         error: function(req, error, htmlError) {
         },
         success: function(result) {
-            template_name = getConfigTemplate(result);
-            if (template_name &&
-                template_name in ENDPOINT_TEMPLATES) {
-                makeTemplateConfig(context, spec, result,
-                    ENDPOINT_TEMPLATES[template_name]);
-            } else {
-                makeCustomConfig(context, spec, result);
-            }
+            reloadConfig(context, spec, result, template_info);
         }
     });
 }
 
 // Make a config without a template.
 function makeCustomConfig(context, spec, values) {
-    mergeConfig(context, spec, values);
-    makeConfig(context);
+    this_spec = $.extend(true, {}, spec);
+
+    mergeConfig(context, this_spec, values);
+    makeConfig(context, context.name_map);
 }
 
 // Make a config with a template.
 function makeTemplateConfig(context, spec, values, template) {
-    spec.template = template;
+    this_spec = $.extend(true, {}, spec);
+    this_spec.template = template;
+
+    name_map = $.extend(true, {}, context.name_map);
     $.each(template.components, function(index, section) {
         if (section.name && section.description) {
-            context.name_map[section.name] = section.description;
+            name_map[section.name] = section.description;
         }
     });
-    mergeConfig(context, spec, values);
-    makeConfig(context);
+
+    mergeConfig(context, this_spec, values);
+    makeConfig(context, name_map);
 }
 
 function templateItemToConfig(item) {
@@ -111,8 +146,6 @@ function mergeConfig(context, spec, values) {
             $.each(params, function(key, value) {
                 if (key in spec[section])
                     spec[section][key]["value"] = value;
-                else
-                    console.error("Key '" + key + "' is present in the current config, but not in the spec.");
             });
         } else {
             // This is benign, some sections aren't configurable.
@@ -122,7 +155,26 @@ function mergeConfig(context, spec, values) {
     context["spec"] = spec;
 }
 
-function makeConfig(context) {
+function makeTemplateSelect(template_info, template_name, set) {
+    // Clear all options.
+    template_info.select.children().remove();
+
+    // Build the list of all templates.
+    template_info.select.append("<option value=''>Custom</option>");
+    $.each(template_info.available, function(key, value) {
+        template_info.select.append(
+            $("<option value='" + key + "'>" + value["description"] + "</option>"));
+    });
+    template_info.select.val(template_name);
+
+    // Reload the template on change.
+    template_info.select.off('change');
+    template_info.select.on('change', function() {
+        set(template_info.select.val());
+    });
+}
+
+function makeConfig(context, name_map) {
     var spec = context["spec"];
 
     // We internally work with jquery objects instead of DOM elements.
@@ -195,7 +247,12 @@ function makeConfig(context) {
             return section.name;
         });
         context["toplevel_folds"] = constructScaffolding(context,
-                                        container_elt, sections, false, false);
+                                                         name_map,
+                                                         container_elt,
+                                                         sections,
+                                                         false,
+                                                         false);
+
         $.each(spec.template.components, function(index, section) {
             if (section.name != null) {
                 // Construct the section.
@@ -214,6 +271,7 @@ function makeConfig(context) {
     } else {
         // Build toplevel scaffolding.
         context["toplevel_folds"] = constructScaffolding(context,
+                                                         name_map,
                                                          container_elt,
                                                          context["toplevel_sections"],
                                                          false,
@@ -224,6 +282,7 @@ function makeConfig(context) {
         $.each(context["sub_specs"], function(sub_spec_name, sub_spec) {
             context["nested_folds"][sub_spec_name] =
                 constructScaffolding(context,
+                                     name_map,
                                      context["toplevel_folds"][sub_spec_name],
                                      Object.keys(sub_spec),
                                      false,
@@ -260,7 +319,7 @@ function makeConfig(context) {
 
     enableButtons(context);
 
-    // Enable custom CSS that needs to be run post-construction
+    // Enable custom CSS that needs to be run post-construction.
     enableChosen();
 
     return context;
@@ -526,6 +585,7 @@ function postConfig(context, post_url) {
 }
 
 function enableButtons(context) {
+    disableButtons(context);
     $("#conf-buttons").find("a").attr("class", "btn btn-primary");
     $("#conf-buttons").find("#conf-save-button").on("click", context["save_task"]);
     $("#conf-buttons").find("#conf-reset-button").on("click", context["reset_task"]);
@@ -548,7 +608,7 @@ function updatePromptLabel(context, topic, message, type) {
     return label;
 }
 
-function constructScaffolding(context, root, sections, exclusive, open) {
+function constructScaffolding(context, name_map, root, sections, exclusive, open) {
     var folds = new Object();
     var top = $("#conf-fold-template").clone()
         .attr("id", "fold-toplevel-" + root.attr("id")).appendTo(root);
@@ -689,6 +749,7 @@ function generateSingleConfig(root, config_name, config)
     case "select":
         span_elt = $("#conf-input-select").clone().appendTo(slot);
         input_elt = span_elt.find("select");
+        input_elt.addClass("chzn-select");
         $.each(config["options"], function(i, item) {
             $('<option>', {
                 text: item[0], value: item[1]
@@ -703,6 +764,7 @@ function generateSingleConfig(root, config_name, config)
     case "multiselect":
         span_elt = $("#conf-input-multiselect").clone().appendTo(slot);
         input_elt = span_elt.find("select");
+        input_elt.addClass("chzn-select");
         if (typeof config["value"] == "string") {
             config["value"] = config["value"].split(",")
         }

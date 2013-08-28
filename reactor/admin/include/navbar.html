@@ -25,8 +25,9 @@
 <div class="input-append">
 <input id="endpointname" class="input-small" placeholder="New endpoint" type="text">
   <div class="btn-group">
-    <button class="btn dropdown-toggle" data-toggle="dropdown" required=" ">
-          Create<span class="caret"></span></button>
+    <button id="endpoint-create-name" class="btn dropdown-toggle" data-toggle="dropdown">
+        Create<span class="caret"></span></button>
+    &nbsp;
     <ul id="endpoint-create-dropdown" class="dropdown-menu">
       <li><a id="endpointcreate" typehref="#">Custom endpoint</a></li>
     </ul>
@@ -96,9 +97,9 @@
         templates.sort().reverse();
         $.each(templates, function(index, key) {
             template = ENDPOINT_TEMPLATES[key];
-            $("#endpoint-create-dropdown").prepend(
+            $("#endpoint-create-dropdown").append(
                 '<li><a id="endpoint-template-' + key +
-                '" typehref="#">New ' + template.description + ' endpoint</a></li>');
+                '" typehref="#">' + template.description + ' endpoint</a></li>');
             $("#endpoint-template-" + key).click(function (e) {
                 e.preventDefault();
                 var name = $("#endpointname").val();

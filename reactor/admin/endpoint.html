@@ -40,6 +40,14 @@
     </div>
 </div>
 
+<div class="control-group">
+    <label class="control-label">Template</label>
+    <div class="controls">
+        <select id="endpoint-template">
+        </select>
+    </div>
+</div>
+
 <!-- Slot for dynamically generated configuration. -->
 <div class="control-group">
   <label class="control-label">Configuration</label>
@@ -140,7 +148,10 @@
         beginMakeConfig("endpoint-conf-container",
                         {"loadbalancer": "Load Balancer"},
                         "/endpoint",
-                        "/v1.1/endpoints/${object}");
+                        "/v1.1/endpoints/${object}",
+                        { "section": "endpoint",
+                          "available": ENDPOINT_TEMPLATES,
+                          "select" : $("#endpoint-template") });
     }
 
     function loadState() {

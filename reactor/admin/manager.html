@@ -71,6 +71,9 @@
 <script src="/assets/log.js"></script>
 <script type="text/javascript">
 
+    // Graph/log update period, in ms.
+    var UPDATE_PERIOD = 10000;
+
     // Dynamically construct config UI based on spec we get back from the server.
     var context = beginMakeConfig("manager-conf-container",
                                   {"loadbalancer": "Load Balancer"},
