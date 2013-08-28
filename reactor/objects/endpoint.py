@@ -43,6 +43,9 @@ MARKED_INSTANCES = "marked_ip"
 # The decommissioned instances.
 DECOMMISSIONED_INSTANCES = "decommissioned"
 
+# The errored instances.
+ERRORED_INSTANCES = "errored"
+
 # The current sessions.
 SESSIONS = "sessions"
 
@@ -133,6 +136,9 @@ class Endpoint(ConfigObject):
 
     def decommissioned_instances(self):
         return self._get_child(DECOMMISSIONED_INSTANCES, clazz=Instances)
+
+    def errored_instances(self):
+        return self._get_child(ERRORED_INSTANCES, clazz=Instances)
 
     def marked_instances(self):
         return self._get_child(MARKED_INSTANCES, clazz=Instances)

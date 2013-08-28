@@ -45,11 +45,23 @@ class EndpointConfig(Config):
         options=loadbalancer_options(),
         description="The loadbalancer for this endpoint.")
 
-    marks = Config.integer(label="Maximum Failed Health Checks",
+    error_marks = Config.integer(label="Maximum Errors",
+        default=1, order=2,
+        validate=lambda self: self.error_marks >= 0 or \
+            Config.error("Errors must be non-negative."),
+        description="Maximum error count for active VMs.")
+
+    unregistered_marks = Config.integer(label="Unregistered Marks",
         default=36, order=2,
-        validate=lambda self: self.marks > 0 or \
+        validate=lambda self: self.unregistered_marks > 0 or \
             Config.error("Marks must be positive."),
-        description="Timeout for unregistered and decomissioned VMs.")
+        description="Timeout for unregistered VMs.")
+
+    decommissioned_marks = Config.integer(label="Decommissioned Marks",
+        default=18, order=2,
+        validate=lambda self: self.decommissioned_marks > 0 or \
+            Config.error("Marks must be positive."),
+        description="Timeout for decomissioned VMs.")
 
     auth_hash = Config.string(label="Auth Hash Token", default=None, order=3,
         description="The authentication token for this endpoint.")
@@ -161,6 +173,12 @@ class ScalingConfig(Config):
     url = Config.string(label="Metrics URL", order=3,
         description="The source url for metrics.")
 
+def _as_ip(ips):
+    if isinstance(ips, list):
+        return len(ips) > 0 and ips[0] or "unknown"
+    else:
+        return ips
+
 class EndpointLog(EventLog):
 
     # The log size (# of entries).
@@ -180,21 +198,23 @@ class EndpointLog(EventLog):
     CONFIG_UPDATED = Event(
         lambda args: "Configuration reloaded")
     RECOMMISSION_INSTANCE = Event(
-        lambda args: "Recommissioning formerly decommissioned instance")
-    DECOMMISION_INSTANCE = Event(
-        lambda args: "Decommissioning instance")
+        lambda args: "Recommissioning instance with IP %s" % _as_ip(args[0]))
+    DECOMMISSION_INSTANCE = Event(
+        lambda args: "Decommissioning instance with IP %s" % _as_ip(args[0]))
     LAUNCH_INSTANCE = Event(
         lambda args: "Launching instance")
     LAUNCH_FAILURE = Event(
         lambda args: "Failure launching instance")
     DELETE_INSTANCE = Event(
-        lambda args: "Deleting instance")
+        lambda args: "Deleting instance with IP %s" % _as_ip(args[0]))
     DELETE_FAILURE = Event(
-        lambda args: "Failure deleting instance")
+        lambda args: "Failure deleting instance with IP %s" % _as_ip(args[0]))
     CONFIRM_IP = Event(
-        lambda args: "Confirmed instance with IP %s" % args[0])
+        lambda args: "Confirmed instance with IP %s" % _as_ip(args[0]))
     DROP_IP = Event(
-        lambda args: "Dropped instance with IP %s" % args[0])
+        lambda args: "Dropped instance with IP %s" % _as_ip(args[0]))
+    ERROR_IP = Event(
+        lambda args: "Errors on instance with IP %s" % _as_ip(args[0]))
     UPDATE_ERROR = Event(
         lambda args: "Error updating endpoint: %s" % args[0])
     RELOADED = Event(
@@ -254,6 +274,11 @@ class Endpoint(Atomic):
         # NOTE: When we decommission an instance, we remove it from the set of
         # known instances above. The instance name information is persisted here.
         self.decommissioned = Cache(self.zkobj.decommissioned_instances())
+
+        # Errored instances map to the instance name (as instances above).
+        # This has the same semantics as decommissioned, except they may not be
+        # recommissioned (because they were removed from the pool due to errors).
+        self.errored = Cache(self.zkobj.errored_instances())
 
         # Start watching the configuration.
         self.update_config(self.zkobj.get_config(watch=self.update_config))
@@ -439,7 +464,7 @@ class Endpoint(Atomic):
         Launch new instances, decommission instances, etc.
         """
         # Look only at the current set of instances.
-        instances = self._filter_instances(instances, decommissioned=False)
+        instances = self._filter_instances(instances, errored=False, decommissioned=False)
         num_instances = len(instances)
         ramp_limit = self.scaling.ramp_limit
 
@@ -486,8 +511,7 @@ class Endpoint(Atomic):
 
             # Then, launch new instances.
             while num_instances < target and action_count < ramp_limit:
-                self._launch_instance(
-                    "bringing instance total up to target %s" % target)
+                self._launch_instance()
                 num_instances += 1
                 action_count += 1
 
@@ -500,8 +524,7 @@ class Endpoint(Atomic):
 
             # Take all the instances that we can.
             to_do = min(len(candidates), ramp_limit, num_instances - target)
-            self._decommission_instances(candidates[:to_do],
-                "bringing instance total down to target %s" % target)
+            self._decommission_instances(candidates[:to_do])
 
     def session_opened(self, client, backend):
         self.zkobj.sessions().opened(client, backend)
@@ -596,9 +619,10 @@ class Endpoint(Atomic):
         while num_instances > 0 and len(decommissioned) > 0:
             # Grab the old decomission data.
             instance_id = decommissioned.pop()
+            ips = self.instance_ips.get(instance_id)
 
             # Log a message.
-            self.logging.info(self.logging.RECOMMISSION_INSTANCE)
+            self.logging.info(self.logging.RECOMMISSION_INSTANCE, ips)
 
             # Drop old decommission state.
             # Here we readd this instance to our regular instances.
@@ -616,42 +640,45 @@ class Endpoint(Atomic):
 
         return recommissioned
 
-    def _decommission_instances(self, instance_ids, reason):
+    def _decommission_instances(self, instance_ids, errored=False):
         """
-        Drop the instances from the system. Note: a reason
-        should be given for why the instances are being dropped.
+        Drop the instances from the system.
         """
         # It might be good to wait a little bit for the servers
         # to clear out any requests they are currently serving.
         for instance_id in instance_ids:
-            # Log a message.
-            self.logging.info(self.logging.DECOMMISION_INSTANCE)
-
             # Write the instance id to decommission.
             # (NOTE: Our update hooks will take care of the rest).
             name = self.instances.get(instance_id)
+            ips = self.instance_ips.get(instance_id)
+
+            # Log a message.
+            self.logging.info(self.logging.DECOMMISSION_INSTANCE, ips)
+
             self.instances.remove(instance_id)
-            self.decommissioned.add(instance_id, name)
+            if errored:
+                self.errored.add(instance_id, name)
+            else:
+                self.decommissioned.add(instance_id, name)
 
             # Unconfirm the address.
             # NOTE: We don't clear out the IP metrics here.
             # If we end up recommissioning this instance, we want
             # the same set of IP metrics to be effect, so they will
             # only be cleared out when the actual instance is deleted.
-            ips = self.instance_ips.get(instance_id)
             for ip in ips:
                 self.zkobj.confirmed_ips().remove(ip)
 
-    def _delete_instance(self, instance_id, cloud=True, decommissioned=False):
-        # Delete the instance from the cloud.
-        self.logging.info(self.logging.DELETE_INSTANCE)
-
+    def _delete_instance(self, instance_id, cloud=True, errored=False, decommissioned=False):
         # NOTE: Because we're going to lose this instance from
         # the cloud, we do our best to populate the caches here.
         # The only real state that we rely on coming from the cloud
         # is the list of IP addresses, and if we've just *restarted*
         # reactor, it's possible that it hasn't been populate yet.
-        self.instance_ips.get(instance_id)
+        ips = self.instance_ips.get(instance_id)
+
+        # Log our message.
+        self.logging.info(self.logging.DELETE_INSTANCE, ips)
 
         if cloud:
             try:
@@ -661,14 +688,16 @@ class Endpoint(Atomic):
                 # Not much we can do? Log and return.
                 # Hopefully at some point the user will
                 # intervene and remove the instance.
-                logging.error(self.logging.DELETE_FAILURE)
+                self.logging.error(self.logging.DELETE_FAILURE, ips)
                 return
 
         # Cleanup the leftover state from the instance.
-        self._clean_instance(instance_id, decommissioned=decommissioned)
+        self._clean_instance(instance_id, errored=errored, decommissioned=decommissioned)
 
-    def _clean_instance(self, instance_id, decommissioned=False):
-        if decommissioned:
+    def _clean_instance(self, instance_id, errored=False, decommissioned=False):
+        if errored:
+            name = self.errored.get(instance_id)
+        elif decommissioned:
             name = self.decommissioned.get(instance_id)
         else:
             name = self.instances.get(instance_id)
@@ -688,12 +717,14 @@ class Endpoint(Atomic):
             self.zkobj.ip_metrics().remove(ip)
 
         # Drop the basic instance information.
-        if decommissioned:
+        if errored:
+            self.errored.remove(instance_id)
+        elif decommissioned:
             self.decommissioned.remove(instance_id)
         else:
             self.instances.remove(instance_id)
 
-    def _launch_instance(self, reason):
+    def _launch_instance(self):
         # Launch the instance.
         self.logging.info(self.logging.LAUNCH_INSTANCE)
 
@@ -713,12 +744,14 @@ class Endpoint(Atomic):
         # Save basic instance data.
         self.instances.add(instance.id, instance.name)
 
-    def _filter_instances(self, instances, regular=True, decommissioned=True):
+    def _filter_instances(self, instances, regular=True, decommissioned=True, errored=True):
         known_instances = self.instances.list()
         decommissioned_instances = self.decommissioned.list()
+        errored_instances = self.errored.list()
         return [x.id for x in instances if
-            (regular and x.id in known_instances or
-             decommissioned and x.id in decommissioned_instances)]
+             (x.id in known_instances or
+             (decommissioned and x.id in decommissioned_instances) or
+             (errored and x.id in errored_instances))]
 
     def _health_check(self, instances, active_ips):
         """
@@ -727,6 +760,7 @@ class Endpoint(Atomic):
         """
         instance_ids = self._filter_instances(instances)
         decommissioned_instances = self.decommissioned.list()
+        errored_instances = self.errored.list()
         confirmed_ips = set(self.confirmed_ips.list())
         active_ips = set(active_ips)
 
@@ -739,6 +773,9 @@ class Endpoint(Atomic):
         for instance_id in self.decommissioned.list():
             if not(instance_id in instance_ids):
                 self._clean_instance(instance_id, decommissioned=True)
+        for instance_id in self.errored.list():
+            if not(instance_id in instance_ids):
+                self._clean_instance(instance_id, errored=True)
         for instance_id in self.zkobj.marked_instances().list():
             if not(instance_id in instance_ids):
                 self.zkobj.marked_instances().remove(instance_id)
@@ -757,7 +794,8 @@ class Endpoint(Atomic):
             expected_ips = set(self.instance_ips.get(instance_id))
             instance_confirmed_ips = confirmed_ips.intersection(expected_ips)
             if len(instance_confirmed_ips) == 0 and \
-               not instance_id in decommissioned_instances:
+               not instance_id in decommissioned_instances and \
+               not instance_id in errored_instances:
 
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
@@ -796,7 +834,10 @@ class Endpoint(Atomic):
         for inactive_instance_id in inactive_instance_ids:
             if inactive_instance_id in decommissioned_instances:
                 if self._mark_instance(inactive_instance_id, 'decommissioned'):
-                    self._delete_instance(instance_id, decommissioned=True)
+                    self._delete_instance(inactive_instance_id, decommissioned=True)
+            if inactive_instance_id in errored_instances:
+                if self._mark_instance(inactive_instance_id, 'decommissioned'):
+                    self._delete_instance(inactive_instance_id, errored=True)
 
         # Return the active instance ids for update().
         return (active_instance_ids, inactive_instance_ids)
@@ -823,6 +864,17 @@ class Endpoint(Atomic):
             return True
         return False
 
+    def ip_errored(self, ip):
+        for instance_id in self.instances.list():
+            if ip in self.instance_ips.get(instance_id):
+                # If this belongs to an instance of ours,
+                # then we call mark_instance appropriately.
+                if self._mark_instance(instance_id, 'error'):
+                    self.logging.info(self.logging.ERROR_IP, ip)
+                    self._decommission_instances([instance_id], errored=True)
+                return True
+        return False
+
     def inactive_ips(self):
         # These IPs belong to decomissioned instances and
         # specifically should not be doing anything. Note,
@@ -831,6 +883,8 @@ class Endpoint(Atomic):
         # we will need to update this code.
         ips = []
         for instance_id in self.decommissioned.list():
+            ips.extend(self.instance_ips.get(instance_id))
+        for instance_id in self.errored.list():
             ips.extend(self.instance_ips.get(instance_id))
         return ips
 
@@ -861,7 +915,19 @@ class Endpoint(Atomic):
         mark_counter = mark_counters.get(label, 0)
         mark_counter += 1
 
-        if mark_counter >= self.config.marks:
+        max_counter = {
+            "unregistered": self.config.unregistered_marks,
+            "decommissioned": self.config.decommissioned_marks,
+            "error": self.config.error_marks,
+        }
+
+        # Check that the label is valid.
+        # It would be ideal if we could assert this as a
+        # compile-time check or at least do some static check.
+        if not label in max_counter:
+            raise Exception("Unknown mark label: %s" % label)
+
+        if mark_counter >= max_counter.get(label, 0):
             # This instance has been marked too many times. There is likely
             # something really wrong with it, so we'll clean it up.
             remove_instance = True
