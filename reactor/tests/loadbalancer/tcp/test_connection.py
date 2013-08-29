@@ -75,84 +75,24 @@ class GlobalTests(unittest.TestCase):
             connection.close_fds(except_fds=[1, 2, 3])
             self.assertEquals(mock_close.call_count, 1021)
 
-    def test_fork_and_exec_grandparent_failure(self):
-        with mock.patch('os.pipe') as mock_pipe,\
-                mock.patch('os.fork') as mock_fork,\
-                mock.patch('os.fdopen') as mock_fdopen,\
+    def test_fork_and_exec_parent(self):
+        with mock.patch('os.fork') as mock_fork:
+            mock_fork.side_effect = [ FAKE_CHILD_PID ]
+            child = connection.fork_and_exec(FAKE_CMD, FAKE_CHILD_FDS)
+            self.assertEqual(child, FAKE_CHILD_PID)
+            self.assertEquals(mock_fork.call_count, 1)
+
+    def test_fork_and_exec_child(self):
+        with mock.patch('os.fork') as mock_fork,\
                 mock.patch('os.close') as mock_close,\
-                mock.patch('os.waitpid') as mock_waitpid,\
                 mock.patch('os.setsid') as mock_setsid,\
                 mock.patch('os.execvp') as mock_execvp,\
-                mock.patch(connection.__name__ + '.close_fds'):
-            mock_pipe.return_value = FAKE_PIPE
-            mock_fork.side_effect = [ FAKE_CHILD_PID ]
-            # Give back a bad (non-zero) status
-            mock_waitpid.return_value = ( FAKE_CHILD_PID, 1 << 8 )
+                mock.patch(connection.__name__ + '.close_fds') as mock_close_fds:
+            mock_fork.side_effect = [ 0 ]
             child = connection.fork_and_exec(FAKE_CMD, FAKE_CHILD_FDS)
             self.assertIsNone(child)
-            self.assertEquals(mock_pipe.call_count, 1)
             self.assertEquals(mock_fork.call_count, 1)
-            self.assertEquals(mock_close.call_count, 2)
-
-    def test_fork_and_exec_grandparent_success(self):
-        with mock.patch('os.pipe') as mock_pipe,\
-                mock.patch('os.fork') as mock_fork,\
-                mock.patch('os.fdopen') as mock_fdopen,\
-                mock.patch('os.close') as mock_close,\
-                mock.patch('os.waitpid') as mock_waitpid,\
-                mock.patch('os.setsid') as mock_setsid,\
-                mock.patch('os.execvp') as mock_execvp,\
-                mock.patch(connection.__name__ + '.close_fds'):
-            mock_pipe.return_value = FAKE_PIPE
-            mock_fork.side_effect = [ FAKE_CHILD_PID ]
-            mock_waitpid.return_value = ( FAKE_CHILD_PID, 0 )
-            mock_file = mock.MagicMock()
-            mock_file.readline.return_value="%s\n" % FAKE_GRANDCHILD_PID
-            mock_fdopen.return_value = mock_file
-            child = connection.fork_and_exec(FAKE_CMD, FAKE_CHILD_FDS)
-            self.assertEquals(child, FAKE_GRANDCHILD_PID)
-            self.assertEquals(mock_pipe.call_count, 1)
-            self.assertEquals(mock_fork.call_count, 1)
-
-    def test_fork_and_exec_child_success(self):
-        with mock.patch('os.pipe') as mock_pipe,\
-                mock.patch('os.fork') as mock_fork,\
-                mock.patch('os.fdopen') as mock_fdopen,\
-                mock.patch('os.close') as mock_close,\
-                mock.patch('os.waitpid') as mock_waitpid,\
-                mock.patch('os.setsid') as mock_setsid,\
-                mock.patch('os.execvp') as mock_execvp,\
-                mock.patch('os._exit') as mock_exit,\
-                mock.patch(connection.__name__ + '.close_fds'):
-            mock_pipe.return_value = FAKE_PIPE
-            mock_fork.side_effect = [ 0, FAKE_GRANDCHILD_PID ]
-            mock_file = mock.MagicMock()
-            mock_fdopen.return_value = mock_file
-            mock_exit.side_effect = OsExit()
-            with self.assertRaises(OsExit):
-                connection.fork_and_exec(FAKE_CMD, FAKE_CHILD_FDS)
-            self.assertEquals(mock_pipe.call_count, 1)
-            self.assertEquals(mock_fork.call_count, 2)
-            self.assertEquals(mock_setsid.call_count, 1)
-            self.assertEquals(mock_exit.call_count, 1)
-            self.assertEquals(mock_file.write.call_count, 1)
-            self.assertEquals(mock_file.write.call_args_list[0][0][0], "%s\n" % (FAKE_GRANDCHILD_PID))
-
-    def test_fork_and_exec_grandchild_success(self):
-        with mock.patch('os.pipe') as mock_pipe,\
-                mock.patch('os.fork') as mock_fork,\
-                mock.patch('os.fdopen') as mock_fdopen,\
-                mock.patch('os.close') as mock_close,\
-                mock.patch('os.waitpid') as mock_waitpid,\
-                mock.patch('os.setsid') as mock_setsid,\
-                mock.patch('os.execvp') as mock_execvp,\
-                mock.patch('os._exit') as mock_exit,\
-                mock.patch(connection.__name__ + '.close_fds'):
-            mock_pipe.return_value = FAKE_PIPE
-            mock_fork.side_effect = [ 0, 0 ]
-            connection.fork_and_exec(FAKE_CMD, FAKE_CHILD_FDS)
-            self.assertEquals(mock_pipe.call_count, 1)
-            self.assertEquals(mock_fork.call_count, 2)
+            self.assertEquals(mock_close_fds.call_count, 1)
             self.assertEquals(mock_setsid.call_count, 1)
             self.assertEquals(mock_execvp.call_count, 1)
 

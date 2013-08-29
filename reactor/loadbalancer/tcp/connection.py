@@ -32,59 +32,16 @@ def fork_and_exec(cmd, child_fds=None):
     if child_fds is None:
         child_fds = []
 
-    # Close all file descriptors, except
-    # for those we have been specified to keep.
-    # These file descriptors are closed in the
-    # parent post fork.
-    # Create a pipe to communicate grandchild PID.
-    (r, w) = os.pipe()
-
-    # Fork
+    # Fork, return the child.
     pid = os.fork()
     if pid != 0:
-        # Close writing end of the pipe.
-        os.close(w)
-
-        # Wait for the child to exit.
-        while True:
-            (rpid, status) = os.waitpid(pid, 0)
-            if rpid == pid:
-                if os.WEXITSTATUS(status) > 0:
-                    # Something went wrong, clean up.
-                    os.close(r)
-                    return None
-                else:
-                    # Get a file object for the read end.
-                    r_obj = os.fdopen(r, "r")
-
-                    # Read grandchild PID from pipe and close it.
-                    try:
-                        child = int(r_obj.readline())
-                        return child
-                    except ValueError:
-                        return None
-                    finally:
-                        r_obj.close()
+        return pid
 
     # Close off all parent FDs.
-    close_fds(except_fds=child_fds + [w])
+    close_fds(except_fds=child_fds)
 
     # Create process group.
     os.setsid()
-
-    # Fork again.
-    pid = os.fork()
-    if pid != 0:
-        # Write grandchild pid to pipe
-        w_obj = os.fdopen(w, "w")
-        w_obj.write(str(pid) + "\n")
-        w_obj.flush()
-
-        # Exit (hard).
-        os._exit(0)
-
-    # Close the write end of the pipe
-    os.close(w)
 
     # Exec the given command.
     os.execvp(cmd[0], cmd)
@@ -134,12 +91,13 @@ class Accept(object):
 
 class ConnectionConsumer(threading.Thread):
 
-    def __init__(self, locks, producer):
+    def __init__(self, locks, error_notify, producer):
         super(ConnectionConsumer, self).__init__()
         self.daemon = True
         self.execute = True
 
         self.locks = locks
+        self.error_notify = error_notify
         self.producer = producer
 
         self.portmap = {}
@@ -229,9 +187,38 @@ class ConnectionConsumer(threading.Thread):
                 # Either redirect or drop the connection.
                 child = connection.redirect(ip, ipmap[ip])
                 standby_time = (exclusive and reconnect)
+
                 if child:
+                    # Start a notification thread. This will
+                    # wake up the main consumer thread (so that
+                    # the child can be reaped) when the child exits,
+                    # but it will also mark the IP as failed if
+                    # an error ultimately lead to the exit.
+                    def _waitchild():
+                        while True:
+                            try:
+                                (pid, status) = os.waitpid(child, 0)
+                                if pid == child:
+                                    break
+                            except OSError:
+                                pass
+                        if os.WEXITSTATUS(status) > 0 and self.error_notify:
+                            # Notify the high-level manager about an error
+                            # found on this IP. This may ultimately result in
+                            # the instance being terminated, etc.
+                            self.error_notify(ip)
+
+                        # Wait up the consumer that it may reap this
+                        # process and accept any new incoming connections.
+                        self.notify()
+
+                    t = threading.Thread(target=_waitchild)
+                    t.daemon = True
+                    t.start()
+
                     self.children[child] = (ip, connection, standby_time)
                     return True
+
             return False
         finally:
             self.cond.release()
@@ -561,7 +548,7 @@ class Connection(LoadBalancerConnection):
         self.active = set()
 
         self.producer = ConnectionProducer()
-        self.consumer = ConnectionConsumer(self.locks, self.producer)
+        self.consumer = ConnectionConsumer(self.locks, self.error_notify, self.producer)
 
     def __del__(self):
         self.producer.set([])

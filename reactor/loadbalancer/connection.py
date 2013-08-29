@@ -37,8 +37,9 @@ class LoadBalancerConnection(Connection):
         ".*" : lambda m: m.group(0)
     }
 
-    def __init__(self, name, config=None, locks=None):
+    def __init__(self, name, config=None, locks=None, error_notify=None):
         self.locks = locks
+        self.error_notify = error_notify
         super(LoadBalancerConnection, self).__init__(
             object_class="loadbalancer", name=name, config=config)
 

@@ -226,6 +226,10 @@ class ScaleManager(Atomic):
         self.zkobj.unwatch()
         self._endpoint_change([])
 
+        # Reset loadbalancers and clouds.
+        self.loadbalancers = {}
+        self.clouds = {}
+
     @Atomic.sync
     def _manager_select(self, endpoint):
         # Find the closest key.
@@ -426,7 +430,10 @@ class ScaleManager(Atomic):
             # Create the load balancer itself.
             self.loadbalancers[name] = \
                 lb_connection.get_connection( \
-                    name, config=config, locks=self.locks[name])
+                    name,
+                    config=config,
+                    locks=self.locks[name],
+                    error_notify=self.error_notify)
 
         # Return the set of supported loadbalancers.
         return self.loadbalancers.keys()
@@ -569,6 +576,11 @@ class ScaleManager(Atomic):
 
             # Always remove the IP.
             self._drop_ips_zkobj.remove(ip)
+
+    def error_notify(self, ip):
+        # Call into the endpoint to notify of the error.
+        for endpoint in self._endpoints.values():
+            endpoint.ip_errored(ip)
 
     @Atomic.sync
     def collect(self, endpoint, exclude=False):
