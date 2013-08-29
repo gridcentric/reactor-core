@@ -161,7 +161,7 @@
                     $("#state").addClass("btn-warning");
                 if( result["state"] == "STOPPED" )
                     $("#state").addClass("btn-inverse");
-            },
+            }
         });
     }
 
@@ -195,7 +195,7 @@
                 processData: false,
                 success: function() {
                     window.location = '/';
-                },
+                }
             });
         });
         $("#delete").click(function (e) {
@@ -268,10 +268,11 @@
                 $.each(result['ip_addresses'], function(idx, ip) {
                     addServerRow(ip);
                 });
-                setTimeout(function() {
-                    loadServers();
-                }, UPDATE_PERIOD);
+                setTimeout(loadServers, UPDATE_PERIOD);
             },
+            error: function() {
+                setTimeout(loadServers, UPDATE_PERIOD);
+            }
         });
     }
 
@@ -285,10 +286,11 @@
                 $.each(sessions, function(client, backend) {
                     addSessionRow(client, backend);
                 });
-                setTimeout(function() {
-                    loadSessions();
-                }, UPDATE_PERIOD);
+                setTimeout(loadSessions, UPDATE_PERIOD);
             },
+            error: function() {
+                setTimeout(loadSessions, UPDATE_PERIOD);
+            }
         });
     }
 
@@ -383,6 +385,10 @@
     }
 
     function updateMetrics(result) {
+        if (!result) {
+            result = {};
+        }
+
         // Generate a timestamp
         var timestamp = new Date().getTime();
 
@@ -432,10 +438,13 @@
     function pollMetrics() {
         // Poll metrics
         $.ajax({
-            url: "/v1.0/endpoints/${object}/metrics",
+            url: "/v1.1/endpoints/${object}/metrics",
             type: 'GET',
             dataType: 'json',
             success: updateMetrics,
+            error: function() {
+                updateMetrics();
+            }
         });
     }
 
@@ -451,7 +460,7 @@
     loadLog('/v1.1/endpoints/${object}/log', 'log', 'endpoint-log');
     loadServers();
     loadSessions();
-    updateMetrics({});
+    updateMetrics();
     $('#tabs a:first').tab('show');
 </script>
 
