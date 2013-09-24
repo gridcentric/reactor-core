@@ -25,13 +25,6 @@ function updateGraph(elem, data) {
         elem.plot.draw();
     } else if( isInDOM(elem) && elem.is(":visible") ) {
         elem.plot = $.plot(elem, data, options);
-    } else {
-        // Retry again in a second.
-        // It's possible that this div has not made
-        // it into the DOM or is not visible yet.
-        setTimeout(function() {
-            updateGraph(elem, data);
-        }, 1.0);
     }
 }
 
