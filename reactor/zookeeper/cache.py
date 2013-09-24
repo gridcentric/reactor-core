@@ -32,6 +32,7 @@ class Cache(Atomic):
         self.add = zkobj.add
         self.remove = zkobj.remove
         self.as_map = zkobj.as_map
+        self._get_child = zkobj._get_child
 
         # Start the watch.
         self._update(zkobj._list_children(watch=self.update))

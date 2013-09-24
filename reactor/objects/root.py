@@ -9,6 +9,7 @@ from . import manager
 from . import endpoint
 from . import ip_address
 from . import loadbalancer
+from . import cloud
 
 # The root path.
 REACTOR = "/reactor"
@@ -34,8 +35,11 @@ NEW_IPS = "new_ips"
 # IP addresses that are to be dropped.
 DROP_IPS = "drop_ips"
 
-# Loadbalancer locks.
+# Loadbalancer objects.
 LOADBALANCERS = "loadbalancers"
+
+# Cloud objects.
+CLOUDS = "clouds"
 
 
 class URLObject(RawObject):
@@ -73,6 +77,9 @@ class Reactor(DatalessObject):
 
     def endpoints(self):
         return self._get_child(ENDPOINTS, clazz=endpoint.Endpoints)
+
+    def clouds(self):
+        return self._get_child(CLOUDS, clazz=cloud.Clouds)
 
     def loadbalancers(self):
         return self._get_child(LOADBALANCERS, clazz=loadbalancer.Loadbalancers)

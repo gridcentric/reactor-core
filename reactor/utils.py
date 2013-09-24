@@ -1,5 +1,6 @@
 import uuid
 import hashlib
+import traceback
 import sys
 
 def import_class(import_str):
@@ -8,7 +9,8 @@ def import_class(import_str):
         __import__(module_str)
         return getattr(sys.modules[module_str], class_str)
     except (ImportError, ValueError, AttributeError), _:
-        raise ImportError("Class %s can not be found." %
+        traceback.print_exc()
+        raise ImportError("Class %s can not be loaded." %
                           (import_str,))
 
 def sha_hash(input_str):

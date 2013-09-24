@@ -19,4 +19,4 @@ class Instance(object):
 
     @property
     def ips(self):
-        return self._ips
+        return map(str, self._ips)

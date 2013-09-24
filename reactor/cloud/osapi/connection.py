@@ -174,7 +174,7 @@ class BaseOsConnection(CloudConnection):
         # NOTE: We don't catch any exceptions here,
         # they will be caught in the endpoint so that
         # they can be *logged*.
-        return self._start_instance(config, params=params)
+        return (self._start_instance(config, params=params), None)
 
     def _delete_instance(self, config, instance_id):
         try:

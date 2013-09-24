@@ -177,7 +177,6 @@ class ScaleManager(Atomic):
         # won't own an endpoint that is not suitable.
 
         self.loadbalancers = {} # Load balancer connections.
-        self.locks = {}         # Load balancer locks.
         self.clouds = {}        # Cloud connections.
 
         # Caches.
@@ -428,16 +427,13 @@ class ScaleManager(Atomic):
         # fairly sensible __del__ methods when necessary).
         self.loadbalancers = {}
         for name in config.loadbalancers:
-            # Ensure that we have locks for this loadbalancer.
-            if not name in self.locks:
-                self.locks[name] = self.zkobj.loadbalancers().locks(name)
-
             # Create the load balancer itself.
             self.loadbalancers[name] = \
                 lb_connection.get_connection( \
                     name,
                     config=config,
-                    locks=self.locks[name],
+                    zkobj=self.zkobj.loadbalancers().tree(name),
+                    this_ip=self._names[0],
                     error_notify=self.error_notify)
 
         # Return the set of supported loadbalancers.
@@ -456,7 +452,12 @@ class ScaleManager(Atomic):
         for name in config.clouds:
             self.clouds[name] = \
                 cloud_connection.get_connection( \
-                    name, config=config)
+                    name,
+                    config=config,
+                    zkobj=self.zkobj.clouds().tree(name),
+                    this_ip=self._names[0],
+                    register_ip=self.register_ip,
+                    drop_ip=self.drop_ip)
 
         # We automatically insert the address into all available
         # cloud configurations. This absolutely requires the cloud
@@ -575,9 +576,10 @@ class ScaleManager(Atomic):
                 # Remove the ip from the ip address set.
                 self.endpoint_ips.remove(ip)
 
-                # Drop it from any locks that may hold it.
-                for lock in self.locks.values():
-                    lock.remove(ip)
+            # Give notice to all loadbalancers.
+            # They may use this to cleanup any stale state.
+            for lb in self.loadbalancers.values():
+                lb.dropped(ip)
 
             # Always remove the IP.
             self._drop_ips_zkobj.remove(ip)

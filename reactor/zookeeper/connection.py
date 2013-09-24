@@ -106,7 +106,7 @@ class ZookeeperConnection(object):
     def silence(self):
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_ERROR)
 
-    def _write(self, path, contents, ephemeral, exclusive, sequential):
+    def _write(self, path, contents, ephemeral, exclusive, sequential, mustexist):
         # We start from the second element because we do not want to inclued
         # the initial empty string before the first "/" because all paths begin
         # with "/". We also don't want to include the final node because that
@@ -127,6 +127,10 @@ class ZookeeperConnection(object):
 
         # Don't create it if we're exclusive.
         if exists and exclusive:
+            return False
+
+        # Check if we require the node to exist.
+        if not exists and mustexist:
             return False
 
         # We make sure that we have the creation flags for ephemeral nodes,
@@ -153,7 +157,15 @@ class ZookeeperConnection(object):
             return zookeeper.create(self.handle, path, contents, [self.acl], flags)
 
     @wrap_exceptions
-    def write(self, path, contents, ephemeral=False, exclusive=False, sequential=False):
+    def write(
+        self,
+        path,
+        contents,
+        ephemeral=False,
+        exclusive=False,
+        sequential=False,
+        mustexist=False):
+
         """
         Writes the contents to the path in zookeeper. It will create the path in
         zookeeper if it does not already exist.
@@ -172,7 +184,8 @@ class ZookeeperConnection(object):
                                    contents=contents,
                                    ephemeral=ephemeral,
                                    exclusive=exclusive,
-                                   sequential=sequential)
+                                   sequential=sequential,
+                                   mustexist=mustexist)
             except zookeeper.NodeExistsException:
                 # If we're writing to an exclusive path, then the caller lost
                 # to another thread/writer. Else, retry.

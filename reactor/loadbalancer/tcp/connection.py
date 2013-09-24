@@ -12,6 +12,7 @@ import netaddr
 from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
 import reactor.loadbalancer.netstat as netstat
+from reactor.objects.ip_address import IPAddresses
 
 def close_fds(except_fds=None):
     if except_fds is None:
@@ -541,14 +542,15 @@ class Connection(LoadBalancerConnection):
     producer = None
     consumer = None
 
-    def __init__(self, **kwargs):
+    def __init__(self, zkobj=None, error_notify=None, **kwargs):
         super(Connection, self).__init__(**kwargs)
 
         self.portmap = {}
         self.active = set()
+        self.locks = zkobj and zkobj._cast_as(IPAddresses)
 
         self.producer = ConnectionProducer()
-        self.consumer = ConnectionConsumer(self.locks, self.error_notify, self.producer)
+        self.consumer = ConnectionConsumer(self.locks, error_notify, self.producer)
 
     def __del__(self):
         self.producer.set([])
@@ -557,6 +559,10 @@ class Connection(LoadBalancerConnection):
         self.consumer.stop()
         if self.locks:
             self.locks.clear()
+
+    def dropped(self, ip):
+        # Ensure the locks are gone.
+        self.locks.remove(ip)
 
     def change(self, url, backends, config=None):
         # Grab the listen port.

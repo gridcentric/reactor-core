@@ -1,6 +1,7 @@
 import hashlib
 import socket
 import sys
+import traceback
 
 from . atomic import Atomic
 from . config import Config
@@ -133,6 +134,7 @@ class EndpointConfig(Config):
             if not self.cloud in cloud_submodules():
                 self._add_error('cloud', 'Unknown cloud.')
             else:
+                # Validate any cloud configuration.
                 errors.update(cloud_connection.get_connection(
                     self.cloud)._endpoint_config(self).validate())
         errors.update(self._get_errors())
@@ -417,6 +419,7 @@ class Endpoint(Atomic):
                                 metric_instances=metric_instances)
 
         except Exception, e:
+            traceback.print_exc()
             self.logging.error(self.logging.UPDATE_ERROR, str(e))
             return False
 
@@ -641,6 +644,7 @@ class Endpoint(Atomic):
 
             for ip in self.instance_ips.get(instance_id):
                 # Reconfirm all ip addresses.
+                self.logging.info(self.logging.CONFIRM_IP, ip)
                 self.confirmed_ips.add(ip, instance_id)
 
             recommissioned += 1
@@ -675,6 +679,7 @@ class Endpoint(Atomic):
             # the same set of IP metrics to be effect, so they will
             # only be cleared out when the actual instance is deleted.
             for ip in ips:
+                self.logging.info(self.logging.DROP_IP, ip)
                 self.zkobj.confirmed_ips().remove(ip)
 
     def _delete_instance(self, instance_id, cloud=True, errored=False, decommissioned=False):
@@ -696,6 +701,7 @@ class Endpoint(Atomic):
                 # Not much we can do? Log and return.
                 # Hopefully at some point the user will
                 # intervene and remove the instance.
+                traceback.print_exc()
                 self.logging.error(self.logging.DELETE_FAILURE, ips)
                 return
 
@@ -721,6 +727,7 @@ class Endpoint(Atomic):
         # by the health_check process (which scrubs old ids).
         ips = self.instance_ips.get(instance_id)
         for ip in ips:
+            self.logging.info(self.logging.DROP_IP, ip)
             self.confirmed_ips.remove(ip)
             self.zkobj.ip_metrics().remove(ip)
 
@@ -741,7 +748,15 @@ class Endpoint(Atomic):
 
         try:
             # Try to start the instance via our cloud connection.
-            instance = self.cloud_conn.start_instance(self.config, params=start_params)
+            (instance, ips) = \
+                self.cloud_conn.start_instance(
+                    self.config, params=start_params)
+            if ips:
+                for ip in ips:
+                    # The IP address has been pre-confirmed.
+                    self.logging.info(self.logging.CONFIRM_IP, ip)
+                    self.confirmed_ips.add(ip, instance.id)
+
         except Exception, e:
             self.logging.error(self.logging.LAUNCH_FAILURE, str(e))
 
@@ -833,6 +848,7 @@ class Endpoint(Atomic):
             # update the load balancer because there is no actual instance
             # backing them.
             for orphaned_address in orphaned_ips:
+                self.logging.info(self.logging.DROP_IP, orphaned_address)
                 self.zkobj.confirmed_ips().remove(orphaned_address)
 
         # This step is done to ensure that the instance remains inactive for at
@@ -910,10 +926,16 @@ class Endpoint(Atomic):
         """
         Returns all backends associated with the endpoint.
         """
-        return map(
-            lambda ip: lb_backend.Backend(
-                ip, self.config.port, self.config.weight),
-            self.active_ips())
+        def to_backend(ip):
+            if ip.find(":") >= 0:
+                (ip, port) = ip.split(":", 1)
+                return lb_backend.Backend(
+                    ip, int(port), self.config.weight)
+            else:
+                return lb_backend.Backend(
+                    ip, self.config.port, self.config.weight)
+
+        return map(to_backend, self.active_ips())
 
     def _mark_instance(self, instance_id, label):
         """ Increments the mark counter. """
@@ -964,6 +986,11 @@ class Endpoint(Atomic):
             ips = []
         else:
             ips = self.backends()
-        self.lb_conn.change(self.config.url, ips, config=self.config)
-        self.lb_conn.save()
-        self.logging.info(self.logging.RELOADED)
+
+        try:
+            self.lb_conn.change(self.config.url, ips, config=self.config)
+            self.lb_conn.save()
+            self.logging.info(self.logging.RELOADED)
+        except NotImplementedError:
+            # Oh well, just using the stub.
+            pass

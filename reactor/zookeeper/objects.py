@@ -3,6 +3,7 @@ import json
 import binascii
 import array
 import threading
+import random
 
 class ZookeeperObject(object):
 
@@ -30,6 +31,9 @@ class ZookeeperObject(object):
             if self._watch_children:
                 client.clear_watch_fn(self._watch_children)
                 self._watch_children = None
+
+    def _cast_as(self, clazz):
+        return clazz(self._zk_client, self._path)
 
     def _serialize(self, data):
         raise NotImplementedError()
@@ -127,8 +131,8 @@ class Collection(DatalessObject):
     def list(self, **kwargs):
         return self._list_children(**kwargs)
 
-    def add(self, name, value=None):
-        return self._get_child(name, clazz=JSONObject)._set_data(value)
+    def add(self, name, value=None, **kwargs):
+        return self._get_child(name, clazz=JSONObject)._set_data(value, **kwargs)
 
     def remove(self, name):
         self._get_child(name)._delete()
@@ -139,6 +143,26 @@ class Collection(DatalessObject):
     def as_map(self):
         return dict(map(lambda x: (x, self.get(x)), self.list()))
 
+    def lock(self, items, value=None):
+        locked = self.list()
+        # NOTE: We shuffle the list of available items, for two
+        # reasons. First, to avoid obviously colliding with other
+        # threads / managers that are trying to grab an item.
+        # Second, if a VM is broken we can end up with the same
+        # one over and over again. This is less than ideal and 
+        # it's better to have a random assignment.
+        candidates = [item for item in items if not item in locked]
+        random.shuffle(candidates)
+        for item in candidates:
+            # Try to lock each of the given candidates sequentially.
+            if self._get_child(item, clazz=JSONObject)._set_data(
+                value, ephemeral=True, exclusive=True):
+                return item
+        return None
+
+    def find(self, value):
+        locked = self.as_map()
+        return [item for (item, item_value) in locked.items() if value == item_value]
 
 def attr(name, **kwargs):
     clazz = kwargs.pop("clazz", None)

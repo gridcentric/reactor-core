@@ -427,10 +427,10 @@ class Connection(Atomic):
         return self._manager_cache[config]
 
     @Atomic.sync
-    def _endpoint_config(self, config=None):
+    def _endpoint_config(self, config=None, values=None):
         """ Return the endpoint config associated with the given values. """
         if config is None:
-            config = {}
+            return self._ENDPOINT_CONFIG_CLASS(values=values, section=self._section)
         if not config in self._endpoint_cache:
             self._endpoint_cache[config] = \
                 self._ENDPOINT_CONFIG_CLASS(obj=config, section=self._section)

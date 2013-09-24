@@ -37,9 +37,13 @@ class LoadBalancerConnection(Connection):
         ".*" : lambda m: m.group(0)
     }
 
-    def __init__(self, name, config=None, locks=None, error_notify=None):
-        self.locks = locks
-        self.error_notify = error_notify
+    def __init__(self,
+        name,
+        config=None,
+        zkobj=None,
+        this_ip=None,
+        error_notify=None):
+
         super(LoadBalancerConnection, self).__init__(
             object_class="loadbalancer", name=name, config=config)
 
@@ -67,6 +71,9 @@ class LoadBalancerConnection(Connection):
         """
         Save current set of specified mappings.
         """
+        pass
+
+    def dropped(self, ip):
         pass
 
     def metrics(self):
