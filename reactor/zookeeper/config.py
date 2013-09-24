@@ -79,7 +79,15 @@ def is_running():
         except OSError:
             return False
     else:
-        return False
+        # Unfortunately, different distros use different
+        # return values for the service command. So we just
+        # have to rely on the output informing us whether
+        # or not Zookeeper is currently running.
+        proc = subprocess.Popen(
+            ["service", "zookeeper", "status"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (stdout, stderr) = proc.communicate()
+        return "running" in stdout
 
 def ensure_stopped():
     if is_running():
