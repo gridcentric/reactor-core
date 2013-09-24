@@ -326,18 +326,21 @@ class ScaleManager(Atomic):
             del self._endpoints[endpoint_name]
 
         for endpoint_name in to_add:
-            self._endpoints[endpoint_name] = \
-                Endpoint(
+            endpoint = Endpoint(
                     self.zkobj.endpoints().get(endpoint_name),
                     collect=self.collect,
                     find_cloud_connection=self._find_cloud_connection,
                     find_loadbalancer_connection=self._find_loadbalancer_connection,
                     delete_hook=self._endpoint_deleted)
+            if endpoint.deleted:
+                # Oops, was already gone.
+                continue
 
             # The endpoint will generally reload the loadbalancer
             # on startup. But we aren't tracking it yet, so it will
             # be excluded. So after we add it to our collection, we
             # do another reload() to ensure that it's included.
+            self._endpoints[endpoint_name] = endpoint
             self._endpoints[endpoint_name].reload()
 
         # Log the change.
@@ -362,10 +365,12 @@ class ScaleManager(Atomic):
         # the actual removing in Zookeeper, since we
         # don't want to continue updating this endpoint.
         new_endpoints = []
+        was_owned = self.endpoint_owned(endpoint)
         for (endpoint_name, local_endpoint) in self._endpoints.items():
             if local_endpoint != endpoint:
                 new_endpoints.append(endpoint_name)
         self._endpoint_change(new_endpoints)
+        return was_owned
 
     def update_config(self, config):
         # If the config changes, then we may no longer

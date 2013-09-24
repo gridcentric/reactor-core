@@ -105,8 +105,12 @@ class Endpoint(ConfigObject):
         return self._deleting._get_data(**kwargs)
 
     def delete(self):
+        # NOTE: We just set the _deleting() attribute.
+        # We allow the owner of the endpoint to do the
+        # actual deletion at whatever point they want.
         self._deleting._set_data(True)
-        self._delete()
+        if not self.manager:
+            self._delete()
 
     def unwatch(self):
         self._state.unwatch()

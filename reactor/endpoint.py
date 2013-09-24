@@ -287,6 +287,7 @@ class Endpoint(Atomic):
         self.update_state(self.zkobj.state().current(watch=self.update_state))
 
         # Start watching whether we're being deleted.
+        self.deleted = False
         self.check_deleting(self.zkobj.is_deleting(watch=self.check_deleting))
 
     def __del__(self):
@@ -298,18 +299,25 @@ class Endpoint(Atomic):
         # and basically ensure that the delete goes through
         # cleanly without a bunch of trashing.
         if val:
-            self.zkobj.unwatch()
+            self.deleted = True
             self.reload(exclude=True)
             if self._delete_hook:
-                self._delete_hook(self)
+                if self._delete_hook(self):
+                    self.break_refs()
+                    self.zkobj._delete()
+                else:
+                    self.break_refs()
+            else:
+                self.break_refs()
 
     def break_refs(self):
         # See NOTE above.
         self.zkobj.unwatch()
-        del self._collect
-        del self._find_cloud_connection
-        del self._find_loadbalancer_connection
-        del self._delete_hook
+        if hasattr(self, '_collect'):
+            del self._collect
+            del self._find_cloud_connection
+            del self._find_loadbalancer_connection
+            del self._delete_hook
 
     # This method is a simple method used for populating our
     # instance IP cache. All the cached (decommissioned instances,
