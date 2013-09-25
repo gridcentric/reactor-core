@@ -64,7 +64,10 @@ class EventLog(object):
         sevstr = self.SEVERITY_MAP.get(sev, "???")
 
         # Format entry string.
-        prettystr = event.formatfn(args)
+        try:
+            prettystr = event.formatfn(args)
+        except Exception, e:
+            prettystr = "Failed to format event: %s" % str(e)
 
         # Form new entry, pretty printed.
         return [ts, sevstr, prettystr]

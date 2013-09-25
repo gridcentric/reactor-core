@@ -204,7 +204,7 @@ class EndpointLog(EventLog):
     LAUNCH_INSTANCE = Event(
         lambda args: "Launching instance")
     LAUNCH_FAILURE = Event(
-        lambda args: "Failure launching instance")
+        lambda args: "Failure launching instance: %s" % args[0])
     DELETE_INSTANCE = Event(
         lambda args: "Deleting instance with IP %s" % _as_ip(args[0]))
     DELETE_FAILURE = Event(
@@ -734,8 +734,8 @@ class Endpoint(Atomic):
         try:
             # Try to start the instance via our cloud connection.
             instance = self.cloud_conn.start_instance(self.config, params=start_params)
-        except Exception:
-            self.logging.error(self.logging.LAUNCH_FAILURE)
+        except Exception, e:
+            self.logging.error(self.logging.LAUNCH_FAILURE, e)
 
             # Cleanup the start params.
             self.lb_conn.cleanup_start_params(self.config, start_params)
