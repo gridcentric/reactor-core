@@ -59,6 +59,7 @@ class Cluster(ReactorApiExtension):
         # Check that everything is up and running.
         self.check_zookeeper(api.client.servers())
         self.check_manager(api.client.servers())
+        logging.info("Cluster ready.")
 
     def __del__(self):
         self.stop_manager()
@@ -95,7 +96,9 @@ class Cluster(ReactorApiExtension):
 
         def manager_run():
             try:
+                logging.info("Manager started.")
                 self._manager.run()
+                logging.info("Manager stopped.")
             except Exception:
                 logging.error("An unrecoverable error occurred: %s",
                     traceback.format_exc())
@@ -147,3 +150,4 @@ class Cluster(ReactorApiExtension):
         # actually deactivate it or set the number of keys appropriately when
         # they do not want it to be used to power endpoints.
         self.start_manager(zk_servers)
+        return Response()

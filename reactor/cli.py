@@ -201,6 +201,7 @@ def main():
     loglevel = logging.INFO
     if debug:
         loglevel = logging.DEBUG
+    log.configure(loglevel, None)
 
     def get_arg(n):
         if len(args) < n+1:
@@ -388,6 +389,7 @@ def main():
             app = api.get_wsgi_app()
 
             from paste.httpserver import serve
+            logging.info("Preparing API...")
             ready()
             serve(app, host='0.0.0.0')
 
