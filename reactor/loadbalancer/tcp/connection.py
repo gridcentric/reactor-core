@@ -532,7 +532,8 @@ class TcpEndpointConfig(Config):
         description="Only allow connections from these client subnets.")
 
 class Connection(LoadBalancerConnection):
-    """ Raw TCP """
+
+    """ Managed TCP """
 
     _ENDPOINT_CONFIG_CLASS = TcpEndpointConfig
     _SUPPORTED_URLS = {
