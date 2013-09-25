@@ -219,6 +219,15 @@ class OsApiEndpointConfig(BaseOsEndpointConfig):
         validate=lambda self: self.validate_keyname(),
         description="The key_name (for injection).")
 
+    # Enable specification of networks if the novaclient supports it.
+    if "tenant_networks" in [ extension.name for extension in \
+        shell.OpenStackComputeShell()._discover_extensions("1.1") ]:
+        network_conf = Config.list(label="Network Configuration", default=[],
+            order=2, validate=lambda self: self.validate_network_conf(),
+            description="Network configuration for scaled instances. " +
+            "This is identical to the --nic parameter in novaclient. " +
+            "One network configuration per line.")
+
     def validate_flavor(self):
         if self.validate_connection_params(False):
             avail = [flavor._info['id'] for flavor in self.novaclient().flavors.list()]
@@ -255,6 +264,43 @@ class OsApiEndpointConfig(BaseOsEndpointConfig):
             # Can't connect to cloud, ignore this param for now
             return True
 
+    def validate_network_conf(self):
+        if self.validate_connection_params(False):
+            # Parse netspecs into objects.
+            try:
+                networks = OsApiEndpointConfig.parse_netspecs(self.network_conf)
+            except Exception as ex:
+                Config.error("Failed to parse network conf: %s" % str(ex))
+
+            known_networks = [nw._info["id"] for nw in self.novaclient().networks.list()]
+            for network in networks:
+                if (network["net-id"] is not None) and \
+                        (network["net-id"] not in known_networks):
+                    Config.error("Network '%s' not found" % network)
+        else:
+            # Can't connect to cloud, ignore this param for now
+            return True
+
+    @staticmethod
+    def parse_netspecs(netspecs):
+        parsed_specs = []
+        for spec in netspecs:
+            res = { "net-id": None,
+                    "v4-fixed-ip": None,
+                    "port-id": None }
+            for keyval in spec.split(","):
+                kv = keyval.split("=", 1)
+                if len(kv) < 2:
+                    raise ValueError("No value given for key '%s'" % str(kv[0]))
+                key = kv[0]
+                value = kv[1]
+
+                if key not in res:
+                    raise KeyError("'%s' is not a valid nic keyword" % str(key))
+                res[key] = value
+            parsed_specs.append(res)
+        return parsed_specs
+
 class Connection(BaseOsConnection):
     """ OpenStack """
 
@@ -281,12 +327,18 @@ class Connection(BaseOsConnection):
     def _start_instance(self, config, params):
         config = self._endpoint_config(config)
         userdata = "reactor=%s" % params.get('reactor', '')
-        instance = config.novaclient().servers.create(
-                                  config.instance_name,
-                                  config.image_id,
-                                  config.flavor_id,
-                                  security_groups=config.security_groups,
-                                  key_name=config.key_name,
-                                  availability_zone=config.availability_zone,
-                                  userdata=userdata)
-        return instance
+        instance_params = {
+            "security_groups": config.security_groups,
+            "key_name": config.key_name,
+            "availability_zone": config.availability_zone,
+            "userdata": userdata
+            }
+        if hasattr(config, "network_conf"):
+            instance_params["nics"] = \
+                OsApiEndpointConfig.parse_netspecs(config.network_conf) or None
+
+        return config.novaclient().servers.create(
+            config.instance_name,
+            config.image_id,
+            config.flavor_id,
+            **instance_params)
