@@ -639,6 +639,7 @@ class ScaleManager(Atomic):
                     results[url] += pending_count
         return results
 
+    @Atomic.sync
     def update_metrics(self):
         """
         Collects the metrics from the loadbalancer, updates zookeeper and
@@ -671,6 +672,7 @@ class ScaleManager(Atomic):
         self.logging.info(self.logging.ALL_METRICS, all_metrics)
         return all_metrics
 
+    @Atomic.sync
     def update_pending(self):
         """
         Same as metrics, but for pending connections.
@@ -791,6 +793,7 @@ class ScaleManager(Atomic):
 
         return my_sessions
 
+    @Atomic.sync
     def update_sessions(self):
         # Collect sessions.
         my_sessions = self._collect_sessions()
@@ -831,7 +834,6 @@ class ScaleManager(Atomic):
                 if not endpoint_ips.get(ip) == endpoint_name:
                     self.endpoint_ips.add(ip, endpoint_name)
 
-    @Atomic.sync
     def update(self):
         # Update the list of sessions.
         self.update_sessions()
