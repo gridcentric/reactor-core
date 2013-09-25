@@ -286,7 +286,7 @@ function makeConfig(context, name_map) {
                                      context["toplevel_folds"][sub_spec_name],
                                      Object.keys(sub_spec),
                                      false,
-                                     true);
+                                     false);
         });
 
         // Populate toplevel config.
