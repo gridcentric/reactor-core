@@ -410,7 +410,7 @@ class Connection(Atomic):
             self._section = name
         self._name = name
         if config is None:
-            self._config = {}
+            self._config = Config()
         else:
             self._config = config
         self._manager_cache = {}
