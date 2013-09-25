@@ -7,6 +7,7 @@ ENDPOINT_TEMPLATES = {
                         { "item" : "loadbalancer:rdp:username" },
                         { "item" : "loadbalancer:rdp:password" },
                         { "item" : "loadbalancer:rdp:domain" },
+                        { "item" : "loadbalancer:rdp:orgunit" },
                         { "item" : "loadbalancer:rdp:host" },
                         { "item" : "loadbalancer:rdp:template" },
                         { "item" : "loadbalancer:rdp:reconnect" },
