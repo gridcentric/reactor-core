@@ -743,7 +743,7 @@ class Endpoint(Atomic):
             # Try to start the instance via our cloud connection.
             instance = self.cloud_conn.start_instance(self.config, params=start_params)
         except Exception, e:
-            self.logging.error(self.logging.LAUNCH_FAILURE, e)
+            self.logging.error(self.logging.LAUNCH_FAILURE, str(e))
 
             # Cleanup the start params.
             self.lb_conn.cleanup_start_params(self.config, start_params)
