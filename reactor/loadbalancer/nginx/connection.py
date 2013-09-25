@@ -13,6 +13,7 @@ from mako.template import Template
 
 from reactor.config import Config
 from reactor.utils import sha_hash
+from reactor.loadbalancer.utils import read_pid
 from reactor.loadbalancer.connection import LoadBalancerConnection
 from reactor.loadbalancer.netstat import connection_count
 
@@ -136,11 +137,15 @@ class NginxLogWatcher(threading.Thread):
 
 class NginxManagerConfig(Config):
 
-    config_path = Config.string(label="Configuration Path",
+    pid_file = Config.string(label="Pid file",
+        default="/var/run/nginx.pid",
+        description="The nginx pid file.")
+
+    config_path = Config.string(label="Configuration path",
         default="/etc/nginx/conf.d",
         description="The configuration directory for nginx.")
 
-    site_path = Config.string(label="Sites-enabled Path",
+    site_path = Config.string(label="Sites-enabled path",
         default="/etc/nginx/sites-enabled",
         description="The site path for nginx.")
 
@@ -167,7 +172,8 @@ class NginxEndpointConfig(Config):
         description="A 301 redirect to use when no backends are available.")
 
 class Connection(LoadBalancerConnection):
-    """ HTTP-based (nginx) """
+
+    """ Nginx """
 
     _MANAGER_CONFIG_CLASS = NginxManagerConfig
     _ENDPOINT_CONFIG_CLASS = NginxEndpointConfig
@@ -185,6 +191,16 @@ class Connection(LoadBalancerConnection):
         self.template = Template(filename=template_file)
         self.log_reader = NginxLogWatcher("/var/log/nginx/access.log")
         self.log_reader.start()
+
+        # Remove all sites configurations.
+        # We want to start with a clean slate in case
+        # there was state leftover from before.
+        for conf in glob.glob(
+            os.path.join(self._manager_config().site_path, "reactor.*")):
+            try:
+                os.remove(conf)
+            except OSError:
+                pass
 
     def __del__(self):
         self.log_reader.stop()
@@ -212,10 +228,10 @@ class Connection(LoadBalancerConnection):
             # Genereate a new random key.
             subprocess.check_call(\
                 "openssl genrsa -des3 -out %s -passout pass:1 1024" % \
-                (raw_file), shell=True)
+                (raw_file), shell=True, close_fds=True)
             subprocess.check_call(\
                 "openssl rsa -in %s -passin pass:1 -out %s" % \
-                (raw_file, key_file), shell=True)
+                (raw_file, key_file), shell=True, close_fds=True)
 
         if cert:
             # Save the saved certificate.
@@ -226,38 +242,18 @@ class Connection(LoadBalancerConnection):
             # Generate a new certificate.
             subprocess.check_call(\
                 "openssl req -new -key %s -batch -out %s" % \
-                (key_file, csr_file), shell=True)
+                (key_file, csr_file), shell=True, close_fds=True)
             subprocess.check_call(\
                 "openssl x509 -req -in %s -signkey %s -out %s" % \
-                (csr_file, key_file, crt_file), shell=True)
+                (csr_file, key_file, crt_file), shell=True, close_fds=True)
 
         # Return the certificate and key.
         return (crt_file, key_file)
 
-    def _determine_nginx_pid(self):
-        if os.path.exists("/var/run/nginx.pid"):
-            pid_file = file("/var/run/nginx.pid", 'r')
-            pid = pid_file.readline().strip()
-            pid_file.close()
-            return int(pid)
-        else:
-            return None
-
-    def clear(self):
-        # Remove all sites configurations.
-        for conf in glob.glob(os.path.join(self._manager_config().site_path, "*")):
-            try:
-                os.remove(conf)
-            except OSError:
-                pass
-
-        # Remove all tracked connections.
-        self.tracked = {}
-
     def change(self, url, backends, config=None):
         # We use a simple hash of the URL as the file name for the configuration file.
         uniq_id = sha_hash(url)
-        conf_filename = "%s.conf" % uniq_id
+        conf_filename = "reactor.%s.conf" % uniq_id
 
         # Grab the endpoint configuration.
         config = self._endpoint_config(config)
@@ -346,7 +342,8 @@ class Connection(LoadBalancerConnection):
                                     extra=extra)
 
         # Write out the config file.
-        config_file = file(os.path.join(self._manager_config().site_path, conf_filename), 'wb')
+        config_file = open(os.path.join(
+            self._manager_config().site_path, conf_filename), 'wb')
         config_file.write(conf)
         config_file.close()
 
@@ -357,9 +354,13 @@ class Connection(LoadBalancerConnection):
 
         # Send a signal to NginX to reload the configuration
         # (Note: we might need permission to do this!!)
-        nginx_pid = self._determine_nginx_pid()
-        if nginx_pid:
-            os.kill(nginx_pid, signal.SIGHUP)
+        pid = read_pid(self._manager_config().pid_file)
+        if pid:
+            os.kill(pid, signal.SIGHUP)
+        else:
+            subprocess.call(
+                ["service", "nginx", "start"],
+                close_fds=True)
 
     def metrics(self):
         # Grab the log records.
