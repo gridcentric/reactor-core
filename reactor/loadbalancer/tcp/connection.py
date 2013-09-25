@@ -11,6 +11,7 @@ import netaddr
 
 from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
+from reactor.ips import is_local
 import reactor.loadbalancer.netstat as netstat
 from reactor.objects.ip_address import IPAddresses
 
@@ -149,11 +150,8 @@ class ConnectionConsumer(threading.Thread):
                 connection.drop()
                 return True
 
-            # Create a map of the IPs.
+            # Grab the information for this port.
             (_, exclusive, reconnect, backends, client_subnets) = self.portmap[port]
-            ipmap = {}
-            ipmap.update(backends)
-            ips = ipmap.keys()
 
             # Check the subnet.
             if client_subnets:
@@ -169,24 +167,34 @@ class ConnectionConsumer(threading.Thread):
 
             # Find a backend IP (exclusive or not).
             ip = None
+            port = None
+
             if exclusive:
                 # See if we have a VM to reconnect to.
                 if reconnect > 0:
                     existing = self.locks.find(connection.src[0])
                     if len(existing) > 0:
-                        ip = existing[0]
-                        if ip in self.standby:
+                        (ip, port) = existing[0].split(":", 1)
+                        port = int(port)
+                        if (ip, port) in self.standby:
                             # NOTE: We will have a lock representing
                             # this connection, but is it already held.
-                            del self.standby[ip]
+                            del self.standby[(ip, port)]
                 if not ip:
-                    ip = self.locks.lock(ips, value=connection.src[0])
+                    # Grab the grab the named lock (w/ ip and port).
+                    candidates = ["%s:%d" % backend for backend in backends]
+                    got = self.locks.lock(candidates, value=connection.src[0])
+                    if got:
+                        # We managed to grab the above lock.
+                        (ip, port) = got.split(":", 1)
+                        port = int(port)
             else:
-                ip = ips[random.randint(0, len(ips)-1)]
+                # Select an IP at random.
+                (ip, port) = backends[random.randint(0, len(backends)-1)]
 
-            if ip:
+            if ip and port:
                 # Either redirect or drop the connection.
-                child = connection.redirect(ip, ipmap[ip])
+                child = connection.redirect(ip, port)
                 standby_time = (exclusive and reconnect)
 
                 if child:
@@ -217,7 +225,7 @@ class ConnectionConsumer(threading.Thread):
                     t.daemon = True
                     t.start()
 
-                    self.children[child] = (ip, connection, standby_time)
+                    self.children[child] = (ip, port, connection, standby_time)
                     return True
 
             return False
@@ -227,12 +235,13 @@ class ConnectionConsumer(threading.Thread):
     def clear_standby(self, force=False):
         removed = []
         now = time.time()
-        for (ip, timeout) in self.standby.items():
+        for ((ip, port), timeout) in self.standby.items():
             if force or timeout < now:
-                self.locks.remove(ip)
-                removed.append(ip)
-        for ip in removed:
-            del self.standby[ip]
+                # Remove the named lock (w/ port).
+                self.locks.remove("%s:%d" % (ip, port))
+                removed.append((ip, port))
+        for (ip, port) in removed:
+            del self.standby[(ip, port)]
         return len(removed)
 
     def run(self):
@@ -296,7 +305,7 @@ class ConnectionConsumer(threading.Thread):
                 os.kill(child, 0)
             except OSError:
                 # Not alive - remove from children list.
-                (ip, conn, standby_time) = self.children[child]
+                (ip, port, _, standby_time) = self.children[child]
                 del self.children[child]
                 reaped += 1
 
@@ -308,9 +317,9 @@ class ConnectionConsumer(threading.Thread):
                 # and the only necessary means of removing the IP
                 # is through the clear_standby() hook.
                 if standby_time:
-                    self.standby[ip] = time.time() + standby_time
+                    self.standby[(ip, port)] = time.time() + standby_time
                 else:
-                    self.locks.remove(ip)
+                    self.locks.remove("%s:%d" % (ip, port))
 
         # Return the number of children reaped.
         # This means that callers can do if self.reap_children().
@@ -347,21 +356,22 @@ class ConnectionConsumer(threading.Thread):
         # Set the active metric for all known backends to zero.
         for (_, _, _, backends, _) in self.portmap.values():
             for (ip, port) in backends:
-                metric_map[ip] = { "active" : (1, 0) }
+                metric_map[ip] = [{ "active" : (1, 0) }]
 
         # Add 1 for every active connection we're tracking.
-        ips = [ip for (ip, _, _) in self.children.values()]
-        ips.extend(self.standby.keys())
-        for ip in ips:
-            if not ip in metric_map:
+        ports = ["%s:%d" % (ip, port) for (ip, port, _, _) in self.children.values()]
+        ports.extend(["%s:%d" % (ip, port) for (ip, port) in self.standby.keys()])
+
+        for port in ports:
+            if not port in metric_map:
                 # Set the current active count to one.
                 # NOTE: This must be an ip that is no longer
                 # in the portmap, but we can still report it.
-                metric_map[ip] = { "active" : (1, 1) }
+                metric_map[port] = [{ "active" : (1, 1) }]
             else:
                 # Add one to our current active count.
-                cur_count = metric_map[ip]["active"][1]
-                metric_map[ip]["active"] = (1, cur_count+1)
+                cur_count = metric_map[ip]["active"][0][1]
+                metric_map[port]["active"][0] = (1, cur_count+1)
 
         self.cond.release()
         return metric_map
@@ -369,23 +379,25 @@ class ConnectionConsumer(threading.Thread):
     def sessions(self):
         session_map = {}
         self.cond.acquire()
-        for (ip, conn, _) in self.children.values():
+        for (ip, port, conn, _) in self.children.values():
             (src_ip, src_port) = conn.src
+            portinfo = "%s:%d" % (ip, port)
             # We store clients as ip:port pairs.
             # This matters for below, where we must match
             # in order to drop the session.
-            ip_sessions = session_map.get(ip, [])
+            ip_sessions = session_map.get(portinfo, [])
             ip_sessions.append(_as_client(src_ip, src_port))
-            session_map[ip] = ip_sessions
+            session_map[portinfo] = ip_sessions
         self.cond.release()
         return session_map
 
     def drop_session(self, client, backend):
         self.cond.acquire()
         for child in self.children.keys():
-            (ip, conn, _) = self.children[child]
+            (ip, port, conn, _) = self.children[child]
             (src_ip, src_port) = conn.src
-            if client == _as_client(src_ip, src_port) and backend == ip:
+            portinfo = "%s:%d" % (ip, port)
+            if client == _as_client(src_ip, src_port) and backend == portinfo:
                 try:
                     os.kill(child, signal.SIGTERM)
                 except OSError:
@@ -571,16 +583,16 @@ class Connection(LoadBalancerConnection):
 
         # Ensure that we can't end up in a loop.
         looping_ips = [backend.ip for backend in backends
-            if (backend.port == listen or backend.port == 0)
-                and backend.ip.startswith("127.")]
-
-        if len(looping_ips) > 0:
-            logging.error("Attempted TCP loop.")
-            return
+            if backend.port == listen and
+               is_local(backend.ip)]
 
         # Clear existing data.
         if self.portmap.has_key(listen):
             del self.portmap[listen]
+
+        if len(looping_ips) > 0:
+            logging.error("Attempted TCP loop.")
+            return
 
         # If no backends, don't queue anything.
         if len(backends) == 0:
@@ -590,11 +602,8 @@ class Connection(LoadBalancerConnection):
         config = self._endpoint_config(config)
         portmap_backends = []
         for backend in backends:
-            if not(backend.port):
-                port = listen
-            else:
-                port = backend.port
-            portmap_backends.append((backend.ip, port))
+            portmap_backends.append((backend.ip, backend.port))
+
         # Update the portmap (including exclusive info).
         # NOTE: The reconnect/exclusive/client_subnets parameters
         # control how backends are mapped by the consumer, how machines

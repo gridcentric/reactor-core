@@ -26,8 +26,8 @@ class EndpointConfig(Config):
         description="The URL for this endpoint.")
 
     port = Config.integer(label="Backend Port", order=1,
-        validate=lambda self: self.port >= 0 or \
-            Config.error("Port must be non-negative."),
+        validate=lambda self: self.port > 0 or \
+            Config.error("Port must be non-zero."),
         description="The backend port for this service.")
 
     redirect = Config.string(label="Fallback URL", order=1,
@@ -380,7 +380,7 @@ class Endpoint(Atomic):
     def update(self,
                metrics=None,
                metric_instances=None,
-               active_ips=None):
+               active_ports=None):
         """
         Update the endpoint based on current metrics and
         active instances. This will launch new instances or
@@ -390,8 +390,8 @@ class Endpoint(Atomic):
             metrics = {}
         if metric_instances is None:
             metric_instances = []
-        if active_ips is None:
-            active_ips = []
+        if active_ports is None:
+            active_ports = []
 
         try:
             # Save the live metrics and active connections
@@ -399,7 +399,7 @@ class Endpoint(Atomic):
             # any practical purpose, they are simply exposed
             # by the API for debugging purposes, etc.
             self.zkobj.metrics = metrics
-            self.zkobj.active = active_ips
+            self.zkobj.active = active_ports
 
             # Grab the current collection of instances.
             # This includes all instances, depending on what
@@ -409,7 +409,7 @@ class Endpoint(Atomic):
 
             # Run a healthcheck to reap old instances,
             # decomissioned instances, unable to launch, etc.
-            (active_ids, inactive_ids) = self._health_check(instances, active_ips)
+            (active_ids, inactive_ids) = self._health_check(instances, active_ports)
 
             # Run an update to launch new instances.
             return self._update(instances,
@@ -776,7 +776,7 @@ class Endpoint(Atomic):
              (decommissioned and x.id in decommissioned_instances) or
              (errored and x.id in errored_instances))]
 
-    def _health_check(self, instances, active_ips):
+    def _health_check(self, instances, active_ports):
         """
         Reap instances that are not responding or have been
         decomissioned for a sufficiently long period of time.
@@ -785,7 +785,7 @@ class Endpoint(Atomic):
         decommissioned_instances = self.decommissioned.list()
         errored_instances = self.errored.list()
         confirmed_ips = set(self.confirmed_ips.list())
-        active_ips = set(active_ips)
+        active_ports = set(active_ports)
 
         # Mark sure that the manager does not contain old
         # scale data, which may result in clogging up Zookeeper.
@@ -833,9 +833,16 @@ class Endpoint(Atomic):
                 associated_confirmed_ips = \
                     associated_confirmed_ips.union(instance_confirmed_ips)
 
+            # Make sure that this is a fully formed hostinfo.
+            # This is because the manager will call us with formed
+            # host:port pairs in order to reduce backend ambiguity.
+            expected_ports = set(map(
+                lambda x: x if ":" in x else "%s:%d" % (x, self.config.port),
+                expected_ips))
+
             # Check if any of these expected_ips are not in our active set. If
             # so that this instance is currently considered inactive.
-            if len(expected_ips.intersection(active_ips)) == 0:
+            if len(expected_ports.intersection(active_ports)) == 0:
                 inactive_instance_ids += [instance_id]
             else:
                 active_instance_ids += [instance_id]

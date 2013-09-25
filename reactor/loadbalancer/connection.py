@@ -79,21 +79,21 @@ class LoadBalancerConnection(Connection):
     def metrics(self):
         """
         Returns metrics as a dictionary --
-            { host : (weight, value) }
+            { "host:port" : (weight, value) }
         """
         return {}
 
     def pending(self):
         """
         Return pending sesisons as a dictionary --
-            { url : count }
+            { "url" : count }
         """
         return {}
 
     def sessions(self):
         """
         Return active sessions as a dictionary --
-            { host : [ client, client, ... ] }
+            { "host:port" : [ client, client, ... ] }
         """
         return {}
 

@@ -437,9 +437,3 @@ class Connection(TcpConnection):
         name = start_params.get("name")
         if name:
             self.cleanup(config, name)
-
-    def change(self, url, ips, **kwargs):
-        # Update the backend port to be the sensible RDP default, instead
-        # of default to whatever port we're listening on here.
-        ips = [Backend(ip.ip, ip.port or 3389, ip.weight) for ip in ips]
-        return super(Connection, self).change(url, ips, **kwargs)
