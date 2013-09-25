@@ -57,33 +57,56 @@ class LoadBalancerConnection(Connection):
         raise Exception("Invalid URL for loadbalancer.")
 
     def change(self, url, backends, config=None):
+        """
+        Specify a backend mapping in the loadbalancer.
+        """
         if len(backends) != 0:
             raise NotImplementedError()
 
     def save(self):
+        """
+        Save current set of specified mappings.
+        """
         pass
 
     def metrics(self):
-        # Returns { host : (weight, value) }
+        """
+        Returns metrics as a dictionary --
+            { host : (weight, value) }
+        """
         return {}
 
     def pending(self):
-        # Returns { url : count }
-        # See loadbalancer/tcp/connection.py for a complete example.
+        """
+        Return pending sesisons as a dictionary --
+            { url : count }
+        """
         return {}
 
     def sessions(self):
-        # If supported, returns { host : [ client, client, ... ] }
+        """
+        Return active sessions as a dictionary --
+            { host : [ client, client, ... ] }
+        """
         return {}
 
     def drop_session(self, client, backend):
         raise NotImplementedError()
 
     def start_params(self, config):
+        """
+        Get a dictionary of start params for an instance.
+        """
         return {}
 
     def cleanup_start_params(self, config, start_params):
+        """
+        Cleanup the given start params (when start fails).
+        """
         pass
 
     def cleanup(self, config, name):
+        """
+        Cleanup the given instance.
+        """
         pass

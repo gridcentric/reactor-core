@@ -5,8 +5,13 @@ from mako.template import Template
 
 from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
+from reactor.loadbalancer.utils import read_pid
 
 class DnsmasqManagerConfig(Config):
+
+    pid_file = Config.string(label="Pid file",
+        default="/var/run/dnsmasq/dnsmasq.pid",
+        description="The dnsmasq pid file.")
 
     config_path = Config.string(label="Configuration Path", default="/etc/dnsmasq.d", \
         description="The configuration directory to insert base configuration.")
@@ -15,7 +20,8 @@ class DnsmasqManagerConfig(Config):
         description="The directory in which to generate site configurations.")
 
 class Connection(LoadBalancerConnection):
-    """ DNS-based (dnsmasq) """
+
+    """ Dnsmasq """
 
     _MANAGER_CONFIG_CLASS = DnsmasqManagerConfig
     _SUPPORTED_URLS = {
@@ -37,22 +43,14 @@ class Connection(LoadBalancerConnection):
         self.template = Template(filename=template_file)
         self.ipmappings = {}
 
-    def _determine_dnsmasq_pid(self):
-        if os.path.exists("/var/run/dnsmasq/dnsmasq.pid"):
-            pid_file = file("/var/run/dnsmasq/dnsmasq.pid",'r')
-            pid = pid_file.readline().strip()
-            pid_file.close()
-            return int(pid)
-        else:
-            return None
-
-    def clear(self):
-        self.ipmappings = {}
-
     def change(self, url, backends, config=None):
         # Save the mappings.
         name = self.url_info(url)
-        self.ipmappings[name] = backends
+        if len(backends) == 0:
+            if name in self.ipmappings:
+                del self.ipmappings[name]
+        else:
+            self.ipmappings[name] = backends
 
     def save(self):
         # Compute the address mapping.
@@ -83,6 +81,10 @@ class Connection(LoadBalancerConnection):
 
         # Send a signal to dnsmasq to reload the configuration
         # (Note: we might need permission to do this!!).
-        dnsmasq_pid = self._determine_dnsmasq_pid()
-        if dnsmasq_pid:
-            os.kill(dnsmasq_pid, signal.SIGHUP)
+        pid = utils.read_pid(self._manager_config().pid_file)
+        if pid:
+            os.kill(pid, signal.SIGHUP)
+        else:
+            subprocess.call(
+                ["service", "dnsmasq", "start"],
+                close_fds=True)
