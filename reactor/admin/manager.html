@@ -21,6 +21,20 @@
     </div>
 </div>
 
+<div class="control-group">
+    <label class="control-label" for="uuid">Loadbalancers</label>
+    <div class="controls" class="span4">
+    <input class="input-xlarge" id="loadbalancers" type="text" placeholder="" disabled>
+    </div>
+</div>
+
+<div class="control-group">
+    <label class="control-label" for="uuid">Clouds</label>
+    <div class="controls" class="span4">
+    <input class="input-xlarge" id="clouds" type="text" placeholder="" disabled>
+    </div>
+</div>
+
 <!-- Slot for dynamically generated configuration. -->
 <div class="control-group">
   <label class="control-label" for="dynamic-conf">Configuration</label>
@@ -95,6 +109,16 @@
                     // will be able to click until you find the
                     // primary log used (handled below).
                     conf_name = result['info']['names'][0];
+                    if (result['info']['loadbalancers']) {
+                        loadbalancers = result['info']['loadbalancers'].map(
+                            function (item) { return item || "none"; });
+                        $("#loadbalancers").val(loadbalancers.join(","));
+                    }
+                    if (result['info']['clouds']) {
+                        clouds = result['info']['clouds'].map(
+                            function (item) { return item || "none"; });
+                        $("#clouds").val(clouds.join(","));
+                    }
                 } else {
                     conf_name = "${object}";
                 }
