@@ -1,0 +1,96 @@
+global
+    daemon
+    stats socket ${stats_path} mode ${stats_mode}
+    % for opt in global_opts:
+    ${opt}
+    % endfor
+
+defaults
+    log global
+    option httplog
+    option httpclose
+    option forwardfor
+    option dontlognull
+    option redispatch
+    maxconn ${maxconn}
+    clitimeout ${clitimeout}
+    retries 3
+
+% for port, info in frontends.items():
+frontend http 0.0.0.0:${port}
+    <%
+        (mode, backends) = info
+    %>
+    mode ${mode}
+    % for netloc, backend in backends:
+    % if netloc:
+    acl acl_${backend} hdr_dom(host) -i ${netloc}
+    use_backend ${backend} if acl_${backend}
+    % else:
+    default_backend ${backend}
+    % endif
+    % endfor
+% endfor
+
+% for backend, info in http_backends.items():
+backend ${backend}
+    <%
+        (config, servers) = info
+    %>
+    mode http
+    balance ${config.balance}
+
+    # option httpchk METH URI VER
+    # We don't sanitize user input, so technically they could specify like that.
+    % if config.check_url:
+    option ${config.check_url}
+    % endif
+
+    # There are some very common haproxy options, which we do not allow
+    # specifying here. This is because when we have a dynamic system (instances
+    # coming and going), we don't want persist to prevent changing backends and
+    # we don't want keepalive interferring with our metrics.
+    #   option persist
+    #   option keepalive
+
+    # NOTE:
+    # We always specify the cookie value for all the servers. If the
+    # sticky parameter is not set within the service, then we will use
+    # the same cookie value for all servers.
+    cookie SERVERID rewrite
+
+    % for server in servers:
+    ${server}
+    % endfor
+
+    % if config.errorloc:
+    # Error codes: for 400-503.
+    errorloc 400 ${config.errorloc % 400}
+    errorloc 403 ${config.errorloc % 403}
+    errorloc 408 ${config.errorloc % 408}
+    errorloc 500 ${config.errorloc % 500}
+    errorloc 502 ${config.errorloc % 502}
+    errorloc 503 ${config.errorloc % 503}
+    errorloc 504 ${config.errorloc % 504}
+    % endif
+
+    # Options that allow override.
+    contimeout ${config.contimeout}
+    srvtimeout ${config.srvtimeout}
+% endfor
+
+% for backend, info in tcp_backends.items():
+backend ${backend}
+    <%
+        (config, servers) = info
+    %>
+    mode tcp
+    balance ${config.balance}
+
+    stick-table type ip size 200k expire 30m
+    stick on src
+
+    % for server in servers:
+    server ${server}
+    % endfor
+% endfor
