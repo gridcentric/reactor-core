@@ -13,7 +13,7 @@ class GetConnectionTests(unittest.TestCase):
         assert isinstance(get_connection(""), CloudConnection)
 
     def test_get_connection_invalid(self):
-        assert isinstance(get_connection("invalid"), CloudConnection)
+        self.assertRaises(ImportError, get_connection, "invalid")
 
     def test_get_connection_mock(self):
         assert isinstance(get_connection("mock"), Connection)

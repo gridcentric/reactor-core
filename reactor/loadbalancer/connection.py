@@ -11,14 +11,9 @@ from reactor.config import Connection
 def get_connection(name, **kwargs):
     if not name:
         return LoadBalancerConnection(name=name, **kwargs)
-    try:
-        lb_class = "reactor.loadbalancer.%s.connection.Connection" % name
-        lb_conn_class = utils.import_class(lb_class)
-        return lb_conn_class(name=name, **kwargs)
-    except Exception:
-        logging.error("Error loading loadbalancer %s: %s",
-            name, traceback.format_exc())
-        return LoadBalancerConnection(name=name, **kwargs)
+    lb_class = "reactor.loadbalancer.%s.connection.Connection" % name
+    lb_conn_class = utils.import_class(lb_class)
+    return lb_conn_class(name=name, **kwargs)
 
 class LoadBalancerConnection(Connection):
 

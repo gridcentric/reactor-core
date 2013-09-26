@@ -16,9 +16,9 @@ sys.modules["reactor.cloud.mock"] = mock_cloud
 from . import mock_loadbalancer
 sys.modules["reactor.loadbalancer.mock"] = mock_loadbalancer
 
-def cloud_submodules():
+def cloud_submodules(all=False):
     return ["mock"]
-def loadbalancer_submodules():
+def loadbalancer_submodules(all=False):
     return ["mock"]
 
 from reactor import submodules

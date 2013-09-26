@@ -27,12 +27,12 @@ class ManagerConfig(Config):
 
     loadbalancers = Config.multiselect(label="Enabled Loadbalancer Drivers", order=1,
         options=submodules.loadbalancer_options(),
-        default=submodules.loadbalancer_submodules(),
+        default=submodules.loadbalancer_submodules(all=True),
         description="List of supported loadbalancers (e.g. nginx).")
 
     clouds = Config.multiselect(label="Enabled Cloud Drivers", order=1,
         options=submodules.cloud_options(),
-        default=submodules.cloud_submodules(),
+        default=submodules.cloud_submodules(all=True),
         description="List of supported clouds (e.g. osapi).")
 
     interval = Config.integer(label="Health Check Interval (seconds)",
@@ -427,7 +427,11 @@ class ScaleManager(Atomic):
         # fairly sensible __del__ methods when necessary).
         self.loadbalancers = {}
         for name in config.loadbalancers:
-            # Create the load balancer itself.
+            # Skip unavailable loadbalancers.
+            if not name in submodules.loadbalancer_submodules():
+                continue
+
+            # Create the loadbalancer connection.
             self.loadbalancers[name] = \
                 lb_connection.get_connection( \
                     name,
@@ -450,6 +454,11 @@ class ScaleManager(Atomic):
         # NOTE: Same restrictions apply to cloud connections.
         self.clouds = {}
         for name in config.clouds:
+            # Skip unavailable clouds.
+            if not name in submodules.cloud_submodules():
+                continue
+
+            # Create the cloud connection.
             self.clouds[name] = \
                 cloud_connection.get_connection( \
                     name,
