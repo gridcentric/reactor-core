@@ -107,7 +107,7 @@ class NginxLogWatcher(threading.Thread):
                 "response" : (hits, record[host][2] / hits),
                 "bytes" : (hits, record[host][1] / delta),
                 }
-            record[host] = metrics
+            record[host] = [metrics]
 
         return record
 
@@ -121,9 +121,6 @@ class NginxLogWatcher(threading.Thread):
                 # We have some information.
                 (_, host, body, response) = line
                 self.lock.acquire()
-                hostinfo = host.split(":")
-                if len(hostinfo) > 1:
-                    host = hostinfo[0]
                 try:
                     if not(host in self.record):
                         self.record[host] = [0, 0, 0.0]
@@ -308,12 +305,8 @@ class Connection(LoadBalancerConnection):
 
         # Collect all the backend IPs.
         for backend in backends:
-            if not(backend.port):
-                port = listen
-            else:
-                port = backend.port
-            ipspecs.append("%s:%d weight=%d" % (backend.ip, port, backend.weight))
-            self.tracked[uniq_id].append((backend.ip, port))
+            ipspecs.append("%s:%d weight=%d" % (backend.ip, backend.port, backend.weight))
+            self.tracked[uniq_id].append((backend.ip, backend.port))
 
         # Compute any extra bits for the template.
         if self._endpoint_config(config).sticky_sessions:
@@ -372,8 +365,11 @@ class Connection(LoadBalancerConnection):
         for connection_list in self.tracked.values():
             for (ip, port) in connection_list:
                 active = active_connections.get((ip, port), 0)
-                if not(ip in records):
-                    records[ip] = {}
-                records[ip]["active"] = (1, active)
+
+                # Save an additional record.
+                hostinfo = "%s:%d" % (ip, port)
+                if not(hostinfo in records):
+                    records[hostinfo] = []
+                records[hostinfo].append({ "active": (1, active) })
 
         return records

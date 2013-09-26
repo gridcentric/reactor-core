@@ -587,7 +587,15 @@ class ScaleManager(Atomic):
     def error_notify(self, ip):
         # Call into the endpoint to notify of the error.
         for endpoint in self._endpoints.values():
-            endpoint.ip_errored(ip)
+            if endpoint.ip_errored(ip):
+                return True
+
+        # Check if we need to strip a port.
+        if ":" in ip:
+            (ip, port) = ip.split(":", 1)
+            return self.error_notify(ip)
+
+        return False
 
     @Atomic.sync
     def collect(self, endpoint, exclude=False):
@@ -622,11 +630,11 @@ class ScaleManager(Atomic):
         # Collect all metrics from loadbalancers.
         results = {}
         for lb in self.loadbalancers.values():
-            for (host, lb_metrics) in lb.metrics().items():
-                if not host in results:
-                    results[host] = [lb_metrics]
+            for (port, lb_metrics) in lb.metrics().items():
+                if not port in results:
+                    results[port] = lb_metrics
                 else:
-                    results[host].append(lb_metrics)
+                    results[port].append(lb_metrics)
         return results
 
     @Atomic.sync
@@ -665,11 +673,11 @@ class ScaleManager(Atomic):
         for (_, manager_metrics) in metrics_map.items():
             if not manager_metrics:
                 continue
-            for (host, host_metrics) in manager_metrics.items():
-                if not host in all_metrics:
-                    all_metrics[host] = host_metrics[:]
+            for (port, port_metrics) in manager_metrics.items():
+                if not port in all_metrics:
+                    all_metrics[port] = port_metrics[:]
                 else:
-                    all_metrics[host].extend(host_metrics)
+                    all_metrics[port].extend(port_metrics)
 
         self.logging.info(self.logging.ALL_METRICS, all_metrics)
         return all_metrics
@@ -706,27 +714,34 @@ class ScaleManager(Atomic):
     def _load_metrics(self, endpoint, all_metrics):
         """
         Load the particular metrics for a endpoint and return
-        a tuple (metrics, metric_ips, active_ips) where:
+        a tuple (metrics, metric_ports, active_ports) where:
 
              metrics - the computed metrics (list)
-             metric_ips - the IPs used to generate the metrics
-             active_ips - the collection of IPs indicating active
+             metric_ports - the IP:port's used to generate the metrics
+             active_ports - the collection of IP:port's indicating active
         """
         metrics = []
-        metric_ips = set()
-        active_ips = set()
+        metric_ports = set()
+        active_ports = set()
+
+        def _ips_to_ports(ips):
+            # Return a list that has the configured port added for all entries.
+            return map(lambda x: x if ":" in x else "%s:%d" % (x, endpoint.config.port), ips)
 
         endpoint_active_ips = endpoint.active_ips()
         endpoint_inactive_ips = endpoint.inactive_ips()
-        def _extract_metrics(ip, these_metrics):
-            if not ip in endpoint_active_ips and \
-               not ip in endpoint_inactive_ips:
+        endpoint_active_ports = _ips_to_ports(endpoint_active_ips)
+        endpoint_inactive_ports = _ips_to_ports(endpoint_inactive_ips)
+
+        def _extract_metrics(port, these_metrics):
+            if not port in endpoint_active_ports and \
+               not port in endpoint_inactive_ports:
                 return
             metrics.extend(these_metrics)
-            metric_ips.add(ip)
+            metric_ports.add(port)
             for metric in these_metrics:
                 if self._metric_indicates_active(metric):
-                    active_ips.add(ip)
+                    active_ports.add(port)
                     break
 
         # Read any default metrics. We can override the source endpoint for
@@ -739,19 +754,28 @@ class ScaleManager(Atomic):
 
         # Read all available ip-specific metrics.
         ip_metrics = endpoint.zkobj.ip_metrics().as_map()
-        map(lambda (x, y): _extract_metrics(x, [y]), ip_metrics.items())
+        map(lambda (x, y): _extract_metrics(
+            "%s:%d" % (x, endpoint.config.port), [y]),
+            ip_metrics.items())
 
         # Read from all metrics.
         map(lambda (x, y): _extract_metrics(x, y), all_metrics.items())
 
         # Return the metrics.
-        return metrics, list(metric_ips), list(active_ips)
+        return metrics, list(metric_ports), list(active_ports)
 
     def _find_endpoint(self, ip):
         # Try looking it up.
         endpoint_name = self.endpoint_ips.get(ip)
         if endpoint_name is not None:
             return endpoint_name
+
+        # If there a port that we should strip?
+        if ":" in ip:
+            ip = ip.split(":", 1)[0]
+            endpoint_name = self.endpoint_ips.get(ip)
+            if endpoint_name is not None:
+                return endpoint_name
 
         # Try static addresses.
         # NOTE: This isn't really safe, it's more of
@@ -862,7 +886,7 @@ class ScaleManager(Atomic):
                 continue
 
             try:
-                metrics, metric_ips, active_ips = \
+                metrics, metric_ports, active_ports = \
                     self._load_metrics(endpoint, all_metrics)
 
                 # Compute the globally weighted averages.
@@ -871,17 +895,17 @@ class ScaleManager(Atomic):
                 # Add in a count of pending connections.
                 if endpoint.config.url in all_pending:
                     metrics["pending"] = float(all_pending[endpoint.config.url])
-                    if len(metric_ips) > 1:
+                    if len(metric_ports) > 1:
                         # NOTE: We may have no instances with pending connections,
                         # but we still do a best effort attempt to scale this by
                         # the number of available instances. Otherwise, the user
                         # has to treat pending with undue care and attention.
-                        metrics["pending"] = metrics["pending"] / len(metric_ips)
+                        metrics["pending"] = metrics["pending"] / len(metric_ports)
 
                 # Do the endpoint update.
                 endpoint.update(metrics=metrics,
-                                metric_instances=len(metric_ips),
-                                active_ips=active_ips)
+                                metric_instances=len(metric_ports),
+                                active_ports=active_ports)
             except Exception:
                 error = traceback.format_exc()
                 self.logging.warn(self.logging.ENDPOINT_ERROR, name, error)
