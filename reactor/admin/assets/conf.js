@@ -54,7 +54,7 @@ function reloadConfig(context, spec, values, template_info) {
     if (template_info) {
         template_name = getConfigTemplate(values, template_info.section);
 
-        var set = function(template_name) {
+        var set_template = function(template_name) {
             // Simply rebuild the entire config.
             // Note that using the set_fn below, it's possible
             // that the underlying configuration has been changed
@@ -63,7 +63,7 @@ function reloadConfig(context, spec, values, template_info) {
             setConfigTemplate(values, template_info.section, template_name);
             reloadConfig(context, spec, values, template_info);
         }
-        makeTemplateSelect(template_info, template_name || "", set);
+        makeTemplateSelect(template_info, template_name || "", set_template);
     }
 
     if (template_name &&
@@ -155,7 +155,7 @@ function mergeConfig(context, spec, values) {
     context["spec"] = spec;
 }
 
-function makeTemplateSelect(template_info, template_name, set) {
+function makeTemplateSelect(template_info, template_name, set_template) {
     // Clear all options.
     template_info.select.children().remove();
 
@@ -170,7 +170,7 @@ function makeTemplateSelect(template_info, template_name, set) {
     // Reload the template on change.
     template_info.select.off('change');
     template_info.select.on('change', function() {
-        set(template_info.select.val());
+        set_template(template_info.select.val());
     });
 }
 

@@ -129,5 +129,44 @@ ENDPOINT_TEMPLATES = {
                     ]
                 }
             ]
+        },
+    "docker" : {
+            "description" : "Docker-based Service",
+            "components" : [
+                {
+                    "name" : "endpoint", "description" : "Endpoint", "items" : [
+                        { "item" : "endpoint:url" },
+                        { "item" : "endpoint:port" },
+                        { "item" : "endpoint:loadbalancer" }
+                    ]
+                },
+                {
+                    "name" : "cloud", "description" : "Docker Settings", "items" : [
+                        { "item" : "cloud:docker:slots" },
+                        { "item" : "cloud:docker:command" },
+                        { "item" : "cloud:docker:image" },
+                        { "item" : "cloud:docker:user" },
+                        { "item" : "cloud:docker:environment" },
+                        { "item" : "cloud:docker:mem_limit" },
+                        { "item" : "cloud:docker:dns" },
+                        { "item" : "cloud:docker:hostname" }
+                    ]
+                },
+                {
+                    "name" : "scaling", "description" : "Auto-scaling", "items" : [
+                        { "item" : "scaling:min_instances", "default" : "1" },
+                        { "item" : "scaling:max_instances", "default" : "1" },
+                        { "item" : "scaling:rules" }
+                    ]
+                },
+                {
+                    "items" : [
+                        { "item" : "endpoint:cloud", "default" : "docker" },
+                        { "item" : "endpoint:unregistered_marks", "default" : 1 },
+                        { "item" : "endpoint:decommissioned_marks", "default" : 1 },
+                        { "item" : "endpoint:template", "default" : "docker" }
+                    ]
+                }
+            ]
         }
 }
