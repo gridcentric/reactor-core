@@ -33,8 +33,16 @@ setup(
     ],
     packages=find_packages(exclude=["reactor.testing"]),
     package_data={
-        "reactor.loadbalancer.nginx" : ["nginx.template", "reactor.conf"],
-        "reactor.loadbalancer.dnsmasq" : ["dnsmasq.template"],
+        "reactor.loadbalancer.nginx" : [
+            "nginx.template",
+            "reactor.conf"
+        ],
+        "reactor.loadbalancer.haproxy" : [
+            "haproxy.template"
+        ],
+        "reactor.loadbalancer.dnsmasq" : [
+            "dnsmasq.template"
+        ],
         "reactor" : [
             "admin/*.html",
             "admin/include/*.html",
