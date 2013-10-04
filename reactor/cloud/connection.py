@@ -11,14 +11,9 @@ from reactor.config import Connection
 def get_connection(name, **kwargs):
     if not name:
         return CloudConnection(name, **kwargs)
-
-    try:
-        cloud_class = "reactor.cloud.%s.connection.Connection" % name
-        cloud_conn_class = utils.import_class(cloud_class)
-        return cloud_conn_class(name, **kwargs)
-    except Exception:
-        logging.error("Unable to load cloud: %s", traceback.format_exc())
-        return CloudConnection(name, **kwargs)
+    cloud_class = "reactor.cloud.%s.connection.Connection" % name
+    cloud_conn_class = utils.import_class(cloud_class)
+    return cloud_conn_class(name, **kwargs)
 
 class CloudConnection(Connection):
 
