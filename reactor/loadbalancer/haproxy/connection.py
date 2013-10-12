@@ -203,6 +203,8 @@ class Connection(LoadBalancerConnection):
                 close_fds=True)
 
     def _sock_command(self, command):
+        if not os.path.exists(self._manager_config().stats_path):
+            return None
         socat = subprocess.Popen([
             "socat",
             "stdio",
