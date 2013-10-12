@@ -203,8 +203,12 @@ class EndpointLog(EventLog):
         lambda args: "Recommissioning instance with IP %s" % _as_ip(args[0]))
     DECOMMISSION_INSTANCE = Event(
         lambda args: "Decommissioning instance with IP %s" % _as_ip(args[0]))
+    CLEAN_INSTANCE = Event(
+        lambda args: "Cleaning instance data for %s" % args[0])
     LAUNCH_INSTANCE = Event(
         lambda args: "Launching instance")
+    LAUNCH_SUCCESS = Event(
+        lambda args: "Launched instance %s" % args[0])
     LAUNCH_FAILURE = Event(
         lambda args: "Failure launching instance: %s" % args[0])
     DELETE_INSTANCE = Event(
@@ -212,9 +216,11 @@ class EndpointLog(EventLog):
     DELETE_FAILURE = Event(
         lambda args: "Failure deleting instance with IP %s" % _as_ip(args[0]))
     CONFIRM_IP = Event(
-        lambda args: "Confirmed instance with IP %s" % _as_ip(args[0]))
+        lambda args: "Confirmed instance with IP %s (%s)" %
+            (_as_ip(args[0]), len(args) > 1 and args[1] or "unknown"))
     DROP_IP = Event(
-        lambda args: "Dropped instance with IP %s" % _as_ip(args[0]))
+        lambda args: "Dropped instance with IP %s (%s)" %
+            (_as_ip(args[0]), len(args) > 1 and args[1] or "unknown"))
     ERROR_IP = Event(
         lambda args: "Errors on instance with IP %s" % _as_ip(args[0]))
     UPDATE_ERROR = Event(
@@ -644,7 +650,7 @@ class Endpoint(Atomic):
 
             for ip in self.instance_ips.get(instance_id):
                 # Reconfirm all ip addresses.
-                self.logging.info(self.logging.CONFIRM_IP, ip)
+                self.logging.info(self.logging.CONFIRM_IP, ip, "recommission")
                 self.confirmed_ips.add(ip, instance_id)
 
             recommissioned += 1
@@ -679,7 +685,7 @@ class Endpoint(Atomic):
             # the same set of IP metrics to be effect, so they will
             # only be cleared out when the actual instance is deleted.
             for ip in ips:
-                self.logging.info(self.logging.DROP_IP, ip)
+                self.logging.info(self.logging.DROP_IP, ip, "decomission")
                 self.zkobj.confirmed_ips().remove(ip)
 
     def _delete_instance(self, instance_id, cloud=True, errored=False, decommissioned=False):
@@ -709,6 +715,7 @@ class Endpoint(Atomic):
         self._clean_instance(instance_id, errored=errored, decommissioned=decommissioned)
 
     def _clean_instance(self, instance_id, errored=False, decommissioned=False):
+        self.logging.info(self.logging.CLEAN_INSTANCE, instance_id)
         if errored:
             name = self.errored.get(instance_id)
         elif decommissioned:
@@ -727,7 +734,7 @@ class Endpoint(Atomic):
         # by the health_check process (which scrubs old ids).
         ips = self.instance_ips.get(instance_id)
         for ip in ips:
-            self.logging.info(self.logging.DROP_IP, ip)
+            self.logging.info(self.logging.DROP_IP, ip, "clean")
             self.confirmed_ips.remove(ip)
             self.zkobj.ip_metrics().remove(ip)
 
@@ -751,10 +758,11 @@ class Endpoint(Atomic):
             (instance, ips) = \
                 self.cloud_conn.start_instance(
                     self.config, params=start_params)
+
             if ips:
                 for ip in ips:
                     # The IP address has been pre-confirmed.
-                    self.logging.info(self.logging.CONFIRM_IP, ip)
+                    self.logging.info(self.logging.CONFIRM_IP, ip, "launch")
                     self.confirmed_ips.add(ip, instance.id)
 
         except Exception, e:
@@ -766,6 +774,7 @@ class Endpoint(Atomic):
 
         # Save basic instance data.
         self.instances.add(instance.id, instance.name)
+        self.logging.info(self.logging.LAUNCH_SUCCESS, instance.id)
 
     def _filter_instances(self, instances, regular=True, decommissioned=True, errored=True):
         known_instances = self.instances.list()
@@ -855,7 +864,7 @@ class Endpoint(Atomic):
             # update the load balancer because there is no actual instance
             # backing them.
             for orphaned_address in orphaned_ips:
-                self.logging.info(self.logging.DROP_IP, orphaned_address)
+                self.logging.info(self.logging.DROP_IP, orphaned_address, "orphaned")
                 self.zkobj.confirmed_ips().remove(orphaned_address)
 
         # This step is done to ensure that the instance remains inactive for at
@@ -879,7 +888,7 @@ class Endpoint(Atomic):
                 # NOTE: We only add the IP to the set of confirmed IPs.
                 # The reload of the loadbalancer, etc. will be handled
                 # out of the band when the confirmed IPs cache is updated.
-                self.logging.info(self.logging.CONFIRM_IP, ip)
+                self.logging.info(self.logging.CONFIRM_IP, ip, "confirmed")
                 self.confirmed_ips.add(ip, instance_id)
                 return True
         return False
@@ -890,7 +899,7 @@ class Endpoint(Atomic):
             # confirmed IPs. Eventually, the backing machine
             # will fail a health check (marks, etc.) and be
             # purged from the system.
-            self.logging.info(self.logging.DROP_IP, ip)
+            self.logging.info(self.logging.DROP_IP, ip, "dropped")
             self.confirmed_ips.remove(ip)
             return True
         return False

@@ -168,7 +168,6 @@ class Connection(LoadBalancerConnection):
             self.frontends[listen] = (scheme, [])
         self.frontends[listen][1].append((netloc, uniq_id))
         backend_map[uniq_id] = (config, ipspecs)
-        print self.frontends
 
     def save(self):
         # Render our given template.
