@@ -20,6 +20,10 @@ class BaseOsEndpointConfig(Config):
     # Cached client.
     _client = None
 
+    # Cached list values.
+    _list_cache = []
+    _last_refresh = None
+
     # Common authentication elements.
     auth_url = Config.string(label="OpenStack Auth URL",
         default="http://localhost:5000/v2.0/", order=0,
@@ -94,8 +98,6 @@ class BaseOsConnection(CloudConnection):
 
     def __init__(self, *args, **kwargs):
         super(BaseOsConnection, self).__init__(*args, **kwargs)
-        self._list_cache = []
-        self._last_refresh = None
 
     def _list_instances(self, config, instance_id):
         """
@@ -109,19 +111,20 @@ class BaseOsConnection(CloudConnection):
         Lists the instances related to a endpoint. The identifier is used to
         identify the related instances in the respective clouds.
         """
-        list_rate_limit = self._endpoint_config(config).list_rate_limit
+        config = self._endpoint_config(config)
+        list_rate_limit = config.list_rate_limit
 
         if instance_id is not None:
             instances = self._list_instances(config, instance_id)
 
-        elif self._last_refresh is not None and \
-            (self._last_refresh + list_rate_limit) > time.time():
-            instances = self._list_cache
+        elif config._last_refresh is not None and \
+            (config._last_refresh + list_rate_limit) > time.time():
+            instances = config._list_cache
 
         else:
             instances = self._list_instances(config, None)
-            self._list_cache = instances
-            self._last_refresh = time.time()
+            config._list_cache = instances
+            config._last_refresh = time.time()
 
         instances = sorted(instances, key=lambda x: x._info.get("created", ""))
 
@@ -168,7 +171,8 @@ class BaseOsConnection(CloudConnection):
         # Reset the refresh so no matter what happens,
         # when we next call list() we will have an up
         # to date view of what's running on the cloud.
-        self._last_refresh = None
+        config = self._endpoint_config(config)
+        config._last_refresh = None
 
         # Finally, do the start.
         # NOTE: We don't catch any exceptions here,
@@ -200,7 +204,8 @@ class BaseOsConnection(CloudConnection):
         # to establish truth. If the delete fails,
         # we don't need the instance so it's less
         # critical to get an immediate update.
-        self._last_refresh = None
+        config = self._endpoint_config(config)
+        config._last_refresh = None
 
 class OsApiEndpointConfig(BaseOsEndpointConfig):
 
