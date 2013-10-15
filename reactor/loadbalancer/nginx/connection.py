@@ -189,15 +189,16 @@ class Connection(LoadBalancerConnection):
         self.log_reader = NginxLogWatcher("/var/log/nginx/access.log")
         self.log_reader.start()
 
-        # Remove all sites configurations.
-        # We want to start with a clean slate in case
-        # there was state leftover from before.
-        for conf in glob.glob(
-            os.path.join(self._manager_config().site_path, "reactor.*")):
-            try:
-                os.remove(conf)
-            except OSError:
-                pass
+        if kwargs.get('zkobj') is not None:
+            # Remove all sites configurations.
+            # We want to start with a clean slate in case
+            # there was state leftover from before.
+            for conf in glob.glob(
+                os.path.join(self._manager_config().site_path, "reactor.*")):
+                try:
+                    os.remove(conf)
+                except OSError:
+                    pass
 
     def __del__(self):
         self.log_reader.stop()
