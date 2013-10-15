@@ -256,8 +256,13 @@ class ReactorApi(object):
 
         # We were not able to authenticate using the
         # credentials from any endpoint associated with
-        # this ip address.
-        return False
+        # this ip address. We allow access if this was an
+        # implicit match (i.e. the endpoint name was set
+        # because it was from the IP) otherwise we disallow.
+        if request.matched_route is not None:
+            return request.matched_route.name.endswith("-implicit")
+        else:
+            return False
 
     @connected
     def _extract_remote_ip(self, context, request):
