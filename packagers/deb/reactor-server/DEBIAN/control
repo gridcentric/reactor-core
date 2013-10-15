@@ -2,12 +2,12 @@ Package: reactor-server
 Section: extra
 Version: VERSION
 Architecture: all
-Depends: iptables, curl, openssh-client,
+Depends: python-reactor,
     python-paste, python-pyramid, python-mako,
     python-netifaces, python-ldap, python-netaddr,
-    python-webob, python-httplib2,
-    zookeeperd, python-zookeeper,
-    python-novaclient, cobalt-novaclient,
-    socat
+    python-webob, python-zookeeper,
+    iptables, curl, openssh-client
+Recommends: python-novaclient, cobalt-novaclient,
+    socat, zookeeperd, nginx, haproxy
 Maintainer: Gridcentric Inc. <support@gridcentric.com>
 Description: Reactor server
