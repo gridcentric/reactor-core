@@ -704,7 +704,7 @@ class Endpoint(Atomic):
             # only be cleared out when the actual instance is deleted.
             for ip in ips:
                 self.logging.info(self.logging.DROP_IP, ip, "decomission")
-                self.zkobj.confirmed_ips().remove(ip)
+                self.confirmed_ips.remove(ip)
 
     def _delete_instance(self, instance_id, cloud=True, errored=False, decommissioned=False):
         # NOTE: Because we're going to lose this instance from
@@ -820,7 +820,7 @@ class Endpoint(Atomic):
                instance.status == cloud_instance.STATUS_ERROR and \
                not instance.id in self.errored.list() and \
                self._mark_instance(instance.id, 'error'):
-                self.logging.info(self.logging.ERROR_INSTANCE, instance.id)
+                self.logging.warn(self.logging.ERROR_INSTANCE, instance.id)
                 self._decommission_instances([instance.id], errored=True)
 
         # Mark sure that the manager does not contain old
@@ -892,7 +892,7 @@ class Endpoint(Atomic):
             # backing them.
             for orphaned_address in orphaned_ips:
                 self.logging.info(self.logging.DROP_IP, orphaned_address, "orphaned")
-                self.zkobj.confirmed_ips().remove(orphaned_address)
+                self.confirmed_ips.remove(orphaned_address)
 
         # This step is done to ensure that the instance remains inactive for at
         # least a small period of time before we destroy it. It's quite
@@ -937,7 +937,7 @@ class Endpoint(Atomic):
                 # If this belongs to an instance of ours,
                 # then we call mark_instance appropriately.
                 if self._mark_instance(instance_id, 'error'):
-                    self.logging.info(self.logging.ERROR_IP, ip)
+                    self.logging.warn(self.logging.ERROR_IP, ip)
                     self._decommission_instances([instance_id], errored=True)
                 return True
         return False

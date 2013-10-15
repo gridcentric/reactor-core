@@ -109,6 +109,10 @@ class ManagerLog(EventLog):
         lambda args: "No match for session %s!" % args[0])
     ENDPOINT_ERROR = Event(
         lambda args: "Error updating endpoint %s: %s" % (args[0], args[1]))
+    ENDPOINT_SKIPPED = Event(
+        lambda args: "Skipped endpoint %s" % args[0])
+    ENDPOINT_UPDATED = Event(
+        lambda args: "Updated endpoint %s" % args[0])
 
     def __init__(self, *args):
         super(ManagerLog, self).__init__(*args, size=ManagerLog.LOG_SIZE)
@@ -907,6 +911,7 @@ class ScaleManager(Atomic):
 
             # Do not kick the endpoint if it is not currently owned by us.
             if not(owned):
+                self.logging.info(self.logging.ENDPOINT_SKIPPED, name)
                 continue
 
             try:
@@ -930,6 +935,7 @@ class ScaleManager(Atomic):
                 endpoint.update(metrics=metrics,
                                 metric_instances=len(metric_ports),
                                 active_ports=active_ports)
+                self.logging.info(self.logging.ENDPOINT_UPDATED, name)
             except Exception:
                 error = traceback.format_exc()
                 self.logging.warn(self.logging.ENDPOINT_ERROR, name, error)
