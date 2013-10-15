@@ -23,6 +23,13 @@ import novaclient.exceptions
 from reactor.config import Config
 from reactor.cloud.connection import CloudConnection
 from reactor.cloud.instance import Instance
+from reactor.cloud.instance import STATUS_OKAY, STATUS_ERROR
+
+STATUS_MAP = {
+    "ACTIVE": STATUS_OKAY,
+    "BUILD": STATUS_OKAY,
+    "ERROR": STATUS_ERROR,
+}
 
 class BaseOsManagerConfig(Config):
 
@@ -162,7 +169,10 @@ class BaseOsConnection(CloudConnection):
                 for network_addrs in network_addresses:
                     addresses.append(str(network_addrs['addr']))
 
-            return Instance(id, name, addresses)
+            # Extract a status.
+            status = STATUS_MAP.get(instance._info.get('status'), STATUS_ERROR)
+
+            return Instance(id, name, addresses, status)
 
         # Return all sanitizing instances.
         return map(_sanitize, instances)

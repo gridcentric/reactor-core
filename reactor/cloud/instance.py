@@ -17,12 +17,16 @@
 Interface to cloud instances.
 """
 
+STATUS_OKAY  = True
+STATUS_ERROR = False
+
 class Instance(object):
 
-    def __init__(self, id, name, ips):
+    def __init__(self, id, name, ips, status=STATUS_OKAY):
         self._id = str(id)
         self._name = name
         self._ips = ips
+        self._status = status
 
     @property
     def id(self):
@@ -35,3 +39,7 @@ class Instance(object):
     @property
     def ips(self):
         return map(str, self._ips)
+
+    @property
+    def status(self):
+        return self._status

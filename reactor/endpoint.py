@@ -25,6 +25,7 @@ from . submodules import loadbalancer_submodules, loadbalancer_options
 from . eventlog import EventLog, Event
 from . utils import sha_hash
 from . cloud import connection as cloud_connection
+from . cloud import instance as cloud_instance
 from . loadbalancer import connection as lb_connection
 from . loadbalancer import backend as lb_backend
 from . metrics import calculator as metric_calculator
@@ -238,6 +239,8 @@ class EndpointLog(EventLog):
             (_as_ip(args[0]), len(args) > 1 and args[1] or "unknown"))
     ERROR_IP = Event(
         lambda args: "Errors on instance with IP %s" % _as_ip(args[0]))
+    ERROR_INSTANCE = Event(
+        lambda args: "Errors on instance %s" % args[0])
     UPDATE_ERROR = Event(
         lambda args: "Error updating endpoint: %s" % args[0])
     RELOADED = Event(
@@ -810,6 +813,15 @@ class Endpoint(Atomic):
         errored_instances = self.errored.list()
         confirmed_ips = set(self.confirmed_ips.list())
         active_ports = set(active_ports)
+
+        # Check if there's an error indicated by the cloud backend.
+        for instance in instances:
+            if instance.id in instance_ids and \
+               instance.status == cloud_instance.STATUS_ERROR and \
+               not instance.id in self.errored.list() and \
+               self._mark_instance(instance.id, 'error'):
+                self.logging.info(self.logging.ERROR_INSTANCE, instance.id)
+                self._decommission_instances([instance.id], errored=True)
 
         # Mark sure that the manager does not contain old
         # scale data, which may result in clogging up Zookeeper.
