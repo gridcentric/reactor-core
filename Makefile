@@ -95,24 +95,6 @@ $(DEBBUILD):
 	@$(INSTALL_DIR) $(DEBBUILD)
 .PHONY: $(DEBBUILD)
 
-# Build agent packages.
-agent.deb: $(DEBBUILD)
-	@$(INSTALL_DIR) $(DEBBUILD)/reactor-agent
-	@rsync -ruav --delete packagers/deb/reactor-agent/ $(DEBBUILD)/reactor-agent
-	@rsync -ruav agent/ $(DEBBUILD)/reactor-agent
-	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-agent/DEBIAN/control
-	@fakeroot dpkg -b $(DEBBUILD)/reactor-agent .
-.PHONY: agent.deb
-
-agent.rpm: $(RPMBUILD)
-	@rpmbuild --with=suggests -bb \
-	    --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
-	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \
-	    --define="%version $(PACKAGE_VERSION)" \
-	    packagers/rpm/reactor-agent.spec
-	@find $(RPMBUILD) -name \*.rpm -exec mv {} . \;
-.PHONY: agent.rpm
-
 # Build server packages.
 server.deb: $(DEBBUILD)
 	@$(INSTALL_DIR) $(DEBBUILD)/reactor-server
@@ -157,8 +139,8 @@ cobaltclient.deb:
 packages: deb-packages rpm-packages
 .PHONY: packages
 
-deb-packages: agent.deb server.deb cobaltclient.deb
+deb-packages: server.deb cobaltclient.deb
 .PHONY: deb-packages
 
-rpm-packages: agent.rpm server.rpm cobaltclient.rpm
+rpm-packages: server.rpm cobaltclient.rpm
 .PHONY: rpm-packages
