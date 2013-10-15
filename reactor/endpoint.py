@@ -554,8 +554,8 @@ class Endpoint(Atomic):
         elif target < num_instances:
 
             # Build our list of candidates (favoring those that are not active).
-            candidates = list(set(inactive_ids).union(instances))
-            candidates.extend(list(set(active_ids).union(instances)))
+            candidates = list(set(inactive_ids).intersection(instances))
+            candidates.extend(list(set(active_ids).intersection(instances)))
 
             # Take all the instances that we can.
             to_do = min(len(candidates), ramp_limit, num_instances - target)
