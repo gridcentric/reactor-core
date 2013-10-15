@@ -1,3 +1,18 @@
+# Copyright 2013 GridCentric Inc.
+# All Rights Reserved.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
+
 import threading
 import time
 import uuid
@@ -137,7 +152,7 @@ class ScaleManager(Atomic):
         # store it under our UUID since it is generated each start.
         # The solution to this problem is that we store the logs
         # under the first name, and ensure that we expose our names
-        # via the manager info block (see _register() below). This way, 
+        # via the manager info block (see _register() below). This way,
         # clients can look up the right place for each manager.
         self.logging = ManagerLog(self.zkobj.managers().log(self._names[0]))
 
@@ -291,7 +306,7 @@ class ScaleManager(Atomic):
         # NOTE: We play a little bit of trickery and
         # remove endpoints from our local list (to prevent
         # updates) before they may actually be removed from
-        # Zookeeper. So it's possible that we'll have a 
+        # Zookeeper. So it's possible that we'll have a
         # spurious event fire in this case, and we'd like to
         # avoid doing a bunch of extra work.
         endpoints.sort()
