@@ -1,7 +1,0 @@
-Package: reactor-agent
-Section: extra
-Version: VERSION
-Architecture: all
-Maintainer: Gridcentric Inc. <support@gridcentric.com>
-Description: Reactor in-guest agent.
-Depends: vms-agent
