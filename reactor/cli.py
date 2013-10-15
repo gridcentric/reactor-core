@@ -21,6 +21,7 @@ import sys
 import traceback
 import json
 import gc
+import getpass
 import atexit
 
 from . import log
@@ -54,6 +55,9 @@ def usage():
     print "   --api=                  The API url (default is localhost)."
     print ""
     print "   --password=             The password used to connect to the API."
+    print "   --askpass               Prompt for the password."
+    print "                           (Alternately, the API password can be provided"
+    print "                            in the environment variable REACTOR_PASSWORD)."
     print ""
     print "   --zookeeper=            The host:port of a zookeeper instance. Use this option"
     print "                           multiple times to specific multiple instances. Only"
@@ -161,7 +165,7 @@ def daemonize(pidfile):
 def main():
     api_server = "http://localhost:8080"
     zk_servers = []
-    password = None
+    password = os.getenv("REACTOR_PASSWORD")
     debug = False
     logfile = None
     pidfile = None
@@ -172,6 +176,7 @@ def main():
         [
             "help",
             "api=",
+            "askpass",
             "password=",
             "zookeeper=",
             "debug",
@@ -187,6 +192,8 @@ def main():
             sys.exit(0)
         elif o in ('--api',):
             api_server = a
+        elif o in ('--askpass',):
+            password = getpass.getpass()
         elif o in ('--password',):
             password = a
         elif o in ('--zookeeper',):
