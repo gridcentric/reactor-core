@@ -30,6 +30,7 @@ from . zookeeper.connection import ZookeeperException
 from . zookeeper.cache import Cache
 from . objects.root import Reactor
 from . utils import random_key
+from . threadpool import Threadpool
 from . endpoint import Endpoint
 from . metrics.calculator import calculate_weighted_averages
 from . loadbalancer import connection as lb_connection
@@ -127,6 +128,16 @@ class ScaleManager(Atomic):
 
     def __init__(self, zk_servers, names=None):
         super(ScaleManager, self).__init__()
+
+        # Our thread pool.
+        # The threadpool is used to do endpoint updates.
+        # This pool will scale automatically to accomodate as
+        # many endpoints as we have. Unfortunately, each endpoint
+        # will likely require add a thread to the size of the pool,
+        # so that will only scale to a few hundred endpoints per
+        # manager. At some point, we may have to revisit this and
+        # see how we could improve scalability for endpoints.
+        self._threadpool = Threadpool()
 
         # Manager uuid (generated).
         # This doesn't serve any particular purpose other than
@@ -888,7 +899,7 @@ class ScaleManager(Atomic):
                 if not endpoint_ips.get(ip) == endpoint_name:
                     self.endpoint_ips.add(ip, endpoint_name)
 
-    def update(self):
+    def update(self, elapsed=None):
         # Update the list of sessions.
         self.update_sessions()
 
@@ -899,6 +910,13 @@ class ScaleManager(Atomic):
         # as our healthcheck interval.
         all_metrics = self.update_metrics()
         all_pending = self.update_pending()
+
+        # Run endpoint updates.
+        self.update_endpoints(all_metrics, all_pending, elapsed=elapsed)
+
+    def update_endpoints(self, all_metrics, all_pending, elapsed=None):
+        # List of updates.
+        update_jobs = {}
 
         # Does a health check on all the endpoints that are being managed.
         for (name, endpoint) in self._endpoints.items():
@@ -914,27 +932,34 @@ class ScaleManager(Atomic):
                 self.logging.info(self.logging.ENDPOINT_SKIPPED, name)
                 continue
 
+            metrics, metric_ports, active_ports = \
+                self._load_metrics(endpoint, all_metrics)
+
+            # Compute the globally weighted averages.
+            metrics = calculate_weighted_averages(metrics)
+
+            # Add in a count of pending connections.
+            if endpoint.config.url in all_pending:
+                metrics["pending"] = float(all_pending[endpoint.config.url])
+                if len(metric_ports) > 1:
+                    # NOTE: We may have no instances with pending connections,
+                    # but we still do a best effort attempt to scale this by
+                    # the number of available instances. Otherwise, the user
+                    # has to treat pending with undue care and attention.
+                    metrics["pending"] = metrics["pending"] / len(metric_ports)
+
+            # Do the endpoint update.
+            update_jobs[name] = self._threadpool.submit(
+                endpoint.update,
+                metrics=metrics,
+                metric_instances=len(metric_ports),
+                active_ports=active_ports,
+                update_interval=elapsed)
+
+        # Wait for all updates to finish.
+        for (name, job) in update_jobs.items():
             try:
-                metrics, metric_ports, active_ports = \
-                    self._load_metrics(endpoint, all_metrics)
-
-                # Compute the globally weighted averages.
-                metrics = calculate_weighted_averages(metrics)
-
-                # Add in a count of pending connections.
-                if endpoint.config.url in all_pending:
-                    metrics["pending"] = float(all_pending[endpoint.config.url])
-                    if len(metric_ports) > 1:
-                        # NOTE: We may have no instances with pending connections,
-                        # but we still do a best effort attempt to scale this by
-                        # the number of available instances. Otherwise, the user
-                        # has to treat pending with undue care and attention.
-                        metrics["pending"] = metrics["pending"] / len(metric_ports)
-
-                # Do the endpoint update.
-                endpoint.update(metrics=metrics,
-                                metric_instances=len(metric_ports),
-                                active_ports=active_ports)
+                job.join()
                 self.logging.info(self.logging.ENDPOINT_UPDATED, name)
             except Exception:
                 error = traceback.format_exc()
@@ -947,10 +972,11 @@ class ScaleManager(Atomic):
                 self.serve()
 
                 # Perform continuous health checks.
+                elapsed = None
                 while self._running:
                     start_time = time.time()
                     self.check_endpoint_ips()
-                    self.update()
+                    self.update(elapsed=elapsed)
 
                     # We only sleep for the part of the interval that
                     # we were not active for. This allows us to actually

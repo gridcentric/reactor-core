@@ -17,6 +17,7 @@ import hashlib
 import socket
 import sys
 import traceback
+import math
 
 from . atomic import Atomic
 from . config import Config
@@ -68,16 +69,16 @@ class EndpointConfig(Config):
             Config.error("Errors must be non-negative."),
         description="Maximum error count for active VMs.")
 
-    unregistered_marks = Config.integer(label="Unregistered Marks",
+    unregistered_timeout = Config.integer(label="Unregistered Timeout (s)",
         default=36, order=2,
-        validate=lambda self: self.unregistered_marks > 0 or \
-            Config.error("Marks must be positive."),
+        validate=lambda self: self.unregistered_timeout > 0 or \
+            Config.error("Timeout must be positive."),
         description="Timeout for unregistered VMs.")
 
-    decommissioned_marks = Config.integer(label="Decommissioned Marks",
+    decommissioned_timeout = Config.integer(label="Decommissioned Timeout (s)",
         default=18, order=2,
-        validate=lambda self: self.decommissioned_marks > 0 or \
-            Config.error("Marks must be positive."),
+        validate=lambda self: self.decommissioned_timeout > 0 or \
+            Config.error("Timeout must be positive."),
         description="Timeout for decomissioned VMs.")
 
     auth_hash = Config.string(label="Auth Hash Token", default=None, order=3,
@@ -404,7 +405,8 @@ class Endpoint(Atomic):
     def update(self,
                metrics=None,
                metric_instances=None,
-               active_ports=None):
+               active_ports=None,
+               update_interval=None):
         """
         Update the endpoint based on current metrics and
         active instances. This will launch new instances or
@@ -433,7 +435,11 @@ class Endpoint(Atomic):
 
             # Run a healthcheck to reap old instances,
             # decomissioned instances, unable to launch, etc.
-            (active_ids, inactive_ids) = self._health_check(instances, active_ports)
+            (active_ids, inactive_ids) = \
+                self._health_check(
+                    instances,
+                    active_ports,
+                    update_interval=update_interval)
 
             # Run an update to launch new instances.
             return self._update(instances,
@@ -803,7 +809,7 @@ class Endpoint(Atomic):
              (decommissioned and x.id in decommissioned_instances) or
              (errored and x.id in errored_instances))]
 
-    def _health_check(self, instances, active_ports):
+    def _health_check(self, instances, active_ports, update_interval=None):
         """
         Reap instances that are not responding or have been
         decomissioned for a sufficiently long period of time.
@@ -858,7 +864,11 @@ class Endpoint(Atomic):
 
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
-                if self._mark_instance(instance_id, 'unregistered'):
+                if self._mark_instance(
+                    instance_id,
+                    'unregistered',
+                    marks=update_interval):
+
                     # This instance has been deemed to be dead and should be
                     # cleaned up.  We don't decomission it because we have
                     # never heard from it in the first place. So there's no
@@ -900,10 +910,16 @@ class Endpoint(Atomic):
         # sessions or connections to this backend.
         for inactive_instance_id in inactive_instance_ids:
             if inactive_instance_id in decommissioned_instances:
-                if self._mark_instance(inactive_instance_id, 'decommissioned'):
+                if self._mark_instance(
+                    inactive_instance_id,
+                    'decommissioned',
+                    marks=update_interval):
                     self._delete_instance(inactive_instance_id, decommissioned=True)
             if inactive_instance_id in errored_instances:
-                if self._mark_instance(inactive_instance_id, 'decommissioned'):
+                if self._mark_instance(
+                    inactive_instance_id,
+                    'decommissioned',
+                    marks=update_interval):
                     self._delete_instance(inactive_instance_id, errored=True)
 
         # Return the active instance ids for update().
@@ -980,13 +996,17 @@ class Endpoint(Atomic):
 
         return map(to_backend, self.active_ips())
 
-    def _mark_instance(self, instance_id, label):
+    def _mark_instance(self, instance_id, label, marks=None):
         """ Increments the mark counter. """
-        # Increment the mark counter.
+        if marks is None:
+            marks = 1
+        else:
+            marks = math.ceil(marks)
+
         remove_instance = False
         mark_counters = self.zkobj.marked_instances().get(instance_id) or {}
         mark_counter = mark_counters.get(label, 0)
-        mark_counter += 1
+        mark_counter += marks
 
         max_counter = {
             "unregistered": self.config.unregistered_marks,
