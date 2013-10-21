@@ -46,6 +46,9 @@ def sig_usr2_handler(signum, frame):
 
 signal.signal(signal.SIGUSR2, sig_usr2_handler)
 
+# Our default port.
+DEFAULT_PORT = 8080
+
 def usage():
     print "usage: %s < --help | [options] command >" % sys.argv[0]
     print ""
@@ -62,6 +65,9 @@ def usage():
     print "   --zookeeper=            The host:port of a zookeeper instance. Use this option"
     print "                           multiple times to specific multiple instances. Only"
     print "                           necessary for run commands. The default is localhost."
+    print ""
+    print "   --port=                 The port to use for the API server."
+    print "                           This option is also only necessary for run commands." 
     print ""
     print "   --debug                 Enables debugging log and full stack trace errors."
     print ""
@@ -165,7 +171,8 @@ def daemonize(pidfile):
     f.close()
 
 def main():
-    api_server = "http://localhost:8080"
+    port = DEFAULT_PORT
+    api_server = "localhost"
     zk_servers = []
     password = os.getenv("REACTOR_PASSWORD")
     debug = False
@@ -181,6 +188,7 @@ def main():
             "askpass",
             "password=",
             "zookeeper=",
+            "port=",
             "debug",
             "gui",
             "pidfile=",
@@ -200,6 +208,8 @@ def main():
             password = a
         elif o in ('--zookeeper',):
             zk_servers.append(a)
+        elif o in ('--port',):
+            port = int(a)
         elif o in ('--debug',):
             debug = True
         elif o in ('--log',):
@@ -221,6 +231,13 @@ def main():
     if len(zk_servers) == 0:
         # Otherwise, use localhost.
         zk_servers = ["localhost"]
+
+    # Fixup the API server.
+    if not 'http:' in api_server and \
+       not 'https:' in api_server:
+        api_server = "http://%s" % (api_server)
+    if len(api_server.split(":")) < 3:
+        api_server = "%s:%d" % (api_server, port)
 
     loglevel = logging.INFO
     if debug:
@@ -418,7 +435,7 @@ def main():
             from paste.httpserver import serve
             logging.info("Preparing API...")
             ready()
-            serve(app, host='0.0.0.0')
+            serve(app, host='0.0.0.0', port=DEFAULT_PORT)
 
         else:
             usage()
