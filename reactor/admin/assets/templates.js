@@ -162,8 +162,8 @@ ENDPOINT_TEMPLATES = {
                 {
                     "items" : [
                         { "item" : "endpoint:cloud", "default" : "docker" },
-                        { "item" : "endpoint:unregistered_marks", "default" : 1 },
-                        { "item" : "endpoint:decommissioned_marks", "default" : 1 },
+                        { "item" : "endpoint:unregistered_timeout", "default" : 1 },
+                        { "item" : "endpoint:decommissioned_timeout", "default" : 1 },
                         { "item" : "endpoint:template", "default" : "docker" }
                     ]
                 }
