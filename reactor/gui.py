@@ -184,7 +184,6 @@ class ReactorGui(ReactorApiExtension):
                     loggedin = authenticated_userid(request) is not None
                     template_args = {
                         "object": object_name,
-                        "user": loggedin and 'admin' or '',
                         "loggedin": loggedin,
                     }
                     template_args.update(kwargs)

@@ -14,6 +14,7 @@
 #    under the License.
 
 import socket
+import subprocess
 
 def list_local_ips():
     from netifaces import interfaces, ifaddresses, AF_INET
@@ -41,3 +42,36 @@ def any_local(hosts):
 
 def find_global():
     return [x for x in list_local_ips() if is_public(x)]
+
+def find_default():
+    # Query all routes.
+    ip_route = subprocess.Popen(
+        ["ip", "route"],
+        stdout=subprocess.PIPE,
+        close_fds=True)
+    (stdout, _) = ip_route.communicate()
+    if ip_route.returncode != 0:
+        return find_global()[0]
+
+    # Find the default gw.
+    for line in stdout:
+        fields = line.strip().split()
+        if len(fields) > 2 and \
+           fields[0] == "default" and \
+           fields[1] == "via":
+            gateway_ip = fields[2]
+
+            # Get the local route for the default gw.
+            this_ip_route = subprocess.Popen(
+                ["ip", "route", "get", gateway_ip],
+                stdout=subprocess.PIPE,
+                close_fds=True)
+            (this_stdout, _) = this_ip_route.communicate()
+
+            for line in this_stdout:
+                fields = line.strip().split()
+                if len(fields) >= 7 and \
+                   fields[5] == "src":
+                    return fields[6]
+
+    return find_global()[0]

@@ -23,6 +23,7 @@ ZOOKEEPER_CONF_DIRS = [
     "/etc/zookeeper/conf",
     "/etc/zookeeper",
 ]
+ZOOKEEPER_CONF_DIR = ZOOKEEPER_CONF_DIRS[1]
 for path in ZOOKEEPER_CONF_DIRS:
     if os.path.exists(path) and os.path.isdir(path):
         ZOOKEEPER_CONF_DIR = path
@@ -32,6 +33,7 @@ ZOOKEEPER_RUN_DIRS = [
     "/var/run/zookeeper",
     "/var/run"
 ]
+ZOOKEEPER_RUN_DIR = ZOOKEEPER_RUN_DIRS[1]
 for path in ZOOKEEPER_RUN_DIRS:
     if os.path.exists(path) and os.path.isdir(path):
         ZOOKEEPER_RUN_DIR = path
@@ -59,10 +61,20 @@ ZOOKEEPER_LOG_DIR = "/var/lib/zookeeper/version-2"
 ZOOKEEPER_BACKUP_COUNT = 3
 
 def generate_config(myid, servers):
+    try:
+        os.makedirs(os.path.dirname(ZOOKEEPER_ID_FILE))
+    except OSError:
+        pass
+
     # Write out the ID file.
     f = open(ZOOKEEPER_ID_FILE, 'w')
     f.write(str(myid).strip() + "\n")
     f.close()
+
+    try:
+        os.makedirs(os.path.dirname(ZOOKEEPER_CONFIG_FILE))
+    except OSError:
+        pass
 
     # Write out the server file.
     f = open(ZOOKEEPER_CONFIG_FILE, 'w')
@@ -128,7 +140,10 @@ def compute_id(servers):
         return 0
 
 def check_config(new_servers):
-    old_servers = read_config()
+    try:
+        old_servers = read_config()
+    except IOError:
+        old_servers = []
     old_servers.sort()
     old_id = compute_id(old_servers)
 

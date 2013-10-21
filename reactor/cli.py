@@ -30,6 +30,8 @@ import atexit
 import threading
 threading._DummyThread._Thread__stop = lambda x: 42
 
+from . import ips as ips_mod
+
 # For debugging stop race conditions.
 def find_objects(t):
     return filter(lambda o: isinstance(o, t), gc.get_objects())
@@ -87,7 +89,7 @@ def usage():
     print ""
     print "Local commands:"
     print ""
-    print "    config [servers...]    Save reactor API servers."
+    print "    zk_servers             Print and update ZooKeeper servers."
     print ""
     print "    runserver [names...]   Run the scale manager server."
     print "    runapi                 Runs the API server."
@@ -239,17 +241,17 @@ def main():
         elif o in ('--cluster',):
             cluster = True
 
+    from . zookeeper import config as zk_config
     if len(zk_servers) == 0:
         try:
             # Try to read the saved configuration.
-            from . zookeeper import config as zk_config
             zk_servers = zk_config.read_config()
         except Exception:
             zk_servers = []
 
     if len(zk_servers) == 0:
-        # Otherwise, use localhost.
-        zk_servers = ["localhost"]
+        # Otherwise, use the default.
+        zk_servers = [ips_mod.find_default()]
 
     # Fixup the API server.
     if not 'http:' in api_server and \
@@ -313,8 +315,10 @@ def main():
             for endpoint in endpoints:
                 print endpoint
 
-        elif command == "config":
-            zk_config.check_config(get_args())
+        elif command == "zk_servers":
+            zk_config.check_config(zk_servers)
+            for server in zk_servers:
+                print server
 
         elif command == "manage":
             endpoint_name = get_arg(1)

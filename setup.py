@@ -2,12 +2,7 @@
 
 import os
 
-try:
-        from setuptools import setup, find_packages
-except ImportError:
-        from ez_setup import use_setuptools
-        use_setuptools()
-        from setuptools import setup, find_packages
+from setuptools import setup
 
 setup(
     name="reactor",
@@ -29,10 +24,25 @@ setup(
         "python-ldap",
         "markdown",
     ],
-    test_require=[
+    test_requires=[
         "mock",
     ],
-    packages=find_packages(exclude=["reactor.testing"]),
+    packages=[
+        "reactor",
+        "reactor.loadbalancer",
+        "reactor.loadbalancer.dnsmasq",
+        "reactor.loadbalancer.nginx",
+        "reactor.loadbalancer.haproxy",
+        "reactor.loadbalancer.tcp",
+        "reactor.loadbalancer.rdp",
+        "reactor.cloud",
+        "reactor.cloud.osapi",
+        "reactor.cloud.osvms",
+        "reactor.cloud.docker",
+        "reactor.metrics",
+        "reactor.objects",
+        "reactor.zookeeper",
+    ],
     package_data={
         "reactor.loadbalancer.nginx" : [
             "nginx.template",
@@ -47,6 +57,7 @@ setup(
         "reactor" : [
             "admin/*.html",
             "admin/include/*.html",
+            "admin/include/*.sh",
             "admin/assets/*.js",
             "admin/assets/*.png",
             "admin/assets/*.css",
