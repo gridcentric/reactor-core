@@ -445,20 +445,22 @@ function annotateFields(context, messages) {
     function addAnnotation(elements, annotations) {
         $.each(annotations["section"], function(field, message) {
             var elt = elements[field]["ref"]
-            var container = elt.closest(".control-group")
-            container.attr("class", "control-group error")
-            var controls = container.find(".controls")
-            $("#conf-error-label-template").clone().attr("id", "")
-                .html(message).appendTo(controls);
-            elt.focus(function() {
-                if (container.attr("class") === "control-group error")
-                    container.attr("class", "control-group warning");
-            });
-            elt.change(function() {
-                if (container.attr("class") === "control-group warning") {
-                    container.attr("class", "control-group info");
-                }
-            });
+            if (elt) {
+                var container = elt.closest(".control-group")
+                container.attr("class", "control-group error")
+                var controls = container.find(".controls")
+                $("#conf-error-label-template").clone().attr("id", "")
+                    .html(message).appendTo(controls);
+                elt.focus(function() {
+                    if (container.attr("class") === "control-group error")
+                        container.attr("class", "control-group warning");
+                });
+                elt.change(function() {
+                    if (container.attr("class") === "control-group warning") {
+                        container.attr("class", "control-group info");
+                    }
+                });
+            }
             context["errors"]++;
         });
     }
