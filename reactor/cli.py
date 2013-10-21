@@ -80,6 +80,8 @@ def usage():
     print ""
     print "    list                   List all the endpoints currently being managed."
     print ""
+    print "    config [servers...]    Save reactor API servers."
+    print ""
     print "    manage <endpoint>      Manage or update a serivce with the given name."
     print "                           The endpoint configuration is read from stdin."
     print "    unmanage <endpoint>    Unmanged the endpoint with the given name."
@@ -273,6 +275,9 @@ def main():
             if endpoints:
                 for endpoint in endpoints:
                     print endpoint
+
+        elif command == "config":
+            zk_config.check_config(get_args())
 
         elif command == "manage":
             endpoint_name = get_arg(1)
