@@ -1009,8 +1009,8 @@ class Endpoint(Atomic):
         mark_counter += marks
 
         max_counter = {
-            "unregistered": self.config.unregistered_marks,
-            "decommissioned": self.config.decommissioned_marks,
+            "unregistered": self.config.unregistered_timeout,
+            "decommissioned": self.config.decommissioned_timeout,
             "error": self.config.error_marks,
         }
 
