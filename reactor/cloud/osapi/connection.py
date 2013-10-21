@@ -16,6 +16,11 @@
 import logging
 import time
 
+import email
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from StringIO import StringIO
+
 from novaclient import shell
 from novaclient.v1_1.client import Client as NovaClient
 import novaclient.exceptions
@@ -30,6 +35,36 @@ STATUS_MAP = {
     "BUILD": STATUS_OKAY,
     "ERROR": STATUS_ERROR,
 }
+
+REACTOR_SCRIPT = """#!/bin/sh
+if which curl; then
+    CMD="curl -X POST %(url)s"
+elif which wget; then
+    CMD="wget --post-data='' %(url)s"
+fi
+ATTEMPTS=0
+while ! $CMD && [ "$ATTEMPTS" -lt %(timeout)s ]; do
+    sleep 1
+    ATTEMPTS=$(($ATTEMPTS+1))
+done
+"""
+
+MIME_TYPES = [
+    ("#!", "x-shellscript"),
+    ("#include-once\n", "x-include-once-url"),
+    ("#include\n", "x-include-url"),
+    ("#cloud-config-archive\n", "cloud-config-archive"),
+    ("#upstart-job\n", "upstart-job"),
+    ("#cloud-config\n", "cloud-config"),
+    ("#part-handler\n", "part-handler"),
+    ("#cloud-boothook\n", "cloud-boothook"),
+]
+
+def mime_type(data):
+    for (header, mime) in MIME_TYPES:
+        if data.startswith(header):
+            return mime
+    return "plain"
 
 class BaseOsManagerConfig(Config):
 
@@ -85,6 +120,9 @@ class BaseOsEndpointConfig(Config):
     availability_zone = Config.string(label="Availability Zone", order=5,
         description="Availability zone for new instances.")
 
+    user_data = Config.text("User Data",
+        order=6, description="Script or cloud-config for new instances.")
+
     def novaclient(self):
         if self._client is None:
             extensions = shell.OpenStackComputeShell()._discover_extensions("1.1")
@@ -120,6 +158,7 @@ class BaseOsConnection(CloudConnection):
 
     def __init__(self, *args, **kwargs):
         super(BaseOsConnection, self).__init__(*args, **kwargs)
+        self._this_url = kwargs.get("this_url")
 
     def _list_instances(self, config, instance_id):
         """
@@ -177,6 +216,47 @@ class BaseOsConnection(CloudConnection):
         # Return all sanitizing instances.
         return map(_sanitize, instances)
 
+    def _user_data(self, user_data=None):
+        reactor_script = REACTOR_SCRIPT % {
+            "url": self._this_url,
+            "timeout": 300,
+        }
+
+        if user_data:
+            # If the user has provided user-data,
+            # then we need to do a multi-part encoding
+            # of the data. We provide the reactor script
+            # as the second piece, to ensure they've gone
+            # through the necessary setup prior to having
+            # the instance registered.
+            msg = MIMEMultipart()
+            orig_msg = email.message_from_file(StringIO(user_data))
+
+            for part in orig_msg.walk():
+                # multipart/* are just containers.
+                if part.get_content_maintype() == 'multipart':
+                    continue
+
+                if part.get_content_type() == "text/plain":
+                    # We try to re-encode text/plain types as
+                    # something else, more sane. This handles
+                    # the plain shell script passed in.
+                    msg.attach(MIMEText(
+                        user_data, mime_type(part.get_payload(decode=True)))
+                else:
+                    msg.attach(part)
+
+            # Attach the reactor script (final step).
+            msg.attach(MIMEText(reactor_script, mime_type(reactor_script))
+
+            return msg.as_string()
+
+        else:
+            # Without a user script, we can just run
+            # the reactor script directly. We don't need
+            # to provide the multi-part encoding here.
+            return reactor_script
+
     def _start_instance(self, config, params):
         """
         Starts a new instance. This is implemented by the subclasses.
@@ -191,7 +271,7 @@ class BaseOsConnection(CloudConnection):
             params = {}
 
         # Inject the manager parameters.
-        params.update({ "reactor" : self._manager_config().reactor })
+        params.update({ "reactor": self._this_url } )
 
         # Reset the refresh so no matter what happens,
         # when we next call list() we will have an up
@@ -358,13 +438,12 @@ class Connection(BaseOsConnection):
 
     def _start_instance(self, config, params):
         config = self._endpoint_config(config)
-        userdata = "reactor=%s" % params.get('reactor', '')
         instance_params = {
             "security_groups": config.security_groups,
             "key_name": config.key_name,
             "availability_zone": config.availability_zone,
-            "userdata": userdata
-            }
+            "userdata": self._user_data(config.user_data)
+        }
         if hasattr(config, "network_conf"):
             instance_params["nics"] = \
                 OsApiEndpointConfig.parse_netspecs(config.network_conf) or None

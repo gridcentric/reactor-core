@@ -24,9 +24,6 @@ import gc
 import getpass
 import atexit
 
-from . import log
-from . zookeeper import config as zk_config
-
 # Resolve internal threading bug, that spams log output.
 # For more information see --
 # http://stackoverflow.com/questions/13193278/understand-python-threading-bug
@@ -224,6 +221,7 @@ def main():
     if len(zk_servers) == 0:
         try:
             # Try to read the saved configuration.
+            from . zookeeper import config as zk_config
             zk_servers = zk_config.read_config()
         except Exception:
             zk_servers = []
@@ -242,6 +240,8 @@ def main():
     loglevel = logging.INFO
     if debug:
         loglevel = logging.DEBUG
+
+    from . import log
     log.configure(loglevel, None)
 
     def get_arg(n):

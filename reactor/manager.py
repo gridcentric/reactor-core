@@ -20,6 +20,7 @@ import bisect
 import traceback
 import logging
 
+from . import cli
 from . import ips as ips_mod
 from . import submodules
 from . atomic import Atomic
@@ -355,14 +356,23 @@ class ScaleManager(Atomic):
             del self._endpoints[endpoint_name]
 
         for endpoint_name in to_add:
-            endpoint = Endpoint(
-                    self.zkobj.endpoints().get(endpoint_name),
-                    collect=self.collect,
-                    find_cloud_connection=self._find_cloud_connection,
-                    find_loadbalancer_connection=self._find_loadbalancer_connection,
-                    delete_hook=self._endpoint_deleted)
+            try:
+                endpoint = Endpoint(
+                        self.zkobj.endpoints().get(endpoint_name),
+                        collect=self.collect,
+                        find_cloud_connection=self._find_cloud_connection,
+                        find_loadbalancer_connection=self._find_loadbalancer_connection,
+                        delete_hook=self._endpoint_deleted)
+            except:
+                # This isn't expected.
+                traceback.print_exc()
+                continue
+
             if endpoint.deleted:
                 # Oops, was already gone.
+                # This just catches a race condition,
+                # presumably some other manager in the
+                # system is actually removed the endpoint.
                 continue
 
             # The endpoint will generally reload the loadbalancer
@@ -375,7 +385,9 @@ class ScaleManager(Atomic):
         # Log the change.
         self.logging.info(
                 self.logging.ENDPOINTS_CHANGED,
-                dict(map(lambda x: (x, self._endpoints[x].key()), endpoints)))
+                dict(map(
+                    lambda x: (x, self._endpoints[x].key()),
+                    self._endpoints.keys())))
 
         # If we've lost endpoints, we need to make sure that
         # we clean up the leftover endpoint IPs. This is done
@@ -461,14 +473,19 @@ class ScaleManager(Atomic):
             if not name in submodules.loadbalancer_submodules():
                 continue
 
-            # Create the loadbalancer connection.
-            self.loadbalancers[name] = \
-                lb_connection.get_connection( \
-                    name,
-                    config=config,
-                    zkobj=self.zkobj.loadbalancers().tree(name),
-                    this_ip=self._names[0],
-                    error_notify=self.error_notify)
+            try:
+                # Create the loadbalancer connection.
+                self.loadbalancers[name] = \
+                    lb_connection.get_connection( \
+                        name,
+                        config=config,
+                        zkobj=self.zkobj.loadbalancers().tree(name),
+                        this_ip=self._names[0],
+                        error_notify=self.error_notify)
+            except:
+                # This isn't expected.
+                traceback.print_exc()
+                continue
 
         # Return the set of supported loadbalancers.
         return self.loadbalancers.keys()
@@ -488,28 +505,26 @@ class ScaleManager(Atomic):
             if not name in submodules.cloud_submodules():
                 continue
 
-            # Create the cloud connection.
-            self.clouds[name] = \
-                cloud_connection.get_connection( \
-                    name,
-                    config=config,
-                    zkobj=self.zkobj.clouds().tree(name),
-                    this_ip=self._names[0],
-                    register_ip=self.register_ip,
-                    drop_ip=self.drop_ip)
-
-        # We automatically insert the address into all available
-        # cloud configurations. This absolutely requires the cloud
-        # configuration to support an address key for the manager,
-        # but we can address that on a case-by-case basis for now.
-        for cloud in self.clouds.values():
-            config = cloud._manager_config()
-            if hasattr(config, 'reactor'):
-                # We use the URL if it's provided, otherwise
-                # it's gonna be a best guess scenario. We set
-                # it to the current name and the default port.
-                config.reactor = self._url or \
-                    "http://%s:8080" % self._names[0]
+            try:
+                # Create the cloud connection.
+                # We automatically insert the address into all available cloud
+                # configurations. This is passed in as the this_url parameter,
+                # and is constructed from the current IP and the default port,
+                # or (ideally) a URL that has been provided by the user.
+                default_api = "http://%s:%d" % (self._names[0], cli.DEFAULT_PORT)
+                self.clouds[name] = \
+                    cloud_connection.get_connection( \
+                        name,
+                        config=config,
+                        zkobj=self.zkobj.clouds().tree(name),
+                        this_ip=self._names[0],
+                        this_url=self._url or default_api,
+                        register_ip=self.register_ip,
+                        drop_ip=self.drop_ip)
+            except:
+                # This isn't expected.
+                traceback.print_exc()
+                continue
 
         # Return the set of supported clouds.
         return self.clouds.keys()
