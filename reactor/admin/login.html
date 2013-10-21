@@ -1,14 +1,15 @@
 <%include file="/header.html"/>
 
-<div id="login" class="span6">
+<div id="login" class="span6 centered">
     <div class="hero-unit">
-        <h3>Please log in to Reactor</h3>
+        <h3>Password required</h3>
         <p>${message}</p>
         <form class="form-inline" action="${url}" method="post">
             <input class="input-medium" name="auth_key" type="password"/>
             <input type="hidden" name="came_from" value="${came_from}"/>
             <button type="submit" id="login" class="btn">Login</button>
         </form>
+        <p>New to Reactor? Read the <a href="/docs/">documentation</a>.</p>
     </div>
 </div>
 

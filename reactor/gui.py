@@ -15,6 +15,8 @@
 
 import os
 import json
+import threading
+import markdown
 
 from pyramid.httpexceptions import HTTPFound
 from pyramid.response import Response
@@ -45,6 +47,16 @@ def fixup_url(url, request):
 def route_url(route, request, **kw):
     url = _route_url(route, request, **kw)
     return fixup_url(url, request)
+
+MIMEMAP = {
+    "js": "application/json",
+    "png": "image/png",
+    "gif": "image/gif",
+    "html": "text/html",
+    "css": "text/css",
+    "txt": "text/plain",
+    "sh": "text/plain",
+}
 
 class ReactorGui(ReactorApiExtension):
 
@@ -87,24 +99,169 @@ class ReactorGui(ReactorApiExtension):
         # admin-object routes (and we want them to go to admin-asset,
         # so that they can be fetched even in unathenticated contexts).
         api.config.add_route('admin-passwd', '/passwd')
+        api.config.add_route('admin-asset', '/assets/{page_name:.*}')
+        api.config.add_route('admin-doc', '/docs/{page_name:.*}', accept="text/html")
         api.config.add_route('admin-page', '/{page_name}', accept="text/html")
-        api.config.add_route('admin-asset', '/assets/{object_name:.*}')
         api.config.add_route('admin-object', '/{page_name}/{object_name:.*}', accept="text/html")
 
         api.config.add_view(self.admin_passwd, route_name='admin-passwd')
         api.config.add_view(self.admin_asset, route_name='admin-asset')
+        api.config.add_view(self.admin_doc, route_name='admin-doc')
         api.config.add_view(self.admin, route_name='admin-page')
         api.config.add_view(self.admin, route_name='admin-object')
+
         api.config.add_view(context='pyramid.exceptions.NotFound',
             view='pyramid.view.append_slash_notfound_view')
 
     @connected
+    @authorized(forbidden_view='self.admin_login')
     def manager_info(self, context, request):
         return Response(body=json.dumps(ManagerConfig().spec()))
 
     @connected
+    @authorized(forbidden_view='self.admin_login')
     def endpoint_info(self, context, request):
         return Response(body=json.dumps(EndpointConfig().spec()))
+
+    def _serve(self,
+            context,
+            request,
+            base_dir=None,
+            include_dirs=None,
+            page_name=None,
+            object_name=None,
+            header=None,
+            footer=None,
+            render_template=False,
+            methods=None,
+            **kwargs):
+
+        if methods is None:
+            methods = ('GET',)
+        if page_name is None:
+            page_name = request.matchdict.get('page_name') or 'index'
+        if object_name is None:
+            object_name = request.matchdict.get('object_name', '')
+        if page_name.endswith('/'):
+            page_name += 'index'
+
+        if request.method in methods:
+
+            # Find the real file.
+            for ext in ['', '.html', '.md']:
+                filename = os.path.join(base_dir, page_name + ext)
+                if os.path.exists(filename):
+                    break
+
+            # Ensure we found it.
+            if not(os.path.exists(filename)) or \
+               not(os.path.isfile(filename)):
+                return Response(status=404)
+
+            try:
+                raw_page_data = open(filename, 'r').read()
+
+                # Add prefix and postfix.
+                if header is not None:
+                    raw_page_data = "<%%include file=\"/%s\"/>\n%s" % \
+                        (header, raw_page_data)
+                if footer is not None:
+                    raw_page_data = "%s\n<%%include file=\"/%s\"/>\n" % \
+                        (raw_page_data, footer)
+
+                # Convert markdown if necessary.
+                if page_name.endswith(".md"):
+                    raw_template_data = markdown.markdown(raw_page_data, extensions=['toc'])
+                else:
+                    raw_template_data = raw_page_data
+
+                # Render if necessary.
+                if render_template:
+                    lookup = TemplateLookup(directories=include_dirs)
+                    template = Template(raw_template_data, lookup=lookup)
+                    loggedin = authenticated_userid(request) is not None
+                    template_args = {
+                        "object": object_name,
+                        "user": loggedin and 'admin' or '',
+                        "loggedin": loggedin,
+                    }
+                    template_args.update(kwargs)
+                    page_data = template.render(**template_args)
+                else:
+                    page_data = raw_template_data
+
+                # Check for supported types.
+                ext = page_name.split('.')[-1]
+                headers = {
+                    "Content-type": MIMEMAP.get(ext, "text/plain")
+                }
+            except Exception:
+                page_data = exceptions.html_error_template().render()
+                headers = {
+                    "Content-type": "text/html"
+                }
+
+            return Response(body=page_data, headers=headers)
+        else:
+            return Response(status=403)
+
+    @connected
+    @authorized(forbidden_view='self.admin_login')
+    def admin(self, context, request):
+        """
+        Render main admin page.
+        """
+        return self._serve(
+            context,
+            request,
+            base_dir=os.path.join(
+                os.path.dirname(__file__),
+                'admin'),
+            include_dirs=[
+                os.path.join(
+                    os.path.dirname(__file__),
+                    'admin',
+                    'include'),
+            ],
+            render_template=True)
+
+    def admin_doc(self, context, request):
+        """
+        Render a documentation page.
+        """
+        return self._serve(
+            context,
+            request,
+            base_dir=os.path.join(
+                os.path.dirname(__file__),
+                'admin',
+                'docs'),
+            include_dirs=[
+                os.path.join(
+                    os.path.dirname(__file__),
+                    'admin',
+                    'docs'),
+                os.path.join(
+                    os.path.dirname(__file__),
+                    'admin',
+                    'include'),
+            ],
+            header="docheader.html",
+            footer="docfooter.html",
+            render_template=True)
+
+    def admin_asset(self, context, request):
+        """
+        Render an asset (media, etc.).
+        """
+        return self._serve(
+            context,
+            request,
+            base_dir=os.path.join(
+                os.path.dirname(__file__),
+                'admin',
+                'assets'),
+            render_template=False)
 
     @connected
     def admin_login(self, context, request):
@@ -116,7 +273,7 @@ class ReactorGui(ReactorApiExtension):
         if referrer == login_url:
             referrer = route_url('admin-page', request, page_name='')
         came_from = request.params.get('came_from', referrer)
-        message = ''
+        url = route_url('admin-login', request)
 
         try:
             # See if the login form was submitted.
@@ -124,23 +281,29 @@ class ReactorGui(ReactorApiExtension):
             return HTTPFound(location=came_from, headers=response.headers)
         except NotImplementedError:
             # Credentials not submitted or incorrect, render login page.
-            filename = os.path.join(os.path.dirname(__file__), 'admin', 'login.html')
-            lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
-            lookup = TemplateLookup(directories=[lookup_path])
-            template = Template(filename=filename, lookup=lookup)
             if self.api._req_get_auth_key(request) != None:
                 message = "Invalid credentials."
             else:
                 message = ""
-            kwargs = {
-                'message' : message,
-                'url' : route_url('admin-login', request),
-                'came_from' : came_from,
-                'user' : '',
-                'loggedin' : False
-            }
-            body = template.render(**kwargs)
-            return Response(body=body)
+
+            return self._serve(
+                context,
+                request,
+                base_dir=os.path.join(
+                    os.path.dirname(__file__),
+                    'admin'),
+                include_dirs=[
+                    os.path.join(
+                        os.path.dirname(__file__),
+                        'admin',
+                        'include'),
+                ],
+                render_template=True,
+                methods=('GET', 'POST'),
+                page_name='login',
+                came_from=came_from,
+                message=message,
+                url=url)
 
     def admin_logout(self, context, request):
         """
@@ -148,75 +311,6 @@ class ReactorGui(ReactorApiExtension):
         """
         response = self.api.logout(context, request)
         return HTTPFound(location=route_url('admin-login', request), headers=response.headers)
-
-    @connected
-    @authorized(forbidden_view='self.admin_login')
-    def admin(self, context, request):
-        """
-        Render a page from the admin directory and write it back.
-        """
-        if request.method == 'GET':
-            # Read the page_name from the request.
-            page_name = request.matchdict.get('page_name', 'index')
-            object_name = request.matchdict.get('object_name', '')
-
-            if object_name and page_name.endswith('s'):
-                page_name = page_name[:-1]
-            if page_name.find('.') < 0:
-                page_name += '.html'
-
-            # Check that the file exists.
-            filename = os.path.join(os.path.dirname(__file__), 'admin', page_name)
-            if not(os.path.exists(filename)):
-                return Response(status=404)
-
-            # Render it.
-            lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
-            lookup = TemplateLookup(directories=[lookup_path])
-            template = Template(filename=filename, lookup=lookup)
-            kwargs = { "object" : object_name,
-                       "user" : 'admin',
-                       "loggedin" : authenticated_userid(request) != None }
-            try:
-                page_data = template.render(**kwargs)
-            except Exception:
-                page_data = exceptions.html_error_template().render()
-
-            return Response(body=page_data)
-
-        else:
-            return Response(status=403)
-
-    def admin_asset(self, context, request):
-        """
-        Render an asset for the admin page
-        """
-        if request.method == 'GET':
-            # Read the page_name from the request.
-            object_name = request.matchdict.get('object_name', '')
-            page_name = os.path.join('assets', object_name)
-
-            # Check that the file exists.
-            filename = os.path.join(os.path.dirname(__file__), 'admin', page_name)
-            if not(os.path.exists(filename)):
-                return Response(status=404)
-
-            page_data = open(filename).read()
-
-            # Check for supported types.
-            ext = page_name.split('.')[-1]
-            mimemap = {
-                "js": "application/json",
-                "png": "image/png",
-                "gif": "image/gif",
-                "html": "text/html",
-                "css": "text/css"
-            }
-
-            return Response(body=page_data,
-                            headers={"Content-type" : mimemap[ext]})
-        else:
-            return Response(status=403)
 
     @connected
     @authorized(forbidden_view='self.admin_login')
@@ -232,15 +326,18 @@ class ReactorGui(ReactorApiExtension):
 
             # Route user back to the home screen.
             return HTTPFound(location=route_url('admin-login', request))
-
-        # New password not submitted, render password page.
-        filename = os.path.join(os.path.dirname(__file__), 'admin', 'passwd.html')
-        lookup_path = os.path.join(os.path.dirname(__file__), 'admin', 'include')
-        lookup = TemplateLookup(directories=[lookup_path])
-        template = Template(filename=filename, lookup=lookup)
-        kwargs = {
-            'user': 'admin',
-            'loggedin': authenticated_userid(request) != None
-        }
-        body = template.render(**kwargs)
-        return Response(body=body)
+        else:
+            return self._serve(
+                context,
+                request,
+                base_dir=os.path.join(
+                    os.path.dirname(__file__),
+                    'admin'),
+                include_dirs=[
+                    os.path.join(
+                        os.path.dirname(__file__),
+                        'admin',
+                        'include'),
+                ],
+                render_template=True,
+                page_name='passwd')

@@ -1,5 +1,5 @@
 ENDPOINT_TEMPLATES = {
-    "rdp" : {
+        "rdp" : {
             "description" : "Remote Desktop Protocol",
             "components" : [
                 {

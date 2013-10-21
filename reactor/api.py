@@ -46,7 +46,7 @@ def authorized(forbidden_view=None, allow_endpoint=False):
     be decorated with @connected(). We don't force this here.)
     """
     def decorator(request_handler):
-        def fn(self, context, request):
+        def fn(self, context, request, **kwargs):
             try:
                 # Make this implict routes are matched.
                 self.authorize_ip_access(context, request)
@@ -55,12 +55,12 @@ def authorized(forbidden_view=None, allow_endpoint=False):
 
             # Can we authorize as an admin?
             if self.authorize_admin_access(context, request):
-                return request_handler(self, context, request)
+                return request_handler(self, context, request, **kwargs)
 
             # Can we authorize as an endpoint?
             if (allow_endpoint and
                 self.authorize_endpoint_access(context, request)):
-                return request_handler(self, context, request)
+                return request_handler(self, context, request, **kwargss)
 
             # Access denied.
             if forbidden_view is not None:

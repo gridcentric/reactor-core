@@ -103,10 +103,10 @@ class Connection(LoadBalancerConnection):
     _MANAGER_CONFIG_CLASS = HaproxyManagerConfig
     _ENDPOINT_CONFIG_CLASS = HaproxyEndpointConfig
     _SUPPORTED_URLS = {
-        "http://([a-zA-Z0-9]+[a-zA-Z0-9.]*)(:[0-9]+|)(/.*|)": \
-            lambda m: ("http", m.group(1), m.group(2), m.group(3)),
+        "http://([a-zA-Z0-9]+[a-zA-Z0-9.]*)(:[0-9]+|)/?": \
+            lambda m: ("http", m.group(1), m.group(2)),
         "(http|tcp)://(:[0-9]+|)": \
-            lambda m: (m.group(1), None, m.group(2), None)
+            lambda m: (m.group(1), None, m.group(2)),
     }
 
     def __init__(self, **kwargs):
@@ -125,17 +125,13 @@ class Connection(LoadBalancerConnection):
         uniq_id = hash_fn.hexdigest()
 
         # Parse the url because we need to know the netloc.
-        (scheme, netloc, listen, path) = self.url_info(url)
+        (scheme, netloc, listen) = self.url_info(url)
         if listen:
             listen = int(listen)
         elif scheme == "http":
             listen = 80
         elif scheme == "tcp":
             raise Exception("Need listen port for TCP.")
-
-        if path:
-            # We don't support backend paths in haproxy.
-            raise Exception("Paths are not supported by HAProxy.")
 
         # Select the correct set of frontends & backends.
         if scheme == "http":

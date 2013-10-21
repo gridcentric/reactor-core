@@ -4,13 +4,13 @@
 <div class="span3" id="navbar">
   <div class="well sidebar-nav">
     <ul class="nav nav-list" id="endpointList">
-        <li class="nav-header">Endpoints</li>
+        <li class="nav-header"><span>Endpoints&nbsp;&nbsp;<a href="/docs/concepts.md#endpoints"><i class="icon-question-sign"></i></a></span></li>
     </ul>
     <ul class="nav nav-list" id="managersActiveList">
-        <li class="nav-header">Managers Active</li>
+        <li class="nav-header"><span>Managers Active&nbsp;&nbsp;<a href="/docs/concepts.md#managers"><i class="icon-question-sign"></i></a></span></li>
     </ul>
     <ul class="nav nav-list" id="managersConfiguredList">
-        <li class="nav-header">Managers Configured</li>
+        <li class="nav-header"><span>Managers Configured&nbsp;&nbsp;<a href="/docs/concepts.md#managers"><i class="icon-question-sign"/></i></a></span></li>
     </ul>
   </div>
 
@@ -19,8 +19,8 @@
 <%include file="/list.html" args="id='#managersConfiguredList',name=manager_name,path='/v1.1/managers',field='configured',link='/managers/'"/>
 
 <!-- New endpoint form -->
-<div class="row">
-<div class="span10 offset2">
+<div class="row-fluid">
+<div class="span10 centered">
 <form class="form-inline">
 <div class="input-append">
 <input id="endpointname" class="input-small" placeholder="New endpoint" type="text">
@@ -38,8 +38,8 @@
 </div>
 
 <!-- New manager form -->
-<div class="row">
-<div class="span10 offset2">
+<div class="row-fluid">
+<div class="span10 centered">
 <form class="form-inline">
 <div class="input-append">
 <input id="managername" class="input-small" placeholder="New manager" type="text">
@@ -51,9 +51,9 @@
 </div>
 </div>
 
-<div class="row">
-<div class="span6 offset3">
-<a class="btn btn-primary" href="http://docs.gridcentric.com/reactor/">Documentation &raquo;</a>
+<div class="row-fluid">
+<div class="span8 centered">
+<a class="btn btn-primary" href="/docs/">Documentation &raquo;</a>
 </div>
 </div>
 
@@ -170,4 +170,3 @@
 
 </script>
 </div>
-

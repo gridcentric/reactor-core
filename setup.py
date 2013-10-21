@@ -27,6 +27,7 @@ setup(
         "netifaces",
         "netaddr",
         "python-ldap",
+        "markdown",
     ],
     test_require=[
         "mock",
@@ -49,8 +50,13 @@ setup(
             "admin/assets/*.js",
             "admin/assets/*.png",
             "admin/assets/*.css",
+            "admin/assets/*.txt",
             "admin/assets/lib/*.js",
             "admin/assets/lib/bootstrap/*/*",
+            "admin/docs/*.md",
+            "admin/docs/*.html",
+            "admin/docs/clouds/*.md",
+            "admin/docs/loadbalancers/*.md",
         ]
     },
     include_package_data=True,

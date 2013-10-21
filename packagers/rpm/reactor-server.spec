@@ -6,12 +6,13 @@ Group: System
 License: Copyright 2012 GridCentric Inc.
 URL: http://www.gridcentric.com
 Packager: GridCentric Inc. <support@gridcentric.com>
-Requires: python-reactor
-Requires: iptables, curl, openssh-clients
-Requires: python-paste, python-pyramid, python-mako
+Requires: python-reactor, python-paste
+Requires: python-mako, python-pyramid,
 Requires: python-netifaces, python-ldap
 Requires: python-netaddr, python-webob
-Requires: python-zookeeper
+Requires: python-zookeeper, python-markdown
+Requires: python-httplib2
+Requires: iptables, curl, openssh-clients
 # Unfortunately, we don't really have any way of
 # specifying soft dependencies. For now, we rely
 # on the cloud-init file to install some of these,
@@ -35,7 +36,6 @@ Reactor server.
 true
 
 %files
-/usr/bin/reactor-setup
 /usr/bin/reactor-defaults
 /etc/init.d/reactor
 /etc/logrotate.d/reactor

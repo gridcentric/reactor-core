@@ -67,7 +67,6 @@ endif
 	@rsync -ruav example/ $(DESTDIR)/etc/reactor/example
 	@rsync -ruav default/ $(DESTDIR)/etc/reactor/default
 	@$(INSTALL_DIR) $(DESTDIR)/usr/bin
-	@$(INSTALL_BIN) bin/reactor-setup $(DESTDIR)/usr/bin
 	@$(INSTALL_BIN) bin/reactor-defaults $(DESTDIR)/usr/bin
 endif
 
@@ -83,6 +82,7 @@ dist_clean: cache_clean
 
 clean: dist_clean
 	@rm -rf *.deb *.rpm extra/cobalt-novaclient*.*
+	@rm -rf pylint.txt pytest.xml
 .PHONY: clean
 
 $(RPMBUILD):
