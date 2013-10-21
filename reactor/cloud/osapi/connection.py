@@ -235,6 +235,8 @@ class BaseOsConnection(CloudConnection):
 class OsApiEndpointConfig(BaseOsEndpointConfig):
 
     instance_name = Config.string(label="Instance Name", order=2,
+        validate=lambda self: self.instance_name or \
+            Config.error("Must provide an instance name."),
         description="The name given to new instances.")
 
     flavor_id = Config.string(label="Flavor", order=2,
