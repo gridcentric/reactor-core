@@ -36,6 +36,9 @@ METRICS = "metrics"
 # The pending connections for a particular manager.
 PENDING = "pending"
 
+# The total active connections for a particular manager.
+ACTIVE = "active"
+
 # The manager logs.
 LOGS = "logs"
 
@@ -85,6 +88,10 @@ class Managers(DatalessObject, Atomic):
 
     def set_pending(self, uuid, value):
         return self._get_child(PENDING)._get_child(
+                uuid, clazz=JSONObject)._set_data(value, ephemeral=True)
+
+    def set_active(self, uuid, value):
+        return self._get_child(ACTIVE)._get_child(
                 uuid, clazz=JSONObject)._set_data(value, ephemeral=True)
 
     def register(self, uuid, ips, info):
@@ -148,3 +155,15 @@ class Managers(DatalessObject, Atomic):
                 PENDING, clazz=JSONObject)._get_child(x)._get_data()),
             self._get_child(
                 PENDING, clazz=JSONObject)._list_children()))
+
+    def active_count(self):
+        # Sums across all active managers to return
+        # the total active connections for the system.
+        # This is not really practically useful, other
+        # than for a big global metric for the entire
+        # system (which is exactly what it is used for).
+        return sum(map(
+            lambda x: self._get_child(
+                ACTIVE, clazz=JSONObject)._get_child(x)._get_data() or 0,
+            self._get_child(
+                ACTIVE, clazz=JSONObject)._list_children()))

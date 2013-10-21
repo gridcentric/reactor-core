@@ -5,7 +5,7 @@
 body {
     overflow-y: scroll;
 }
-.row-fluid {
+.row-fluid#content {
     margin-top: 60px;
 }
 .container a.brand.active {

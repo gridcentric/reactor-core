@@ -78,6 +78,16 @@ class Endpoints(DatalessObject):
     def unmanage(self, name):
         self.get(name).delete()
 
+    def state_counts(self):
+        result = {}
+        for name in self.list():
+            state = self.get(name).state().current()
+            if not state in result:
+                result[state] = 1
+            else:
+                result[state] += 1
+        return result
+
 class State(RawObject):
 
     running = "RUNNING"
