@@ -43,8 +43,8 @@ class EndpointConfig(Config):
         description="The URL for this endpoint.")
 
     port = Config.integer(label="Backend Port", order=1,
-        validate=lambda self: self.port > 0 or \
-            Config.error("Port must be non-zero."),
+        validate=lambda self: self.port >= 0 or \
+            Config.error("Port must not be negative."),
         description="The backend port for this service.")
 
     redirect = Config.string(label="Fallback URL", order=1,
