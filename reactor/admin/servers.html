@@ -1,0 +1,162 @@
+<%include file="/navbar.html"/>
+
+<div id="templates" style="display: none;">
+<div id="disabled-template">
+  <div class="control-group">
+    <label class="control-label"></label>
+    <div class="controls">
+      <button class="btn btn-success">Enable</button>
+    </div>
+  </div>
+</div>
+<div id="enabled-template">
+  <div class="control-group">
+    <label class="control-label"></label>
+    <div class="controls">
+      <button class="btn">Disable</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="modal" id="errorModal" style="display: none;" role="dialog" aria-labelledby="errorModalLabel" aria-hidden="true">
+  <div class="modal-header">
+      <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&#739;</button>
+      <h3 id="errorModalLabel">Error Setting ZK Servers</h3>
+  </div>
+  <div class="modal-body">
+      <p>Sorry, something went wrong setting the ZooKeeper servers. The cluster
+      may be okay, but it will probably require manual repair. Wait a minute
+      and try accessing this page again before panicking, however.</p>
+  </div>
+</div>
+
+<div class="span8">
+  <div class="hero-unit">
+      <form id="api-server-form" class="form-horizontal" method="post">
+      <fieldset>
+        <div id="legend">
+            <h3>Set ZK Servers</h3>
+        </div>
+        <div id="control-buttons">
+        </div>
+      </fieldset>
+    </form>
+  </div>
+</div>
+
+<script type="text/javascript">
+
+    function postZKServers(zk_servers) {
+        if (zk_servers.length == 0) {
+            alert("Cowardly refusing to remove all ZK servers.");
+            location.reload(true);
+            return;
+        }
+
+        $.ajax({
+            url: "/zk_servers",
+            type: 'POST',
+            dataType: 'json',
+            data: JSON.stringify({ "zk_servers": zk_servers }),
+            success: function() {
+                location.reload(true);
+            },
+            error: function(result) {
+                $('#errorModal').modal('show');
+            }
+        });
+    }
+
+    function disableZKServer(zk_servers, name) {
+        var filtered = [];
+        $.each(zk_servers, function(index, server) {
+            if( server != name ) {
+                filtered.push(server);
+            }
+        });
+        postZKServers(filtered);
+    }
+
+    function enableZKServer(zk_servers, name) {
+        var filtered = [];
+        $.each(zk_servers, function(index, server) {
+            if( server != name ) {
+                filtered.push(server);
+            }
+        });
+        filtered.push(name);
+        postZKServers(filtered);
+    }
+
+    function addEnabled(zk_servers, name, disabled) {
+        var these_controls = $("#enabled-template").clone();
+        var btn = these_controls.find(".btn");
+        btn.click(function(e) {
+            e.preventDefault();
+            $(".btn").addClass("disabled");
+            disableZKServer(zk_servers, name);
+        });
+        if (disabled) {
+            btn.addClass("disabled");
+        }
+        these_controls.find(".control-label").append("<span>"+name+"</span>");
+        these_controls.appendTo($("#control-buttons"));
+    }
+
+    function addDisabled(zk_servers, name) {
+        var these_controls = $("#disabled-template").clone();
+        var btn = these_controls.find(".btn");
+        btn.click(function(e) {
+            e.preventDefault();
+            $(".btn").addClass("disabled");
+            enableZKServer(zk_servers, name);
+        });
+        these_controls.find(".control-label").append("<span>"+name+"</span>");
+        these_controls.appendTo($("#control-buttons"));
+    }
+
+    function processManagers(zk_servers, managers) {
+        var done_did = {};
+        var done_active = {};
+        $.each(managers, function(index, name) {
+            done_active[name] = true;
+        });
+        $.each(zk_servers, function(index, name) {
+            if( !(name in done_did) ) {
+                addEnabled(zk_servers, name, (name in done_active));
+                done_did[name] = true;
+            }
+        });
+        $.each(managers, function(index, name) {
+            if( !(name in done_did) ) {
+                addDisabled(zk_servers, name);
+                done_did[name] = true;
+            }
+        });
+    }
+
+    function processZKServers(result) {
+        zk_servers = result["zk_servers"];
+        $.ajax({
+            url: "/v1.1/managers",
+            type: 'GET',
+            dataType: 'json',
+            success: function(result) {
+                processManagers(
+                    zk_servers,
+                    result["configured"]);
+            },
+        });
+    }
+
+    $('#errorModal').modal('hide');
+    $.ajax({
+        url: "/zk_servers",
+        type: 'GET',
+        dataType: 'json',
+        success: processZKServers
+    });
+</script>
+
+<%include file="/footer.html"/>
