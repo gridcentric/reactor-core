@@ -50,7 +50,7 @@ setup(
             "admin/assets/*.js",
             "admin/assets/*.png",
             "admin/assets/*.css",
-            "admin/assets/*.txt",
+            "admin/assets/*.sh",
             "admin/assets/lib/*.js",
             "admin/assets/lib/bootstrap/*/*",
             "admin/docs/*.md",
