@@ -351,8 +351,8 @@ def main():
         elif command == "ips":
             endpoint_name = get_arg(1)
             api_client = get_api_client()
-            ip_addresses = api_client.endpoint_ip_addresses(endpoint_name)
-            for ip in ip_addresses:
+            ips = api_client.endpoint_ips(endpoint_name)
+            for ip in ips:
                 print ip
 
         elif command == "register":

@@ -58,7 +58,7 @@ class ReactorApiClient(httplib2.Http):
         Returns a list of all the endpoints currently being managed by the reactor.
         """
         _, body = self.request('/v1.1/endpoints', 'GET')
-        return body.get('endpoints', [])
+        return body
 
     def endpoint_manage(self, endpoint_name, config):
         """
@@ -108,12 +108,12 @@ class ReactorApiClient(httplib2.Http):
         """
         self.request('/v1.1/managers/%s' % manager, 'DELETE')
 
-    def endpoint_ip_addresses(self, endpoint_name):
+    def endpoint_ips(self, endpoint_name):
         """
         Returns a list of the dynamic ip addresses for this endpoint.
         """
         _, body = self.request('/v1.1/endpoints/%s/ips' % endpoint_name, 'GET')
-        return body.get('ip_addresses', [])
+        return body
 
     def endpoint_action(self, endpoint_name, action):
         """

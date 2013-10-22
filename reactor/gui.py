@@ -55,6 +55,7 @@ MIMEMAP = {
     "html": "text/html",
     "css": "text/css",
     "txt": "text/plain",
+    "md": "text/html",
     "sh": "text/plain",
 }
 

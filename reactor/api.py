@@ -637,7 +637,7 @@ class ReactorApi(object):
         if request.method == "GET":
             ips = self.zkobj.endpoints().get(
                 endpoint_name).confirmed_ips().list()
-            return Response(body=json.dumps({'ip_addresses': ips}))
+            return Response(body=json.dumps(ips))
         else:
             return Response(status=403)
 
@@ -650,7 +650,7 @@ class ReactorApi(object):
         """
         if request.method == "GET":
             endpoints = self.zkobj.endpoints().list()
-            return Response(body=json.dumps({'endpoints':endpoints}))
+            return Response(body=json.dumps(endpoints))
         else:
             return Response(status=403)
 
