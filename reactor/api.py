@@ -138,6 +138,9 @@ class ReactorApi(object):
         self._add('url', ['1.1'],
                   'url', self.handle_url_action)
 
+        self._add('info', ['1.1'],
+                  'info', self.handle_info_action)
+
         self._add('register-implicit', ['1.0', '1.1'],
                   'register', self.register_ip_implicit)
 
@@ -416,6 +419,24 @@ class ReactorApi(object):
         elif request.method == "POST":
             self.zkobj.url().set(json.loads(request.body).get('url'))
             return Response()
+        else:
+            return Response(status=403)
+
+    @log
+    @connected
+    @authorized()
+    def handle_info_action(self, context, request):
+        if request.method == "GET":
+            active = self.zkobj.managers().active_count()
+            endpoint_states = self.zkobj.endpoints().state_counts()
+            instances = len(self.zkobj.endpoint_ips().list())
+            managers = len(self.zkobj.managers().key_map())
+            return Response(body=json.dumps({
+                'active': active,
+                'instances': instances,
+                'managers': managers,
+                'endpoints': endpoint_states,
+            }))
         else:
             return Response(status=403)
 

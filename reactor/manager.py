@@ -912,11 +912,13 @@ class ScaleManager(Atomic):
         all_pending = self.update_pending()
 
         # Run endpoint updates.
-        self.update_endpoints(all_metrics, all_pending, elapsed=elapsed)
+        active = self.update_endpoints(all_metrics, all_pending, elapsed=elapsed)
+        self._managers_zkobj.set_active(self._uuid, active)
 
     def update_endpoints(self, all_metrics, all_pending, elapsed=None):
         # List of updates.
         update_jobs = {}
+        total_active = 0
 
         # Does a health check on all the endpoints that are being managed.
         for (name, endpoint) in self._endpoints.items():
@@ -937,6 +939,7 @@ class ScaleManager(Atomic):
 
             # Compute the globally weighted averages.
             metrics = calculate_weighted_averages(metrics)
+            total_active += metrics.get("active", 0)
 
             # Add in a count of pending connections.
             if endpoint.config.url in all_pending:
@@ -964,6 +967,9 @@ class ScaleManager(Atomic):
             except Exception:
                 error = traceback.format_exc()
                 self.logging.warn(self.logging.ENDPOINT_ERROR, name, error)
+
+        # Return the total active connections.
+        return total_active
 
     def run(self):
         while self._running:

@@ -1,31 +1,15 @@
 <%include file="/navbar.html"/>
 
-<div id="loggedin" class="span9">
+<div class="span9">
 
-<div class="hero-unit">
-    <div>
-        <h3>Reactor Administration</h3>
-        <p>Reactor is a load-balancing, scale management system for cloud
-        application delivery built on top of Gridcentric's
-        <a href="http://gridcentric.com/technology/vms/">Virtual Memory Streaming</a>
-        technology. Reactor addresses the need for real-time
-        provisioning of new instances according to changing load.</p>
-        
-        <p>Reactor makes building truly reactive cloud services not only
-        feasible but simple. Running as a virtual appliance in your
-        VMS-enabled OpenStack cloud infrastructure, Reactor leverages
-        the rapid virtual machine cloning technology of VMS to seamlessly
-        scale services in response to load.</p>
-        <p><a class="btn btn-primary btn-large" href="http://docs.gridcentric.com/reactor/">Documentation &raquo;</a></p>
-    </div>
+<div id="metrics" style="overflow:hidden">
 </div>
-
-<script type="text/javascript">
-</script>
+<%include file="/metrics.html"/>
 
 <div class="row-fluid">
   <div class="span4">
       <h4 id="instances"></h2>
+      <h4 id="active"></h2>
   </div>
   <div class="span4">
       <h4 id="running"></h2>
@@ -39,59 +23,47 @@
 
 </div>
 
+<script src="/assets/constants.js"></script>
 <script type="text/javascript">
-    var endpoint_count = 0;
-    var running_count = 0;
-    var paused_count = 0;
-    var stopped_count = 0;
-    var active_count = 0;
-    var pending = 0;
-    var managers = {};
+    function loadInfo() {
+        $.ajax({
+            url: "/v1.1/info",
+            type: 'GET',
+            dataType: 'json',
+            success: function(result) {
+                // Set the number of instances and connections.
+                instances = result["instances"];
+                active = result["active"];
+                $("#instances").html("" + instances + " instances.");
+                $("#active").html("" + active + " connections.");
 
-    function done_endpoint() {
-        pending -= 1;
-        if( pending == 0 ) {
-            $("#instances").html("" + active_count + " active instances.");
-            $("#running").html("" + running_count + " running endpoints.");
-            $("#paused").html("" + paused_count + " paused endpoints.");
-            $("#stopped").html("" + stopped_count + " stopped endpoints.");
-            $("#managers").html("" + Object.keys(managers).length + " managers.");
-        }
-    }
+                // Set the different states.
+                running = result["endpoints"]["RUNNING"] || 0;
+                paused = result["endpoints"]["PAUSED"] || 0;
+                stopped = result["endpoints"]["STOPPED"] || 0;
+                $("#running").html("" + running + " running endpoints.");
+                $("#paused").html("" + paused + " paused endpoints.");
+                $("#stopped").html("" + stopped + " stopped endpoints.");
 
-    function process_endpoints(result) {
-        $.each(result["endpoints"], function(index, value) {
-            endpoint_count += 1;
-            pending += 1;
-            $.ajax({
-                url: "/v1.1/endpoints/" + value + "/state",
-                type: 'GET',
-                dataType: 'json',
-                success: function(result) {
-                    active_count += result["active"].length;
-                    managers[result["manager"]] = true;
-                    if( result["state"] == "RUNNING" ) {
-                        running_count += 1;
-                    } else if( result["state"] == "PAUSED" ) {
-                        paused_count += 1;
-                    } else if( result["state"] == "STOPPED" ) {
-                        stopped_count += 1;
-                    }
-                    done_endpoint();
-                },
-                error: function(result) {
-                    done_endpoint();
-                },
-            });
+                // Set the number of managers.
+                managers = result["managers"];
+                $("#managers").html("" + managers + " managers.");
+
+                // Graph the suckers.
+                graphMetrics({
+                    "instances": instances,
+                    "connections": active
+                });
+
+                setTimeout(loadInfo, UPDATE_PERIOD);
+            },
+            error: function() {
+                setTimeout(loadInfo, UPDATE_PERIOD);
+            }
         });
     }
 
-    $.ajax({
-        url: "/v1.1/endpoints",
-        type: 'GET',
-        dataType: 'json',
-        success: process_endpoints,
-    });
+    loadInfo();
 </script>
 
 <%include file="/footer.html"/>
