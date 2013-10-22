@@ -193,7 +193,7 @@ class ReactorGui(ReactorApiExtension):
                 # Check for supported types.
                 ext = page_name.split('.')[-1]
                 headers = {
-                    "Content-type": MIMEMAP.get(ext, "text/plain")
+                    "Content-type": MIMEMAP.get(ext, "text/html")
                 }
             except Exception:
                 page_data = exceptions.html_error_template().render()
