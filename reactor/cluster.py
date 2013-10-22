@@ -68,8 +68,8 @@ class Cluster(ReactorApiExtension):
         self._cleaner_thread.start()
 
         # Add route for changing the API servers.
-        api.config.add_route('api-servers', '/api_servers')
-        api.config.add_view(self.set_api_servers, route_name='api-servers')
+        api.config.add_route('api-servers', '/zk_servers')
+        api.config.add_view(self.set_zk_servers, route_name='api-servers')
 
         # Check that everything is up and running.
         self.check_zookeeper(api.client.servers())
@@ -82,23 +82,26 @@ class Cluster(ReactorApiExtension):
 
     @connected
     @authorized()
-    def set_api_servers(self, context, request):
+    def set_zk_servers(self, context, request):
         """
         Updates the list of API servers in the system.
         """
         if request.method == 'POST':
             # Change the used set of API servers.
             logging.info("Updating API Servers.")
-            api_servers = json.loads(request.body)['api_servers']
-            self.check_zookeeper(api_servers)
-            self.api.client.reconnect(api_servers)
-            self.check_manager(api_servers)
+            zk_servers = json.loads(request.body)['zk_servers']
+            if len(zk_servers) == 0:
+                return Respone(status=403)
+
+            self.check_zookeeper(zk_servers)
+            self.api.client.reconnect(zk_servers)
+            self.check_manager(zk_servers)
             return Response()
 
         elif request.method == 'GET':
             # Return the current set of API servers.
             return Response(body=json.dumps(
-                { "api_servers" : self.api.client.servers() }))
+                { "zk_servers" : self.api.client.servers() }))
 
         else:
             return Response(status=403)

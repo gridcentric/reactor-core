@@ -265,12 +265,12 @@ def main():
     def get_api():
         from reactor.api import ReactorApi
         api = ReactorApi(zk_servers)
-        if gui:
-            from . gui import ReactorGui
-            api = ReactorGui(api)
         if cluster:
             from . cluster import Cluster
             api = Cluster(api)
+        if gui:
+            from . gui import ReactorGui
+            api = ReactorGui(api)
         return api
 
     try:
