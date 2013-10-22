@@ -51,6 +51,10 @@ ifneq ($(DESTDIR),)
 	    (cd $(DESTDIR)/usr/lib* && mv python* python$(PYTHON_VER))
 	@[ -d $(DESTDIR)/usr/lib*/python$(PYTHON_VER)/$(PACKAGES_DIR) ] || \
 	    (cd $(DESTDIR)/usr/lib*/python$(PYTHON_VER) && mv *-packages $(PACKAGES_DIR))
+endif
+
+server_install: dist_clean
+ifneq ($(DESTDIR),)
 ifneq ($(INIT),)
 	@$(INSTALL_DIR) $(DESTDIR)/etc
 	@rsync -ruav $(INIT)/ $(DESTDIR)/etc
@@ -95,24 +99,50 @@ $(DEBBUILD):
 	@$(INSTALL_DIR) $(DEBBUILD)
 .PHONY: $(DEBBUILD)
 
-# Build server packages.
-server.deb: $(DEBBUILD)
-	@$(INSTALL_DIR) $(DEBBUILD)/reactor-server
+python-reactor.deb: $(DEBBUILD)
+	@$(INSTALL_DIR) $(DEBBUILD)/python-reactor
 	@$(MAKE) dist_install \
 	    PYTHON_VER=2.7 \
 	    PACKAGES_DIR=dist-packages \
+	    DESTDIR=$(DEBBUILD)/python-reactor
+	@rsync -ruav packagers/deb/python-reactor/ $(DEBBUILD)/python-reactor
+	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/python-reactor/DEBIAN/control
+	@fakeroot dpkg -b $(DEBBUILD)/python-reactor .
+.PHONY: python-reactor.deb
+
+reactor-server.deb: $(DEBBUILD)
+	@$(INSTALL_DIR) $(DEBBUILD)/reactor-server
+	@$(MAKE) server_install \
 	    INIT=etc/upstart \
 	    DESTDIR=$(DEBBUILD)/reactor-server
 	@rsync -ruav packagers/deb/reactor-server/ $(DEBBUILD)/reactor-server
 	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-server/DEBIAN/control
 	@fakeroot dpkg -b $(DEBBUILD)/reactor-server .
-.PHONY: server.deb
+.PHONY: reactor-server.deb
 
-server.rpm: $(RPMBUILD)
+reactor-client.deb: $(DEBBUILD)
+	@$(INSTALL_DIR) $(DEBBUILD)/reactor-client
+	@rsync -ruav packagers/deb/reactor-client/ $(DEBBUILD)/reactor-client
+	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-client/DEBIAN/control
+	@fakeroot dpkg -b $(DEBBUILD)/reactor-client .
+.PHONY: reactor-client.deb
+
+python-reactor.rpm: $(RPMBUILD)
 	@rm -rf $(CURDIR)/$(RPMBUILD)/BUILDROOT/*
 	@$(MAKE) dist_install \
 	    PYTHON_VER=2.6 \
 	    PACKAGES_DIR=site-packages \
+	    DESTDIR=$(CURDIR)/$(RPMBUILD)/BUILDROOT
+	@rpmbuild --with=suggests -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
+	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \
+	    --define="%version $(PACKAGE_VERSION)" \
+	    packagers/rpm/python-reactor.spec
+	@find $(RPMBUILD) -name \*.rpm -exec mv {} . \;
+.PHONY: python-reactor.rpm
+
+reactor-server.rpm: $(RPMBUILD)
+	@rm -rf $(CURDIR)/$(RPMBUILD)/BUILDROOT/*
+	@$(MAKE) server_install \
 	    INIT=etc/sysV \
 	    DESTDIR=$(CURDIR)/$(RPMBUILD)/BUILDROOT
 	@rpmbuild --with=suggests -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
@@ -120,27 +150,22 @@ server.rpm: $(RPMBUILD)
 	    --define="%version $(PACKAGE_VERSION)" \
 	    packagers/rpm/reactor-server.spec
 	@find $(RPMBUILD) -name \*.rpm -exec mv {} . \;
-.PHONY: server.rpm
+.PHONY: reactor-server.rpm
 
-cobaltclient.rpm:
-	@rm -rf $(CURDIR)/extra/cobalt-novaclient*.rpm
-	@rm -rf $(CURDIR)/cobalt-novaclient*.rpm
-	@curl -L -O http://downloads.gridcentric.com/packages/cobaltclient/grizzly/rpm/binary/cobalt-novaclient-`curl -L http://downloads.gridcentric.com/packages/cobaltclient/grizzly/rpm/repodata/filelists.xml.gz 2>/dev/null | zcat | grep -o -E 'ver=".+\"' | cut -d ' ' -f 1 | head -n1 | sed -e 's/ver="//' -e 's/"$$//'`-py2.7.noarch.rpm 2>/dev/null
-	@mv cobalt-novaclient*.rpm $(CURDIR)/extra/
-.PHONY: cobaltclient.rpm
-
-cobaltclient.deb:
-	@rm -rf $(CURDIR)/extra/cobalt-novaclient*.deb
-	@rm -rf $(CURDIR)/cobalt-novaclient*.deb
-	@curl -L -O http://downloads.gridcentric.com/packages/cobaltclient/grizzly/deb//`curl -L http://downloads.gridcentric.com/packages/cobaltclient/grizzly/deb/dists/gridcentric/non-free/binary-amd64/Packages.gz 2>/dev/null | zcat | grep ^Filename | cut -d ' ' -f 2-` 2>/dev/null
-	@mv cobalt-novaclient*.deb $(CURDIR)/extra/
-.PHONY: cobaltclient.deb
+reactor-client.rpm: $(RPMBUILD)
+	@rm -rf $(CURDIR)/$(RPMBUILD)/BUILDROOT/*
+	@rpmbuild --with=suggests -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
+	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \
+	    --define="%version $(PACKAGE_VERSION)" \
+	    packagers/rpm/reactor-client.spec
+	@find $(RPMBUILD) -name \*.rpm -exec mv {} . \;
+.PHONY: reactor-client.rpm
 
 packages: deb-packages rpm-packages
 .PHONY: packages
 
-deb-packages: server.deb cobaltclient.deb
+deb-packages: python-reactor.deb reactor-server.deb reactor-client.deb
 .PHONY: deb-packages
 
-rpm-packages: server.rpm cobaltclient.rpm
+rpm-packages: python-reactor.rpm reactor-server.rpm reactor-client.rpm
 .PHONY: rpm-packages

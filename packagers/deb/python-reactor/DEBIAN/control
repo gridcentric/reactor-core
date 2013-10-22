@@ -1,0 +1,7 @@
+Package: python-reactor
+Section: extra
+Version: VERSION
+Architecture: all
+Maintainer: Gridcentric Inc. <support@gridcentric.com>
+Description: Reactor python bindings
+Depends: python-httplib2

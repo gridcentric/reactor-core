@@ -6,13 +6,18 @@ Group: System
 License: Copyright 2012 GridCentric Inc.
 URL: http://www.gridcentric.com
 Packager: GridCentric Inc. <support@gridcentric.com>
+Requires: python-reactor
 Requires: iptables, curl, openssh-clients
 Requires: python-paste, python-pyramid, python-mako
-Requires: python-netifaces, python-ldap, python-netaddr
-Requires: python-httplib2, python-webob
-Requires: python-zookeeper zookeeper
-Requires: python-novaclient, cobalt-novaclient
-Requires: socat
+Requires: python-netifaces, python-ldap
+Requires: python-netaddr, python-webob
+Requires: python-zookeeper
+# Unfortunately, we don't really have any way of
+# specifying soft dependencies. For now, we rely
+# on the cloud-init file to install some of these,
+# and we just leave them out of the required spec.
+# Recommends: python-novaclient, cobalt-novaclient
+# Recommends: socat, zookeeper, nginx, haproxy
 BuildRoot: %{_tmppath}/%{name}.%{version}-buildroot
 AutoReq: no
 AutoProv: no
@@ -29,7 +34,8 @@ Reactor server.
 true
 
 %files
-/usr/
+/usr/bin/reactor-setup
+/usr/bin/reactor-defaults
 /etc/init.d/reactor
 /etc/logrotate.d/reactor
 /etc/reactor/

@@ -1,0 +1,7 @@
+Package: reactor-client
+Section: extra
+Version: VERSION
+Architecture: all
+Depends: python-reactor
+Maintainer: Gridcentric Inc. <support@gridcentric.com>
+Description: Reactor client

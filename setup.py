@@ -12,7 +12,7 @@ except ImportError:
 setup(
     name="reactor",
     description="Load balancer and scale manager.",
-    version=os.getenv("VERSION"),
+    version=os.getenv("VERSION") or "0.1",
     author="Gridcentric Inc.",
     author_email="support@gridcentric.com",
     url="http://www.gridcentric.com",
