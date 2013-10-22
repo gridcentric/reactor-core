@@ -8,6 +8,6 @@ Depends: python-reactor,
     python-webob, python-zookeeper,
     iptables, curl, openssh-client
 Recommends: python-novaclient, cobalt-novaclient,
-    socat, zookeeperd, nginx, haproxy
+    socat, zookeeperd, nginx, haproxy, dnsmasq
 Maintainer: Gridcentric Inc. <support@gridcentric.com>
 Description: Reactor server

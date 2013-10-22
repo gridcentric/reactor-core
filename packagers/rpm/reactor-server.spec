@@ -18,6 +18,7 @@ Requires: python-zookeeper
 # and we just leave them out of the required spec.
 # Recommends: python-novaclient, cobalt-novaclient
 # Recommends: socat, zookeeper, nginx, haproxy
+# Recommends: dnsmasq
 BuildRoot: %{_tmppath}/%{name}.%{version}-buildroot
 AutoReq: no
 AutoProv: no
