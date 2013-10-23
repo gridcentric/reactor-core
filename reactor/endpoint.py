@@ -696,6 +696,17 @@ class Endpoint(Atomic):
             name = self.instances.get(instance_id)
             ips = self.instance_ips.get(instance_id)
 
+            # There are no confirmed IPs here.
+            # So we don't actually need to decomission this instance.
+            # In fact, that will create a bit of a problem, because
+            # instances that get decomissioned *have* been active at
+            # some point and we know they are good. If this instance
+            # is not active and being called here, we know that it's
+            # never been active. So we kill it directly.
+            if len(set(ips).intersection(set(self.confirmed_ips.list()))) == 0:
+                self._delete_instance(instance_id)
+                continue
+
             # Log a message.
             self.logging.info(self.logging.DECOMMISSION_INSTANCE, ips)
 
