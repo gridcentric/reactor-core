@@ -145,7 +145,7 @@ def endpoints(request, n=5):
     r = reactor(request)
     for name in names:
         # Save all with an empty configuration.
-        r.endpoints().get(name).set_config({})
+        r.endpoints().manage(name, {})
 
     # Ensure all watches have fired to
     # synchronize manager's active state.

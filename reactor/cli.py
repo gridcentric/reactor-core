@@ -120,6 +120,10 @@ def usage():
     print "    unmanage <endpoint>    Delete the endpoint with the given name."
     print "    show <endpoint>        Show the current configuration for the endpoint."
     print ""
+    print "    rename <endpoint> new-name>  Rename the givern endpoint."
+    print "    alias <endpoint> <new-name>  Alias the given endpoint."
+    print "                                 The endpoints will share all state."
+    print ""
     print "    get <endpoint> <section> <key>"
     print "    set <endpoint> <section> <key> <value>"
     print ""
@@ -339,6 +343,19 @@ def main():
             api_client = get_api_client()
             config = api_client.endpoint_config(endpoint_name)
             print json.dumps(config, indent=2)
+
+        elif command == "rename":
+            endpoint_name = get_arg(1)
+            new_name = get_arg(2)
+            api_client = get_api_client()
+            api_client.endpoint_alias(endpoint_name, new_name)
+            api_client.endpoint_unmanage(endpoint_name)
+
+        elif command == "alias":
+            endpoint_name = get_arg(1)
+            new_name = get_arg(2)
+            api_client = get_api_client()
+            api_client.endpoint_alias(endpoint_name, new_name)
 
         elif command == "get":
             endpoint_name = get_arg(1)

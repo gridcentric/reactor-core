@@ -13,6 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from uuid import uuid4
+
 from reactor.zookeeper.objects import JSONObject
 from reactor.zookeeper.objects import BinObject
 from reactor.zookeeper.objects import RawObject
@@ -24,6 +26,12 @@ from . instance import Instances
 from . session import Sessions
 from . config import ConfigObject
 from . ring import Ring
+
+# The endpoint names.
+NAMES = "names"
+
+# The endpoint data.
+DATA = "data"
 
 # The action for an endpoint.
 STATE = "state"
@@ -64,19 +72,63 @@ ERRORED_INSTANCES = "errored"
 # The current sessions.
 SESSIONS = "sessions"
 
-# Whether this endpoint is being deleted.
-DELETING = "deleting"
+class EndpointNotFound(Exception):
+    pass
 
 class Endpoints(DatalessObject):
 
     def get(self, name):
-        return self._get_child(name, clazz=Endpoint)
+        # Get the endpoint UUID from the names directory.
+        uuid = self._get_child(NAMES)._get_child(
+            name, clazz=RawObject)._get_data()
+        if uuid:
+            return self._get_child(DATA)._get_child(
+                uuid, clazz=Endpoint)
+        else:
+            raise EndpointNotFound(name)
 
     def list(self, **kwargs):
-        return self._list_children(**kwargs)
+        # List the endpoints as names.
+        return self._get_child(NAMES)._list_children(**kwargs)
+
+    def manage(self, name, config):
+        # Generate a UUID if one doesn't exist.
+        uuid = str(uuid4())
+        self._get_child(NAMES)._get_child(
+            name, clazz=RawObject)._set_data(uuid, exclusive=True)
+
+        # Set the configuration for this endpoint.
+        self.get(name).set_config(config)
 
     def unmanage(self, name):
-        self.get(name).delete()
+        # Delete the given endpoint.
+        self._get_child(NAMES)._get_child(name)._delete()
+
+    def clean(self):
+        uuids = self._get_child(DATA)._list_children()
+        names = self._get_child(NAMES)._list_children()
+
+        # Get all the available endpoints.
+        active_uuids = map(lambda x:
+            self._get_child(NAMES)._get_child(x, clazz=RawObject)._get_data(),
+            names)
+
+        # Ensure there are no unused endpoints.
+        for uuid in uuids:
+            if not uuid in active_uuids:
+                self._get_child(DATA)._get_child(uuid)._delete()
+
+    def alias(self, name, new_name):
+        # Get the current endpoint UUID.
+        uuid = self._get_child(NAMES)._get_child(
+            name, clazz=RawObject)._get_data()
+
+        if uuid is not None:
+            self._get_child(NAMES)._get_child(
+                new_name, clazz=RawObject)._set_data(uuid)
+            return True
+        else:
+            return False
 
     def state_counts(self):
         result = {}
@@ -124,22 +176,9 @@ class Endpoint(ConfigObject):
     def __init__(self, *args, **kwargs):
         super(Endpoint, self).__init__(*args, **kwargs)
         self._state = self._get_child(STATE, clazz=State)
-        self._deleting = self._get_child(DELETING, clazz=JSONObject)
-
-    def is_deleting(self, **kwargs):
-        return self._deleting._get_data(**kwargs)
-
-    def delete(self):
-        # NOTE: We just set the _deleting() attribute.
-        # We allow the owner of the endpoint to do the
-        # actual deletion at whatever point they want.
-        self._deleting._set_data(True)
-        if not self.manager:
-            self._delete()
 
     def unwatch(self):
         self._state.unwatch()
-        self._deleting.unwatch()
         super(Endpoint, self).unwatch()
 
     def get_config(self, **kwargs):

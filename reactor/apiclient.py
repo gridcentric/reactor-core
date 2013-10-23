@@ -72,6 +72,12 @@ class ReactorApiClient(httplib2.Http):
         """
         self.request('/v1.1/endpoints/%s' % endpoint_name, 'DELETE')
 
+    def endpoint_alias(self, endpoint_name, new_name):
+        """
+        Alias the endpoint.
+        """
+        self.request('/v1.1/endpoints/%s/alias' % endpoint_name, 'POST', body=new_name)
+
     def endpoint_config(self, endpoint_name):
         """
         Return the endpoint's configuration.

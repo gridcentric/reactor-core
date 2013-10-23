@@ -33,6 +33,7 @@ from . manager import ManagerLog
 from . endpoint import EndpointConfig
 from . endpoint import EndpointLog
 from . objects.root import Reactor
+from . objects.endpoint import EndpointNotFound
 from . zookeeper.connection import ZookeeperException
 from . zookeeper.client import ZookeeperClient
 
@@ -86,6 +87,9 @@ def connected(fn):
         try:
             self.connect()
             return fn(self, *args, **kwargs)
+        except EndpointNotFound, e:
+            # Couldn't find object.
+            return Response(status=404, body=str(e))
         except ZookeeperException:
             # Disconnect (next request will reconnect).
             logging.error("Unexpected error: %s", traceback.format_exc())
@@ -165,6 +169,9 @@ class ReactorApi(object):
 
         self._add('endpoint-action',  ['1.0', '1.1'],
                   'endpoints/{endpoint_name}', self.handle_endpoint_action)
+
+        self._add('endpoint-alias-action',  ['1.1'],
+                  'endpoints/{endpoint_name}/alias', self.handle_alias_action)
 
         self._add('endpoint-list',  ['1.0', '1.1'],
                   'endpoints', self.list_endpoints)
@@ -450,27 +457,41 @@ class ReactorApi(object):
     def handle_manager_action(self, context, request):
         """
         This Handles a general manager action:
-        GET - Returns the manager config in the Response body
-        POST/PUT - Updates the manager with a new config in the request body
+        GET - Returns the manager config in the Response body.
+        POST/PUT - Updates the manager with a new config in the request body.
         DELETE - Removes the management config.
         """
         manager = request.matchdict['manager']
 
         if request.method == "GET":
+            # Read the config if available.
             config = self.zkobj.managers().get_config(manager)
             if config is not None:
-                try:
-                    config['uuid'] = self.zkobj.managers().key(manager)
-                    config['info'] = self.zkobj.managers().info(config['uuid'])
-                except:
+                real_config = True
+            else:
+                real_config = False
+                config = {}
+
+            try:
+                # Associate this with a running manager.
+                config['uuid'] = self.zkobj.managers().key(manager)
+                config['info'] = self.zkobj.managers().info(config['uuid'])
+            except:
+                # No real config *or* running manager?
+                if not real_config:
+                    return Response(status=404, body=manager)
+                else:
                     config['uuid'] = None
                     config['info'] = None
-                return Response(body=json.dumps(config))
-            else:
-                return Response(status=404, body="%s not found" % manager)
+
+            return Response(body=json.dumps(config))
 
         elif request.method == "POST" or request.method == "PUT":
-            manager_config = fromstr(request.body)
+            try:
+                manager_config = fromstr(request.body)
+            except:
+                return Response(status=403)
+
             config = ManagerConfig(values=manager_config)
             errors = config.validate()
             if errors:
@@ -480,14 +501,8 @@ class ReactorApi(object):
                 return Response()
 
         elif request.method == "DELETE":
-            config = self.zkobj.managers().get_config(manager)
-            if config is not None:
-                # Delete the given manager completely.
-                self.zkobj.managers().remove_config(manager)
-                return Response()
-            else:
-                return Response(status=404, body="%s not found" % manager)
-
+            self.zkobj.managers().remove_config(manager)
+            return Response()
         else:
             return Response(status=403)
 
@@ -534,27 +549,28 @@ class ReactorApi(object):
     def handle_endpoint_action(self, context, request):
         """
         This handles a general endpoint action:
-        GET - Returns the endpoint config in the Response body
-        POST/PUT - Either manages or updates the endpoint with a new config in the request body
+        GET - Returns the endpoint config in the Response body.
+        POST/PUT - Manages or updates the endpoint with a new config.
         DELETE - Unmanages the endpoint.
         """
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
-            config = self.zkobj.endpoints().get(endpoint_name).get_config()
-            if config is not None:
-                return Response(body=json.dumps(config))
-            else:
-                return Response(status=404, body="%s not found" % endpoint_name)
+            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            return Response(body=json.dumps(endpoint.get_config()))
 
         elif request.method == "POST" or request.method == "PUT":
-            endpoint_config = fromstr(request.body)
+            try:
+                endpoint_config = fromstr(request.body)
+            except:
+                return Response(status=403)
+
             config = EndpointConfig(values=endpoint_config)
             errors = config.validate()
             if errors:
                 return Response(status=400, body=json.dumps(errors))
             else:
-                self.zkobj.endpoints().get(endpoint_name).set_config(endpoint_config)
+                self.zkobj.endpoints().manage(endpoint_name, endpoint_config)
                 return Response()
 
         elif request.method == "DELETE":
@@ -566,40 +582,49 @@ class ReactorApi(object):
 
     @log
     @connected
+    @authorized()
+    def handle_alias_action(self, context, request):
+        """
+        This handles a general endpoint action:
+        POST/PUT - Post the new endpoint name.
+        """
+        endpoint_name = request.matchdict['endpoint_name']
+
+        if request.method == "POST" or request.method == "PUT":
+            new_name = json.loads(request.body)
+            self.zkobj.endpoints().alias(endpoint_name, new_name)
+            return Response()
+        else:
+            return Response(status=403)
+
+    @log
+    @connected
     @authorized(allow_endpoint=True)
     def handle_state_action(self, context, request):
         """
         This handles a endpoint info request:
-        GET - Returns the current endpoint info
+        GET - Returns the current endpoint info.
         """
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
             endpoint = self.zkobj.endpoints().get(endpoint_name)
             config = endpoint.get_config()
-            if config is not None:
-                state = endpoint.state().current()
-                active = endpoint.active
-                manager = endpoint.manager
-                value = {
-                    'state': state,
-                    'active': active or [],
-                    'manager': manager or None,
-                }
-                return Response(body=json.dumps(value))
-            else:
-                return Response(status=404, body="%s not found" % endpoint_name)
+            state = endpoint.state().current()
+            active = endpoint.active
+            manager = endpoint.manager
+            value = {
+                'state': state,
+                'active': active or [],
+                'manager': manager or None,
+            }
+            return Response(body=json.dumps(value))
 
         elif request.method == "POST" or request.method == "PUT":
             state_action = json.loads(request.body)
             endpoint = self.zkobj.endpoints().get(endpoint_name)
-            config = endpoint.get_config()
-
-            if config is not None:
-                endpoint.state().action(state_action.get('action'))
-                return Response()
-            else:
-                return Response(status=404, body="%s not found" % endpoint_name)
+            endpoint.state().action(state_action.get('action'))
+            return Response()
 
         else:
             return Response(status=403)
@@ -617,16 +642,17 @@ class ReactorApi(object):
         endpoint_ip = request.matchdict.get('endpoint_ip', None)
 
         if request.method == "GET":
-            metrics = self.zkobj.endpoints().get(endpoint_name).metrics
-            return Response(body=json.dumps(metrics or {}))
+            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            return Response(body=json.dumps(endpoint.metrics or {}))
 
         elif request.method == "POST" or request.method == "PUT":
+            endpoint = self.zkobj.endpoints().get(endpoint_name)
             metrics = json.loads(request.body)
             if endpoint_ip is not None:
-                ip_metrics = self.zkobj.endpoints().get(endpoint_name).ip_metrics()
+                ip_metrics = endpoint.ip_metrics()
                 ip_metrics.add(endpoint_ip, metrics)
             else:
-                self.zkobj.endpoints().get(endpoint_name).custom_metrics = metrics
+                endpoint.custom_metrics = metrics
             return Response()
 
         else:
@@ -639,9 +665,8 @@ class ReactorApi(object):
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
-            ips = self.zkobj.endpoints().get(
-                endpoint_name).confirmed_ips().list()
-            return Response(body=json.dumps(ips))
+            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            return Response(body=json.dumps(endpoint.confirmed_ips().list()))
         else:
             return Response(status=403)
 
@@ -754,9 +779,8 @@ class ReactorApi(object):
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
-            sessions = self.zkobj.endpoints().get(
-                endpoint_name).sessions().active_map()
-            return Response(body=json.dumps(sessions))
+            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            return Response(body=json.dumps(endpoint.sessions().active_map()))
         else:
             return Response(status=403)
 
@@ -771,15 +795,12 @@ class ReactorApi(object):
         session = request.matchdict['session']
 
         if request.method == "GET":
-            backend = self.zkobj.endpoints().get(endpoint_name).sessions().backend(session)
-            return Response(body=json.dumps(backend))
+            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            return Response(body=json.dumps(endpoint.sessions().backend(session)))
 
         elif request.method == "DELETE":
             endpoint = self.zkobj.endpoints().get(endpoint_name)
-            if endpoint.get_config() is not None:
-                endpoint.sessions().drop(session)
-            else:
-                return Response(status=404, body="%s not found" % endpoint_name)
+            endpoint.sessions().drop(session)
             return Response()
         else:
             return Response(status=403)

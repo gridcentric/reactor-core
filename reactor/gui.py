@@ -15,7 +15,6 @@
 
 import os
 import json
-import threading
 import markdown
 import traceback
 

@@ -365,18 +365,12 @@ class ScaleManager(Atomic):
                         self.zkobj.endpoints().get(endpoint_name),
                         collect=self.collect,
                         find_cloud_connection=self._find_cloud_connection,
-                        find_loadbalancer_connection=self._find_loadbalancer_connection,
-                        delete_hook=self._endpoint_deleted)
+                        find_loadbalancer_connection=self._find_loadbalancer_connection)
             except:
                 # This isn't expected.
+                # Perhaps we just caught a race condition,
+                # with the endpoint being deleted?
                 traceback.print_exc()
-                continue
-
-            if endpoint.deleted:
-                # Oops, was already gone.
-                # This just catches a race condition,
-                # presumably some other manager in the
-                # system is actually removed the endpoint.
                 continue
 
             # The endpoint will generally reload the loadbalancer
@@ -402,20 +396,6 @@ class ScaleManager(Atomic):
     def endpoint_change(self, endpoints):
         self._endpoint_change(endpoints)
         self._watch_ips()
-
-    @Atomic.sync
-    def _endpoint_deleted(self, endpoint):
-        # This will remove the endpoint locally.
-        # We will do this immediately following doing
-        # the actual removing in Zookeeper, since we
-        # don't want to continue updating this endpoint.
-        new_endpoints = []
-        was_owned = self.endpoint_owned(endpoint)
-        for (endpoint_name, local_endpoint) in self._endpoints.items():
-            if local_endpoint != endpoint:
-                new_endpoints.append(endpoint_name)
-        self._endpoint_change(new_endpoints)
-        return was_owned
 
     def update_config(self, config):
         # If the config changes, then we may no longer
@@ -996,12 +976,19 @@ class ScaleManager(Atomic):
                 # Reconnect to the Zookeeper servers.
                 self.serve()
 
+                # Clean out stale endpoints.
+                # We do this first thing, to ensure that we
+                # don't run any updates on endpoints that have
+                # been deleted while we've been offline.
+                self._endpoints_zkobj.clean()
+
                 # Perform continuous health checks.
                 elapsed = None
                 while self._running:
                     start_time = time.time()
                     self.check_endpoint_ips()
                     self.update(elapsed=elapsed)
+                    self._endpoints_zkobj.clean()
 
                     # We only sleep for the part of the interval that
                     # we were not active for. This allows us to actually

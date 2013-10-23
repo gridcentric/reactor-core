@@ -91,7 +91,7 @@ class Cluster(ReactorApiExtension):
             logging.info("Updating API Servers.")
             zk_servers = json.loads(request.body)['zk_servers']
             if len(zk_servers) == 0:
-                return Respone(status=403)
+                return Response(status=403)
 
             self.check_zookeeper(zk_servers)
             self.client.reconnect(zk_servers)
