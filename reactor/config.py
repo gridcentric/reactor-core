@@ -399,7 +399,13 @@ def fromini(ini):
 
 def fromstr(obj):
     """ Create a dictionary from an arbitrary string. """
-    while not isinstance(obj, dict):
+
+    # Try to convert from a JSON string.
+    # Or, possibly a INI-style config string.
+    # We attempt this *twice* because it may
+    # be an INI-style config string which has
+    # been encoded as a JSON object, etc.
+    for _ in range(2):
         if isinstance(obj, str) or isinstance(obj, unicode):
             try:
                 obj = json.loads(obj)
@@ -410,6 +416,11 @@ def fromstr(obj):
                     config = SafeConfigParser()
                     config.readfp(StringIO(obj))
                     obj = fromini(config)
+
+    # Still not a dictionary? Given up.
+    if not isinstance(obj, dict):
+        return None
+
     return obj
 
 class Connection(Atomic):
