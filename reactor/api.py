@@ -755,14 +755,22 @@ class ReactorApi(object):
         Returns the endpoints' log.
         """
         endpoint_name = request.matchdict['endpoint_name']
-        since = request.params.get('since', None)
-        if since is not None:
-            try:
-                since = float(since)
-            except ValueError:
-                since = None
 
-        if request.method == "GET":
+        if request.method == "POST" or request.method == "PUT":
+            level = request.params.get('level', None)
+            message = str(json.loads(request.body))
+            endpoint_log = EndpointLog(
+                self.zkobj.endpoints().get(endpoint_name).log())
+            endpoint_log.post(message, level=level)
+            return Response()
+
+        elif request.method == "GET":
+            since = request.params.get('since', None)
+            if since is not None:
+                try:
+                    since = float(since)
+                except ValueError:
+                    since = None
             endpoint_log = EndpointLog(
                 self.zkobj.endpoints().get(endpoint_name).log())
             return Response(body=json.dumps(endpoint_log.get(since=since)))

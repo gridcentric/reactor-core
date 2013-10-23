@@ -39,6 +39,10 @@ class EventLog(object):
     # Default event.
     UNKNOWN_EVENT = Event()
 
+    # User data.
+    USER_EVENT = Event(
+        lambda args: args[0])
+
     def __init__(self, zkobj, size=None):
         self.zkobj = zkobj
         self.size = size and int(size)
@@ -68,6 +72,12 @@ class EventLog(object):
 
     def error(self, event, *args):
         self._log(self.ERROR, event, *args)
+
+    def post(self, message, level=None):
+        if level is None:
+            self._log(self.INFO, self.USER_EVENT, message)
+        else:
+            self._log(level, self.USER_EVENT, message)
 
     def _format_entry(self, entry):
         (ts, sev, code, args) = entry

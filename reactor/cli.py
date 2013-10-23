@@ -23,6 +23,7 @@ import json
 import gc
 import getpass
 import atexit
+import time
 
 # Resolve internal threading bug, that spams log output.
 # For more information see --
@@ -51,6 +52,15 @@ DEFAULT_API = "localhost"
 # Our default port.
 DEFAULT_PORT = 8080
 
+# Log message formats.
+LOG_FORMATS = {
+    "ERROR": "%s \033[91m%s\033[0m %s",
+    "WARNING": "%s \033[93m%s\033[0m %s",
+    "INFO": "%s \033[94m%s\033[0m %s",
+}
+def log_format(severity):
+    return LOG_FORMATS.get(severity, "%s %s %s")
+
 def usage():
     print "Usage: %s [options] <command>" % sys.argv[0]
     print "Options:"
@@ -77,7 +87,7 @@ def usage():
     print "                           (Alternately, the API port can be provided"
     print "                            in the environment variable REACTOR_PORT)."
     print ""
-    print "   --debug                 Enables verbose logging and full stack trace errors."
+    print "   --debug                 Enables verbose logging and full stack errors."
     print ""
     print "   --log=                  Log to a file instead of stdout."
     print ""
@@ -127,23 +137,32 @@ def usage():
     print "    get <endpoint> <section> <key>"
     print "    set <endpoint> <section> <key> <value>"
     print ""
-    print "    register <ip>          Register the given IP address."
-    print "    drop <ip>              Remove the given IP address."
-    print "    ips <endpoint>         Displays confirmed IP addresses for the endpoint."
+    print "    register [ip]          Register the given IP address."
+    print "    drop [ip]              Remove the given IP address."
+    print "    ips [endpoint]         Displays confirmed IP addresses."
     print ""
-    print "    state <endpoint>       Get the endpoint state."
+    print "    state [endpoint]       Get the endpoint state."
     print ""
-    print "    start <endpoint>       "
-    print "    stop <endpoint>        Update the endpoint state."
-    print "    pause <endpoint>       "
+    print "    start [endpoint]       "
+    print "    stop [endpoint]        Update the endpoint state."
+    print "    pause [endpoint]       "
+    print ""
+    print "    get-metrics [endpoint] Get custom endpoint metrics."
+    print "    set-metrics [endpoint] Set custom endpoint metrics."
+    print "                           (The metrics are read as JSON from stdin.)"
+    print "                               {\"name\": [weight, value], ...}"
     print ""
     print "    get-metrics <endpoint> Get custom endpoint metrics."
     print "    set-metrics <endpoint> Set custom endpoint metrics."
     print "                           (The metrics are read from stdin.)"
     print "                             {\"name\": [weight, value], ...}"
     print ""
-    print "    sessions <endpoint>        List all managed sessions."
-    print "    kill <endpoint> <session>  Kill the given session."
+    print "    log [endpoint]         Show the endpoint log."
+    print "    watch [endpoint]       Watch the endpoint log."
+    print "    post [endpoint]        Post to the endpoint log."
+    print ""
+    print "    sessions [endpoint]        List all managed sessions."
+    print "    kill [endpoint] <session>  Kill the given session."
     print ""
 
 def daemonize(pidfile):
@@ -197,7 +216,10 @@ def daemonize(pidfile):
 def main():
     port = os.getenv("REACTOR_PORT") or DEFAULT_PORT
     api_server = os.getenv("REACTOR_API") or DEFAULT_API
-    zk_servers = os.environ.get("REACTOR_ZK_SERVERS", "").split(",")
+    if "REACTOR_ZK_SERVERS" in os.environ:
+        zk_servers = os.environ["REACTOR_ZK_SERVERS"].split(",")
+    else:
+        zk_servers = []
     password = os.getenv("REACTOR_PASSWORD")
     debug = False
     logfile = None
@@ -393,6 +415,7 @@ def main():
 
         elif command == "manager-update":
             manager = get_arg(1)
+
             new_conf = ""
             for line in sys.stdin.readlines():
                 new_conf += line
@@ -409,68 +432,137 @@ def main():
         elif command == "manager-forget":
             manager = get_arg(1)
             api_client = get_api_client()
-            api_client.manager_reset(manager)
+            api_client.manager_forget(manager)
 
         elif command == "ips":
-            endpoint_name = get_arg(1)
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
             api_client = get_api_client()
             ips = api_client.endpoint_ips(endpoint_name)
             for ip in ips:
                 print ip
 
         elif command == "register":
-            ip = get_arg(1)
+            if len(args) > 1:
+                ip = get_arg(1)
+            else:
+                ip = None
             api_client = get_api_client()
             api_client.register_ip(ip)
 
         elif command == "drop":
-            ip = get_arg(1)
+            if len(args) > 1:
+                ip = get_arg(1)
+            else:
+                ip = None
             api_client = get_api_client()
             api_client.drop_ip(ip)
 
         elif command == "state":
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
             api_client = get_api_client()
-            endpoint_name = get_arg(1)
             state = api_client.endpoint_state(endpoint_name)
             print json.dumps(state, indent=2)
 
         elif command == "start" or command == "stop" or command == "pause":
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
             api_client = get_api_client()
-            endpoint_name = get_arg(1)
-            api_client.endpoint_action(endpoint_name, command)
+            api_client.endpoint_action(
+                endpoint_name=endpoint_name,
+                action=command)
 
         elif command == "get-metrics":
-            endpoint_name = get_arg(1)
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
             api_client = get_api_client()
-            metrics = api_client.endpoint_metrics(endpoint_name)
+            metrics = api_client.endpoint_metrics(
+                endpoint_name=endpoint_name)
             print metrics
 
         elif command == "set-metrics":
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
+
             new_metrics = ""
             for line in sys.stdin.readlines():
                 new_metrics += line
 
-            endpoint_name = get_arg(1)
             api_client = get_api_client()
-            api_client.endpoint_metrics_set(endpoint_name, json.loads(new_metrics))
+            api_client.endpoint_metrics_set(
+                endpoint_name=endpoint_name,
+                metrics=json.loads(new_metrics))
 
         elif command == "log":
-            endpoint_name = get_arg(1)
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
             api_client = get_api_client()
-            entries = api_client.endpoint_log(endpoint_name)
+            entries = api_client.endpoint_log(endpoint_name=endpoint_name)
             for (ts, level, message) in entries:
-                print ts, level, message
+                print log_format(level) % (ts, level, message)
+
+        elif command == "watch":
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
+            api_client = get_api_client()
+            delay = 2.0
+            last_ts = 0.0
+            while True:
+                entries = api_client.endpoint_log(
+                    endpoint_name=endpoint_name,
+                    since=last_ts)
+                for (ts, level, message) in entries:
+                    print log_format(level) % (ts, level, message)
+                    last_ts = ts
+                time.sleep(delay)
+
+        elif command == "post":
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
+
+            message = ""
+            for line in sys.stdin.readlines():
+                message += line
+
+            api_client = get_api_client()
+            api_client.endpoint_post(
+                endpoint_name=endpoint_name,
+                message=message.strip())
 
         elif command == "sessions":
-            endpoint_name = get_arg(1)
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
             api_client = get_api_client()
             sessions = api_client.session_list(endpoint_name)
             for client, backend in sessions.items():
                 print client, backend
 
         elif command == "kill":
-            endpoint_name = get_arg(1)
-            session = get_arg(2)
+            if len(args) > 2:
+                endpoint_name = get_arg(1)
+                session = get_arg(2)
+            else:
+                endpoint_name = None
+                session = get_arg(1)
             api_client = get_api_client()
             api_client.session_kill(endpoint_name, session)
 

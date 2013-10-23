@@ -108,80 +108,135 @@ class ReactorApiClient(httplib2.Http):
         _, body = self.request('/v1.1/managers/%s' % manager, 'GET')
         return body
 
-    def manager_reset(self, manager):
+    def manager_forget(self, manager):
         """
         Remove the given manager's configuration.
         """
         self.request('/v1.1/managers/%s' % manager, 'DELETE')
 
-    def endpoint_ips(self, endpoint_name):
+    def endpoint_ips(self, endpoint_name=None):
         """
         Returns a list of the dynamic ip addresses for this endpoint.
         """
-        _, body = self.request('/v1.1/endpoints/%s/ips' % endpoint_name, 'GET')
+        if endpoint_name is None:
+            _, body = self.request('/v1.1/endpoint/ips', 'GET')
+        else:
+            _, body = self.request('/v1.1/endpoints/%s/ips' % endpoint_name, 'GET')
         return body
 
-    def endpoint_action(self, endpoint_name, action):
+    def endpoint_action(self, endpoint_name=None, action=None):
         """
         Set the current endpoint action.
         """
-        _, body = self.request(
-            '/v1.1/endpoints/%s/state' % endpoint_name, 'POST', body={"action": action})
+        if action is None:
+            raise Exception("Action required!")
+        if endpoint_name is None:
+            _, body = self.request('/v1.1/endpoint/state',
+                'POST', body={"action": action})
+        else:
+            _, body = self.request('/v1.1/endpoints/%s/state' % endpoint_name,
+                'POST', body={"action": action})
         return body
 
-    def endpoint_state(self, endpoint_name):
+    def endpoint_state(self, endpoint_name=None):
         """
         Return available live endpoint info.
         """
-        _, body = self.request('/v1.1/endpoints/%s/state' % endpoint_name, 'GET')
+        if endpoint_name is None:
+            _, body = self.request('/v1.1/endpoint/state', 'GET')
+        else:
+            _, body = self.request('/v1.1/endpoints/%s/state' % endpoint_name, 'GET')
         return body
 
-    def endpoint_metrics(self, endpoint_name):
+    def endpoint_metrics(self, endpoint_name=None):
         """
         Set the custom endpoint metrics.
         """
-        _, body = self.request('/v1.1/endpoints/%s/metrics' % endpoint_name, 'GET')
+        if endpoint_name is None:
+            _, body = self.request('/v1.1/endpoint/metrics', 'GET')
+        else:
+            _, body = self.request('/v1.1/endpoints/%s/metrics' % endpoint_name, 'GET')
         return body
 
-    def endpoint_metrics_set(self, endpoint_name, metrics):
+    def endpoint_metrics_set(self, endpoint_name=None, metrics=None):
         """
         Set the custom endpoint metrics.
         """
-        self.request(
-            '/v1.1/endpoints/%s/metrics' % endpoint_name, 'POST', body=metrics)
+        if metrics is None:
+            raise Exception("Metrics required!")
+        if endpoint_name is None:
+            self.request('/v1.1/endpoint/metrics', 'POST', body=metrics)
+        else:
+            self.request('/v1.1/endpoints/%s/metrics' % endpoint_name, 'POST', body=metrics)
 
-    def endpoint_log(self, endpoint_name):
+    def endpoint_log(self, endpoint_name=None, since=None):
         """
         Return the full endpoint log.
         """
-        _, body = self.request('/v1.1/endpoints/%s/log' % endpoint_name, 'GET')
+        if endpoint_name is None:
+            url = '/v1.1/endpoint/log'
+        else:
+            url = '/v1.1/endpoints/%s/log' % endpoint_name
+        if since is not None:
+            url += '?since=%f' % float(since)
+        _, body = self.request(url, 'GET')
         return body
 
-    def session_list(self, endpoint_name):
+    def endpoint_post(self, endpoint_name=None, message=None, level=None):
+        """
+        Post a message to the endpoint log.
+        """
+        if message is None:
+            raise Exception("Message required!")
+        if endpoint_name is None:
+            url = '/v1.1/endpoint/log'
+        else:
+            url = '/v1.1/endpoints/%s/log' % endpoint_name
+        if level is not None:
+            url += '?level=%s' % level
+        _, body = self.request(url, 'POST', body=message)
+        return body
+
+    def session_list(self, endpoint_name=None):
         """
         Return a list of active sessions.
         """
-        _, body = self.request('/v1.1/endpoints/%s/sessions' % endpoint_name, 'GET')
+        if endpoint_name is None:
+            _, body = self.request('/v1.1/endpoint/sessions', 'GET')
+        else:
+            _, body = self.request('/v1.1/endpoints/%s/sessions' % endpoint_name, 'GET')
         return body
 
-    def session_kill(self, endpoint_name, session):
+    def session_kill(self, endpoint_name=None, session=None):
         """
         Drop a specific session.
         """
-        self.request(
-            '/v1.1/endpoints/%s/sessions/%s' % (endpoint_name, session), 'DELETE')
+        if session is None:
+            raise Exception("Session required!")
+        if endpoint_name is None:
+            self.request('/v1.1/endpoint/sessions/%s' %
+                (session), 'DELETE')
+        else:
+            self.request('/v1.1/endpoints/%s/sessions/%s' %
+                (endpoint_name, session), 'DELETE')
 
-    def register_ip(self, ip):
+    def register_ip(self, ip=None):
         """
         Register the given IP.
         """
-        self.request('/v1.1/register/%s' % ip, 'POST')
+        if ip is None:
+            self.request('/v1.1/register', 'POST')
+        else:
+            self.request('/v1.1/register/%s' % ip, 'POST')
 
-    def drop_ip(self, ip):
+    def drop_ip(self, ip=None):
         """
         Unregister the given IP.
         """
-        self.request('/v1.1/unregister/%s' % ip, 'POST')
+        if ip is None:
+            self.request('/v1.1/unregister', 'POST')
+        else:
+            self.request('/v1.1/unregister/%s' % ip, 'POST')
 
     def api_key_set(self, api_key):
         """
@@ -197,6 +252,7 @@ class ReactorApiClient(httplib2.Http):
     def request(self, url, method, *args, **kwargs):
         headers = kwargs.get('headers', {})
         headers['Accept'] = 'application/json'
+        headers['Content-Type'] = 'application/json'
         if self.api_key != None:
             headers['X-Auth-Key'] = self.api_key
         kwargs['headers'] = headers

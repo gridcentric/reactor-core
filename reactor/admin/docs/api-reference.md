@@ -335,7 +335,7 @@ GET /v1.1/managers/{manager}/log[?since=<since>]
 
 Data: none.
 
-Result: [*log-message*, ...]
+Result: [[*timestamp*, *severity*, *message*], ...]
 
 Example:
 
