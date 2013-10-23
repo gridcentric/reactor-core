@@ -1065,7 +1065,10 @@ class Endpoint(Atomic):
         # If not, then we use only our local active IPs to
         # construct a reasonable collection of IPs to send to
         # the loadbalancer.
-        if self._collect:
+
+        if not hasattr(self, '_collect'):
+            return
+        elif self._collect:
             ips = self._collect(self, exclude=exclude)
         elif exclude:
             ips = []
