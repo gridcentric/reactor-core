@@ -112,6 +112,7 @@ class ReactorApi(object):
         self.client = ZookeeperClient(zk_servers)
         self.zkobj = Reactor(self.client)
         self.config = Configurator()
+        self._extensions = []
 
         # Set up auth-ticket authentication.
         self.config.set_authentication_policy(
@@ -210,6 +211,9 @@ class ReactorApi(object):
             self.config.add_route(route_name, url_path)
             self.config.add_view(fn,
                 route_name=route_name, accept="application/json")
+
+    def extend(self, extension_class):
+        self._extensions.append(extension_class(self))
 
     def disconnect(self):
         self.client.disconnect()
@@ -786,8 +790,7 @@ class ReactorApiExtension(object):
     provide additional functionality. It works as follows:
 
     * A class inherits from ReactorApiExtension.
-    * You instantiate the class with an API object.
-    * You then treat the ReactorApiExtension as the api.
+    * You call extend() on the API object above.
 
     This was done because we wanted to be able to provide arbitrary
     API extensions (API interface, clustering, etc.) without having
@@ -802,7 +805,6 @@ class ReactorApiExtension(object):
 
     def __init__(self, api):
         super(ReactorApiExtension, self).__init__()
-        self.api = api
 
         # Bind all base attributes from the API class.
         # After this point, you can freely add new stuff.

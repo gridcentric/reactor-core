@@ -267,10 +267,10 @@ def main():
         api = ReactorApi(zk_servers)
         if cluster:
             from . cluster import Cluster
-            api = Cluster(api)
+            api.extend(Cluster)
         if gui:
             from . gui import ReactorGui
-            api = ReactorGui(api)
+            api.extend(ReactorGui)
         return api
 
     try:
@@ -289,9 +289,8 @@ def main():
         elif command == "list":
             api_client = get_api_client()
             endpoints = api_client.endpoint_list()
-            if endpoints:
-                for endpoint in endpoints:
-                    print endpoint
+            for endpoint in endpoints:
+                print endpoint
 
         elif command == "config":
             zk_config.check_config(get_args())

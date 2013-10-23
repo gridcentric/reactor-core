@@ -94,14 +94,14 @@ class Cluster(ReactorApiExtension):
                 return Respone(status=403)
 
             self.check_zookeeper(zk_servers)
-            self.api.client.reconnect(zk_servers)
+            self.client.reconnect(zk_servers)
             self.check_manager(zk_servers)
             return Response()
 
         elif request.method == 'GET':
             # Return the current set of API servers.
             return Response(body=json.dumps(
-                { "zk_servers" : self.api.client.servers() }))
+                { "zk_servers" : self.client.servers() }))
 
         else:
             return Response(status=403)
@@ -136,7 +136,7 @@ class Cluster(ReactorApiExtension):
 
     def setup_iptables(self, managers, zk_servers=None):
         if zk_servers is None:
-            zk_servers = self.api.client.servers()
+            zk_servers = self.client.servers()
         hosts = list(set(managers + zk_servers))
         iptables.setup(hosts)
 
@@ -159,7 +159,7 @@ class Cluster(ReactorApiExtension):
         # manager. If the user creates a new configuration for manager
         # that is not inside the cluster, we have to respond by opening
         # up iptables rules appropriately so that it can connect.
-        self._managers = self.api.zkobj.managers()
+        self._managers = self.zkobj.managers()
         self.setup_iptables(
             self._managers.list(watch=self.setup_iptables),
             zk_servers=zk_servers)

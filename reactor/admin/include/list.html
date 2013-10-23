@@ -1,4 +1,4 @@
-<%page args='id,path,field,link,name="",key=False,second_time=[]'/>
+<%page args='id,path,link,field=None,name="",key=False,second_time=[]'/>
 
 <%
 # This exploits a little trick in the way this code
@@ -44,7 +44,10 @@ else:
 <script type="text/javascript">
     function list_process(result) {
         var keys = [];
-        $.each(result['${field}'], function(index, value) {
+% if field:
+        result = result['${field}'];
+% endif
+        $.each(result, function(index, value) {
             % if key:
             keys.push(index);
             % else:
