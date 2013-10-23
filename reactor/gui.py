@@ -17,6 +17,7 @@ import os
 import json
 import threading
 import markdown
+import traceback
 
 from pyramid.httpexceptions import HTTPFound
 from pyramid.response import Response
@@ -61,11 +62,11 @@ MIMEMAP = {
 
 class ReactorGui(ReactorApiExtension):
 
-    def __init__(self, api, *args, **kwargs):
-        super(ReactorGui, self).__init__(api, *args, **kwargs)
+    def __init__(self, api):
+        super(ReactorGui, self).__init__(api)
 
         # Set the index.
-        self.api.index = self.admin
+        api.index = self.admin
 
         # NOTE: We bind a collection of new endpoints onto
         # the basic API configuration. For some of these endpoints,
@@ -197,6 +198,7 @@ class ReactorGui(ReactorApiExtension):
                     "Content-type": MIMEMAP.get(ext, "text/html")
                 }
             except Exception:
+                traceback.print_exc()
                 page_data = exceptions.html_error_template().render()
                 headers = {
                     "Content-type": "text/html"
@@ -278,11 +280,11 @@ class ReactorGui(ReactorApiExtension):
 
         try:
             # See if the login form was submitted.
-            response = self.api.login(context, request)
+            response = self.login(context, request)
             return HTTPFound(location=came_from, headers=response.headers)
         except NotImplementedError:
             # Credentials not submitted or incorrect, render login page.
-            if self.api._req_get_auth_key(request) != None:
+            if self._req_get_auth_key(request) != None:
                 message = "Invalid credentials."
             else:
                 message = ""
@@ -310,7 +312,7 @@ class ReactorGui(ReactorApiExtension):
         """
         Logs the admin user out.
         """
-        response = self.api.logout(context, request)
+        response = self.logout(context, request)
         return HTTPFound(location=route_url('admin-login', request), headers=response.headers)
 
     @connected
@@ -323,7 +325,7 @@ class ReactorGui(ReactorApiExtension):
         if 'auth_key' in request.params:
             # Set the new password.
             auth_key = request.params['auth_key']
-            self.api.zkobj.auth_hash = self.api._create_admin_auth_token(auth_key)
+            self.zkobj.auth_hash = self._create_admin_auth_token(auth_key)
 
             # Route user back to the home screen.
             return HTTPFound(location=route_url('admin-login', request))

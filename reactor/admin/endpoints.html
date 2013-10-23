@@ -268,9 +268,9 @@
             type: 'GET',
             dataType: 'json',
             success: function(result) {
-                NUM_SERVERS = result['ip_addresses'].length;
+                NUM_SERVERS = result.length;
                 $('.servers-list-row').remove();
-                $.each(result['ip_addresses'], function(idx, ip) {
+                $.each(result, function(idx, ip) {
                     addServerRow(ip);
                 });
                 setTimeout(loadServers, UPDATE_PERIOD);
