@@ -122,7 +122,14 @@ def calculate_ideal_uniform(endpoint_spec, metric_averages, num_instances):
                           c.metric_key, c.lower_bound, c.upper_bound)
 
             if c.metric_key == 'instances':
-                (metric_min, metric_max) = (c.lower_bound, c.upper_bound)
+                if c.lower_exact or c.lower_bound is None:
+                    metric_min = c.lower_bound
+                else:
+                    metric_min = c.lower_bound + 1
+                if c.upper_exact or c.upper_bound is None:
+                    metric_max = c.upper_bound
+                else:
+                    metric_max = c.upper_bound - 1
             else:
                 avg = metric_averages.get(c.metric_key, 0)
                 (metric_min, metric_max) = \
@@ -184,15 +191,15 @@ class EndpointCriteria(object):
         m = re.match(EndpointCriteria.PATTERN, criteria_str)
         if m != None:
             try:
-                self.lower_bound = m.group(2) and float(m.group(2))
-            except ValueError:
+                self.lower_bound = float(m.group(2))
+            except (TypeError, ValueError):
                 self.lower_bound = None
             self.lower_exact = m.group(4) == "<="
             self.metric_key = m.group(5)
             self.upper_exact = m.group(7) == "<="
             try:
-                self.upper_bound = m.group(8) and float(m.group(8))
-            except ValueError:
+                self.upper_bound = float(m.group(8))
+            except (TypeError, ValueError):
                 self.upper_bound = None
         else:
             self.lower_bound = None
