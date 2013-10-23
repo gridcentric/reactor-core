@@ -43,6 +43,9 @@ def sig_usr2_handler(signum, frame):
 
 signal.signal(signal.SIGUSR2, sig_usr2_handler)
 
+# Our default API server.
+DEFAULT_API = "localhost"
+
 # Our default port.
 DEFAULT_PORT = 8080
 
@@ -52,19 +55,25 @@ def usage():
     print ""
     print "   --help                  Display this help message."
     print ""
-    print "   --api=                  The API URL (default is localhost)."
+    print "   --api=                  The API URL (default is %s)." % DEFAULT_API
+    print "                           (Alternately, this API server can be provided"
+    print "                            in the environment variable REACTOR_API)."
     print ""
     print "   --password=             Specify a password to connect to the API."
     print "   --askpass               Prompt for the password."
     print "                           (Alternately, the API password can be provided"
     print "                            in the environment variable REACTOR_PASSWORD)."
     print ""
-    print "   --zookeeper=            A zookeeper instance (specified as host[:port])."
-    print "                           Use this option multiple times to specify multiple"
-    print "                           instances. This is option is only useful for the"
-    print "                           zk_servers and run commands."
+    print "   --zookeeper=            The host:port of a zookeeper instance. Use this"
+    print "                           option multiple times to specify multiple servers."
+    print "                           This is only necessary for the local commands."
+    print "                           (Alternately, this ZooKeeper servers can be provided"
+    print "                            in the environment variable REACTOR_ZK_SERVERS)."
     print ""
-    print "   --port=                 The port to use for the API server."
+    print "   --port=                 The port for the API server (default is %d)." % DEFAULT_PORT
+    print "                           This option is also only necessary for run commands."
+    print "                           (Alternately, the API port can be provided"
+    print "                            in the environment variable REACTOR_PORT)."
     print ""
     print "   --debug                 Enables verbose logging and full stack trace errors."
     print ""
@@ -105,7 +114,7 @@ def usage():
     print "    list                   List all managed endpoints."
     print ""
     print "    manage <endpoint>      Create or update the given endpoint."
-    print "                           The endpoint configuration is read from stdin."
+    print "                           (The endpoint configuration is read from stdin.)"
     print "    unmanage <endpoint>    Delete the endpoint with the given name."
     print "    show <endpoint>        Show the current configuration for the endpoint."
     print ""
@@ -124,8 +133,8 @@ def usage():
     print ""
     print "    get-metrics <endpoint> Get custom endpoint metrics."
     print "    set-metrics <endpoint> Set custom endpoint metrics."
-    print "                           The metrics are read as JSON from stdin."
-    print "                              { \"name\" : [weight, value] }"
+    print "                           (The metrics are read from stdin.)"
+    print "                             {\"name\": [weight, value], ...}"
     print ""
     print "    sessions <endpoint>        List all managed sessions."
     print "    kill <endpoint> <session>  Kill the given session."
@@ -180,9 +189,9 @@ def daemonize(pidfile):
     f.close()
 
 def main():
-    port = DEFAULT_PORT
-    api_server = "localhost"
-    zk_servers = []
+    port = os.getenv("REACTOR_PORT") or DEFAULT_PORT
+    api_server = os.getenv("REACTOR_API") or DEFAULT_API
+    zk_servers = os.environ.get("REACTOR_ZK_SERVERS", "").split(",")
     password = os.getenv("REACTOR_PASSWORD")
     debug = False
     logfile = None
