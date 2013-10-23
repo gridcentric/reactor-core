@@ -210,6 +210,8 @@ class EndpointLog(EventLog):
         lambda args: "Endpoint marked as Stopped")
     ENDPOINT_PAUSED = Event(
         lambda args: "Endpoint marked as Paused")
+    INSTANCE_UPDATE = Event(
+        lambda args: "Instance states: %s" % args[0])
     SCALE_UPDATE = Event(
         lambda args: "Target number of instances has changed: %d => %d" % (args[0], args[1]))
     METRICS_CONFLICT = Event(
@@ -828,6 +830,15 @@ class Endpoint(Atomic):
                self._mark_instance(instance.id, 'error'):
                 self.logging.warn(self.logging.ERROR_INSTANCE, instance.id)
                 self._decommission_instances([instance.id], errored=True)
+
+        # Log the state of all instances.
+        instance_states = {
+            "total": len(instance_ids),
+            "active": len(confirmed_ips),
+            "decommissioned": len(decommissioned_instances),
+            "errored": len(errored_instances),
+        }
+        self.logging.info(self.logging.INSTANCE_UPDATE, instance_states)
 
         # Mark sure that the manager does not contain old
         # scale data, which may result in clogging up Zookeeper.
