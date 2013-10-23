@@ -15,6 +15,7 @@
 
 import os
 import logging
+import traceback
 
 import reactor.loadbalancer.connection as loadbalancer
 import reactor.cloud.connection as cloud
@@ -32,7 +33,6 @@ def _discover_submodules(mod, connection_fn, all=False):
                     connection_fn(name)
                 discovered.append(name)
         except Exception:
-            import traceback
             logging.debug("Unable to load module %s: %s",
                           name, traceback.format_exc())
             continue

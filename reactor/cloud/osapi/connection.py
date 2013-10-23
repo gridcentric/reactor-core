@@ -242,12 +242,12 @@ class BaseOsConnection(CloudConnection):
                     # something else, more sane. This handles
                     # the plain shell script passed in.
                     msg.attach(MIMEText(
-                        user_data, mime_type(part.get_payload(decode=True)))
+                        user_data, mime_type(part.get_payload(decode=True))))
                 else:
                     msg.attach(part)
 
             # Attach the reactor script (final step).
-            msg.attach(MIMEText(reactor_script, mime_type(reactor_script))
+            msg.attach(MIMEText(reactor_script, mime_type(reactor_script)))
 
             return msg.as_string()
 
