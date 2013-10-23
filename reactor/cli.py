@@ -47,64 +47,51 @@ signal.signal(signal.SIGUSR2, sig_usr2_handler)
 DEFAULT_PORT = 8080
 
 def usage():
-    print "usage: %s < --help | [options] command >" % sys.argv[0]
+    print "Usage: %s [options] <command>" % sys.argv[0]
+    print "Options:"
     print ""
-    print "Optional arguments:"
     print "   --help                  Display this help message."
     print ""
-    print "   --api=                  The API url (default is localhost)."
+    print "   --api=                  The API URL (default is localhost)."
     print ""
-    print "   --password=             The password used to connect to the API."
+    print "   --password=             Specify a password to connect to the API."
     print "   --askpass               Prompt for the password."
     print "                           (Alternately, the API password can be provided"
     print "                            in the environment variable REACTOR_PASSWORD)."
     print ""
-    print "   --zookeeper=            The host:port of a zookeeper instance. Use this option"
-    print "                           multiple times to specific multiple instances. Only"
-    print "                           necessary for run commands. The default is localhost."
+    print "   --zookeeper=            A zookeeper instance (specified as host[:port])."
+    print "                           Use this option multiple times to specify multiple"
+    print "                           instances. This is option is only useful for the"
+    print "                           zk_servers and run commands."
     print ""
     print "   --port=                 The port to use for the API server."
-    print "                           This option is also only necessary for run commands." 
     print ""
-    print "   --debug                 Enables debugging log and full stack trace errors."
+    print "   --debug                 Enables verbose logging and full stack trace errors."
     print ""
     print "   --log=                  Log to a file instead of stdout."
     print ""
-    print "   --pidfile=              Write the current pid to the given file."
+    print "   --pidfile=              Daemonize and write the pid to the given file."
     print ""
-    print "   --gui                   Enable the GUI extension."
+    print "   --gui                   Enable the GUI extension (for runapi)."
     print ""
-    print "   --cluster               Enable the cluster extension."
+    print "   --cluster               Enable the cluster extension (for runapi)."
     print ""
-    print "Commands:"
-    print "    version                Get the server API version."
-    print ""
-    print "    url                    Get the server API url."
-    print ""
-    print "    list                   List all the endpoints currently being managed."
+    print "Local commands:"
     print ""
     print "    config [servers...]    Save reactor API servers."
     print ""
-    print "    manage <endpoint>      Manage or update a serivce with the given name."
-    print "                           The endpoint configuration is read from stdin."
-    print "    unmanage <endpoint>    Unmanged the endpoint with the given name."
-    print "    show <endpoint>        Show the current configuration for the endpoint."
+    print "    runserver [names...]   Run the scale manager server."
+    print "    runapi                 Runs the API server."
     print ""
-    print "    register <ip>          Register the given IP address."
-    print "    drop <ip>              Remove the given IP address."
-    print "    ips <endpoint>         Displays all of the confirmed IP addresses."
+    print "Global commands:"
     print ""
-    print "    state <endpoint>       Get the endpoint state."
-    print "    start <endpoint>       "
-    print "    stop  <endpoint>       Update the endpoint state."
-    print "    pause <endpoint>       "
+    print "    version                Get the server API version."
     print ""
-    print "    get-metrics <endpoint> Get custom endpoint metrics."
-    print "    set-metrics <endpoint> Set custom endpoint metrics. The metrics are read"
-    print "                           as JSON { \"name\" : [weight, value] } from stdin."
+    print "    url [<URL>]            Get or set the server API URL."
     print ""
-    print "    sessions <endpoint>        List all the sessions."
-    print "    kill <endpoint> <session>  Kill the given session."
+    print "    passwd [password]      Set or clear the API password."
+    print ""
+    print "Manager commands:"
     print ""
     print "    managers               List all the configured managers."
     print "    managers-active        List all the active managers."
@@ -113,10 +100,35 @@ def usage():
     print "    manager-show <ip>      Show the current configuration for the manager."
     print "    manager-forget <ip>    Remove and forget the given manager."
     print ""
-    print "    passwd [password]      Updates the API's password."
+    print "Endpoint commands:"
     print ""
-    print "    runserver [names...]   Run the scale manager server."
-    print "    runapi                 Runs the API server."
+    print "    list                   List all managed endpoints."
+    print ""
+    print "    manage <endpoint>      Create or update the given endpoint."
+    print "                           The endpoint configuration is read from stdin."
+    print "    unmanage <endpoint>    Delete the endpoint with the given name."
+    print "    show <endpoint>        Show the current configuration for the endpoint."
+    print ""
+    print "    get <endpoint> <section> <key>"
+    print "    set <endpoint> <section> <key> <value>"
+    print ""
+    print "    register <ip>          Register the given IP address."
+    print "    drop <ip>              Remove the given IP address."
+    print "    ips <endpoint>         Displays confirmed IP addresses for the endpoint."
+    print ""
+    print "    state <endpoint>       Get the endpoint state."
+    print ""
+    print "    start <endpoint>       "
+    print "    stop <endpoint>        Update the endpoint state."
+    print "    pause <endpoint>       "
+    print ""
+    print "    get-metrics <endpoint> Get custom endpoint metrics."
+    print "    set-metrics <endpoint> Set custom endpoint metrics."
+    print "                           The metrics are read as JSON from stdin."
+    print "                              { \"name\" : [weight, value] }"
+    print ""
+    print "    sessions <endpoint>        List all managed sessions."
+    print "    kill <endpoint> <session>  Kill the given session."
     print ""
 
 def daemonize(pidfile):
@@ -314,6 +326,28 @@ def main():
             api_client = get_api_client()
             config = api_client.endpoint_config(endpoint_name)
             print json.dumps(config, indent=2)
+
+        elif command == "get":
+            endpoint_name = get_arg(1)
+            section = get_arg(2)
+            key = get_arg(3)
+            api_client = get_api_client()
+            config = api_client.endpoint_config(endpoint_name)
+            section_config = config.get(section, {})
+            if section_config.has_key(key):
+                print section_config[key]
+
+        elif command == "set":
+            endpoint_name = get_arg(1)
+            section = get_arg(2)
+            key = get_arg(3)
+            value = get_arg(4)
+            api_client = get_api_client()
+            config = api_client.endpoint_config(endpoint_name)
+            if not section in config:
+                config[section] = {}
+            config[section][key] = value
+            api_client.endpoint_manage(endpoint_name, config)
 
         elif command == "managers":
             api_client = get_api_client()
