@@ -44,7 +44,7 @@ ENDPOINT_TEMPLATES = {
                 }
             ]
         },
-    "http" : {
+        "http" : {
             "description" : "HTTP-based Web Service",
             "components" : [
                 {
@@ -84,7 +84,7 @@ ENDPOINT_TEMPLATES = {
                 }
             ]
         },
-    "https" : {
+        "https" : {
             "description" : "HTTPS-based Web Service",
             "components" : [
                 {
@@ -130,7 +130,7 @@ ENDPOINT_TEMPLATES = {
                 }
             ]
         },
-    "docker" : {
+        "docker" : {
             "description" : "Docker-based Service",
             "components" : [
                 {
@@ -169,4 +169,4 @@ ENDPOINT_TEMPLATES = {
                 }
             ]
         }
-}
+    }

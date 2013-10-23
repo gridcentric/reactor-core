@@ -151,11 +151,15 @@ class ScaleManager(Atomic):
         # Basically, this can be used to provide some kind
         # of sensible scheme for configuration, etc.
         # By default, these names are the available non-local
-        # IP addresses found on the machine.
+        # IP addresses found on the machine. The name used for
+        # registration is the default() IP and should be at
+        # least routeable.
         if names is None:
             self._names = ips_mod.find_global()
+            self._ip = ips_mod.find_default()
         else:
             self._names = names
+            self._ip = names[0]
         if not self._names:
             raise Exception("Manager has no persistent names!")
 
@@ -170,7 +174,7 @@ class ScaleManager(Atomic):
         # under the first name, and ensure that we expose our names
         # via the manager info block (see _register() below). This way,
         # clients can look up the right place for each manager.
-        self.logging = ManagerLog(self.zkobj.managers().log(self._names[0]))
+        self.logging = ManagerLog(self.zkobj.managers().log(self._ip))
 
         # Runtime state.
         self._running = True
@@ -480,7 +484,7 @@ class ScaleManager(Atomic):
                         name,
                         config=config,
                         zkobj=self.zkobj.loadbalancers().tree(name),
-                        this_ip=self._names[0],
+                        this_ip=self._ip,
                         error_notify=self.error_notify)
             except:
                 # This isn't expected.
@@ -511,13 +515,13 @@ class ScaleManager(Atomic):
                 # configurations. This is passed in as the this_url parameter,
                 # and is constructed from the current IP and the default port,
                 # or (ideally) a URL that has been provided by the user.
-                default_api = "http://%s:%d" % (self._names[0], cli.DEFAULT_PORT)
+                default_api = "http://%s:%d" % (self._ip, cli.DEFAULT_PORT)
                 self.clouds[name] = \
                     cloud_connection.get_connection( \
                         name,
                         config=config,
                         zkobj=self.zkobj.clouds().tree(name),
-                        this_ip=self._names[0],
+                        this_ip=self._ip,
                         this_url=self._url or default_api,
                         register_ip=self.register_ip,
                         drop_ip=self.drop_ip)

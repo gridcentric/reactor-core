@@ -137,5 +137,21 @@ if [ -f /etc/dnsmasq.conf ]; then
     cp -a /etc/dnsmasq.conf /etc/dnsmasq.conf.$BACKUP_DATE
 fi
 
-# Setup reactor defaults.
-reactor-defaults
+# Regenerate the zookeeper config.
+if [ -f /etc/zookeeper/conf/zoo.cfg ]; then
+    cp -a /etc/zookeeper/conf/zoo.cfg /etc/zookeeper/conf/zoo.cfg.$BACKUP_DATE
+    rm -f /etc/zookeeper/conf/zoo.cfg
+fi
+if [ -f /etc/zookeeper/zoo.cfg ]; then
+    cp -a /etc/zookeeper/zoo.cfg /etc/zookeeper/zoo.cfg.$BACKUP_DATE
+    rm -f /etc/zookeeper/zoo.cfg
+fi
+
+# This will generate the default configuration.
+reactor zk_servers
+
+# If this is the user running this script interactively,
+# they may want to generate the default endpoints here.
+# However, we can't really do that in many cases -- simply
+# because we're not sure how this script is being run.
+echo "run 'reactor-defaults' to install default endpoints."
