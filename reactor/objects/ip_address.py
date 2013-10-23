@@ -13,7 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from reactor.zookeeper.objects import JSONObject
 from reactor.zookeeper.objects import Collection
 
 class IPAddresses(Collection):

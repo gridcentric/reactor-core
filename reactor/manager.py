@@ -30,6 +30,7 @@ from . zookeeper.client import ZookeeperClient
 from . zookeeper.connection import ZookeeperException
 from . zookeeper.cache import Cache
 from . objects.root import Reactor
+from . objects.endpoint import EndpointNotFound
 from . utils import random_key
 from . threadpool import Threadpool
 from . endpoint import Endpoint
@@ -44,12 +45,12 @@ class ManagerConfig(Config):
 
     loadbalancers = Config.multiselect(label="Enabled Loadbalancer Drivers", order=1,
         options=submodules.loadbalancer_options(),
-        default=submodules.loadbalancer_submodules(all=True),
+        default=submodules.loadbalancer_submodules(include_all=True),
         description="List of supported loadbalancers (e.g. nginx).")
 
     clouds = Config.multiselect(label="Enabled Cloud Drivers", order=1,
         options=submodules.cloud_options(),
-        default=submodules.cloud_submodules(all=True),
+        default=submodules.cloud_submodules(include_all=True),
         description="List of supported clouds (e.g. osapi).")
 
     interval = Config.integer(label="Health Check Interval (seconds)",
@@ -366,10 +367,12 @@ class ScaleManager(Atomic):
                         collect=self.collect,
                         find_cloud_connection=self._find_cloud_connection,
                         find_loadbalancer_connection=self._find_loadbalancer_connection)
-            except:
-                # This isn't expected.
+            except EndpointNotFound:
                 # Perhaps we just caught a race condition,
                 # with the endpoint being deleted?
+                continue
+            except Exception:
+                # This isn't expected.
                 traceback.print_exc()
                 continue
 
@@ -466,7 +469,7 @@ class ScaleManager(Atomic):
                         zkobj=self.zkobj.loadbalancers().tree(name),
                         this_ip=self._ip,
                         error_notify=self.error_notify)
-            except:
+            except Exception:
                 # This isn't expected.
                 traceback.print_exc()
                 continue
@@ -505,7 +508,7 @@ class ScaleManager(Atomic):
                         this_url=self._url or default_api,
                         register_ip=self.register_ip,
                         drop_ip=self.drop_ip)
-            except:
+            except Exception:
                 # This isn't expected.
                 traceback.print_exc()
                 continue
@@ -630,7 +633,7 @@ class ScaleManager(Atomic):
 
         # Check if we need to strip a port.
         if ":" in ip:
-            (ip, port) = ip.split(":", 1)
+            (ip, _) = ip.split(":", 1)
             return self.error_notify(ip)
 
         return False

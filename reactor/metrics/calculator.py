@@ -175,6 +175,12 @@ class EndpointCriteria(object):
               "(" + OP_PATTERN + NUMBER_PATTERN + ")?$"
 
     def __init__(self, criteria_str):
+        super(EndpointCriteria, self).__init__()
+        self.lower_bound = None
+        self.lower_exact = None
+        self.metric_key = None
+        self.upper_bound = None
+        self.upper_exact = None
         self._parse(criteria_str)
 
     @staticmethod
@@ -201,12 +207,6 @@ class EndpointCriteria(object):
                 self.upper_bound = float(m.group(8))
             except (TypeError, ValueError):
                 self.upper_bound = None
-        else:
-            self.lower_bound = None
-            self.lower_exact = None
-            self.metric_key = None
-            self.upper_bound = None
-            self.upper_exact = None
 
     def __str__(self):
         return "%s => %s%s,%s%s" % (

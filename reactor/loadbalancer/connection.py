@@ -17,8 +17,6 @@
 The generic load balancer interface.
 """
 import re
-import logging
-import traceback
 
 from reactor import utils
 from reactor.config import Connection

@@ -70,7 +70,7 @@ tells Reactor to maintain response times below 300ms, and keep the average numbe
 If two scaling rules conflict with each other, the rule that is earlier in the list takes precidence. For example, the rule set:
 
     2 <= instances, 10 <= active <= 30
-    
+
 tells Reactor to maintain at least two instances, and keep the number of active connections per instance between 10 and 30. If the average number of active connections drops below 10, Reactor will still keep two instances ready.
 
 On the other hand, the rule set:
@@ -130,7 +130,7 @@ From this point onward, Reactor must be accessable via the `api.<domain>` set, e
 
 The domain can be reset by re-running the `reactor setup` command with the new domain.
 
-### Adding an additional Reactor 
+### Adding an additional Reactor
 Additional Reactor instances can be added to an existing Reactor cluster using the `reactor add` command:
 
     $ reactor add --domain=<domain> <ip addr of reactor instance>
@@ -172,12 +172,12 @@ Endpoints are created by pushing a configuration file to Reactor. The configurat
 
     [endpoint]
     url=<URL of endpoint>
-    
+
     [scaling]
     rules=<list of scaling rules>
     min_instances=<integer>
     max_instances=<integer>
-    
+
     [nova-vms]
     instance_id=<VMS-enabled instance ID>
     authurl=<OpenStack API URL>

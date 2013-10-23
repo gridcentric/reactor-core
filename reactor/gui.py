@@ -29,7 +29,7 @@ from mako import exceptions
 
 from . api import connected
 from . api import authorized
-from . api import ReactorApiExtension
+from . api import ReactorApiMixin
 from . endpoint import EndpointConfig
 from . manager import ManagerConfig
 
@@ -59,10 +59,10 @@ MIMEMAP = {
     "sh": "text/plain",
 }
 
-class ReactorGui(ReactorApiExtension):
+class GuiMixin(ReactorApiMixin):
 
     def __init__(self, api):
-        super(ReactorGui, self).__init__(api)
+        super(GuiMixin, self).__init__(api)
 
         # Set the index.
         api.index = self.admin

@@ -13,7 +13,7 @@ trap cleanup EXIT
 cat >$KEYFILE <<EOF
 -----BEGIN PGP PUBLIC KEY BLOCK-----
 Version: GnuPG v1.4.11 (GNU/Linux)
-  
+
 mQENBFAQqgUBCADOMIkW4BliIOZyks8addo/SJjXRVjbAs2/O5pINHTRRo8DabCB
 ISbKAjmxpkepQ/mN2o4cxK+3IGpSVQhrhLRyBRRMZv1MH4n+Yoq2AemO83ILQthi
 39jHwKm107untAeLKTwt1DSY1HnFEQJl5bwG7HHqz3iD9HCwY5bX4eDrm4AxW0NG
@@ -34,7 +34,7 @@ EOF
 # Detect distro by finding out how core utils are provided.
 
 if dpkg -l coreutils >/dev/null 2>&1; then
-   
+
     # Import the package key and add repos.
     apt-key add $KEYFILE
     cat >/etc/apt/sources.list.d/reactor.list <<-EOF

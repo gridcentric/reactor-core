@@ -20,6 +20,7 @@ Interface to backend instances.
 class Backend(object):
 
     def __init__(self, ip, port=0, weight=1):
+        super(Backend, self).__init__()
         self._ip = ip
         self._port = port
         self._weight = weight

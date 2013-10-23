@@ -23,7 +23,7 @@ from reactor.zookeeper.objects import JSONObject
 from reactor.objects.instance import Instances
 from reactor.zookeeper.cache import Cache
 
-from connection import DockerEndpointConfig
+from . connection import DockerEndpointConfig
 
 # Existing containers (all systems).
 CONTAINERS = "containers"
@@ -310,7 +310,7 @@ class DockerManager(object):
                 continue
 
             # Get the config.
-            # FIXME: This is currently a hack that is required to
+            # This is currently a hack that is required to
             # break the circular reference between the manager and
             # the connection. If there is a reference, then neither
             # the manager nor the connection will ever be cleaned up.

@@ -33,7 +33,7 @@ First get our public key.
 
 Second, configure a new APT repo.
 
-    echo deb http://downloads.gridcentric.com/packages/reactor/reactor-core/ubuntu/ gridcentric multiverse | sudo tee /etc/apt/sources.list.d/reactor.list 
+    echo deb http://downloads.gridcentric.com/packages/reactor/reactor-core/ubuntu/ gridcentric multiverse | sudo tee /etc/apt/sources.list.d/reactor.list
 
 Now let apt do its job.
 

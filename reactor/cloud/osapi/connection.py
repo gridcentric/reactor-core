@@ -192,9 +192,9 @@ class BaseOsConnection(CloudConnection):
         def _sanitize(instance):
             # Extract the instance id.
             if hasattr(instance, 'id'):
-                id = instance.id
+                instance_id = instance.id
             else:
-                id = instance._info['id']
+                instance_id = instance._info['id']
 
             # Extract the instance name.
             if hasattr(instance, 'name'):
@@ -211,7 +211,7 @@ class BaseOsConnection(CloudConnection):
             # Extract a status.
             status = STATUS_MAP.get(instance._info.get('status'), STATUS_ERROR)
 
-            return Instance(id, name, addresses, status)
+            return Instance(instance_id, name, addresses, status)
 
         # Return all sanitizing instances.
         return map(_sanitize, instances)

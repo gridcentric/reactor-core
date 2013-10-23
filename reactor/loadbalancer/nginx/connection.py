@@ -34,12 +34,13 @@ from reactor.loadbalancer.netstat import connection_count
 
 class NginxLogReader(object):
 
-    def __init__(self, log_filename, filter=None):
+    def __init__(self, log_filename, log_filter=None):
+        super(NginxLogReader, self).__init__()
         self.logfile = None
         self.log_filename = log_filename
-        self.filter = None
-        if filter != None:
-            self.filter = re.compile(filter)
+        self.log_filter = None
+        if log_filter != None:
+            self.log_filter = re.compile(log_filter)
         self.connected = False
 
     def connect(self):
@@ -59,9 +60,9 @@ class NginxLogReader(object):
                 return None
 
         line = self.logfile.readline().strip()
-        while self.filter != None and line:
+        while self.log_filter != None and line:
             # Apply the filter to the line.
-            m = self.filter.match(line)
+            m = self.log_filter.match(line)
             if m != None:
                 return m.groups()
             else:
@@ -94,7 +95,7 @@ class NginxLogWatcher(threading.Thread):
                    + "[^<]*" \
                    + "<([^>]*?)>" \
                    + ".*"
-        self.log = NginxLogReader(access_logfile, log_filter)
+        self.log = NginxLogReader(access_logfile, log_filter=log_filter)
         self.execute = True
         self.lock = threading.Lock()
         self.last_update = time.time()
@@ -389,3 +390,6 @@ class Connection(LoadBalancerConnection):
                 records[hostinfo].append({ "active": (1, active) })
 
         return records
+
+    def drop_session(self, client, backend):
+        raise NotImplementedError()

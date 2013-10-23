@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import traceback
+import ConfigParser
 
 from pyramid.config import Configurator
 from pyramid.response import Response
@@ -61,7 +62,7 @@ def authorized(forbidden_view=None, allow_endpoint=False):
             # Can we authorize as an endpoint?
             if (allow_endpoint and
                 self.authorize_endpoint_access(context, request)):
-                return request_handler(self, context, request, **kwargss)
+                return request_handler(self, context, request, **kwargs)
 
             # Access denied.
             if forbidden_view is not None:
@@ -472,24 +473,26 @@ class ReactorApi(object):
                 real_config = False
                 config = {}
 
-            try:
-                # Associate this with a running manager.
-                config['uuid'] = self.zkobj.managers().key(manager)
+            # Check if this is a running manager.
+            uuid = self.zkobj.managers().key(manager)
+
+            # No real config *or* running manager?
+            if uuid is None and not real_config:
+                return Response(status=404, body=manager)
+
+            if uuid is not None:
+                config['uuid'] = uuid
                 config['info'] = self.zkobj.managers().info(config['uuid'])
-            except:
-                # No real config *or* running manager?
-                if not real_config:
-                    return Response(status=404, body=manager)
-                else:
-                    config['uuid'] = None
-                    config['info'] = None
+            else:
+                config['uuid'] = None
+                config['info'] = None
 
             return Response(body=json.dumps(config))
 
         elif request.method == "POST" or request.method == "PUT":
             try:
                 manager_config = fromstr(request.body)
-            except:
+            except (ConfigParser.Error, TypeError, ValueError):
                 return Response(status=403)
 
             config = ManagerConfig(values=manager_config)
@@ -562,7 +565,7 @@ class ReactorApi(object):
         elif request.method == "POST" or request.method == "PUT":
             try:
                 endpoint_config = fromstr(request.body)
-            except:
+            except (ConfigParser.Error, TypeError, ValueError):
                 return Response(status=403)
 
             config = EndpointConfig(values=endpoint_config)
@@ -609,7 +612,6 @@ class ReactorApi(object):
 
         if request.method == "GET":
             endpoint = self.zkobj.endpoints().get(endpoint_name)
-            config = endpoint.get_config()
             state = endpoint.state().current()
             active = endpoint.active
             manager = endpoint.manager
@@ -813,12 +815,12 @@ class ReactorApi(object):
         else:
             return Response(status=403)
 
-class ReactorApiExtension(object):
+class ReactorApiMixin(object):
     """
     This class can be used to extend a API instance in order to
     provide additional functionality. It works as follows:
 
-    * A class inherits from ReactorApiExtension.
+    * A class inherits from ReactorApiMixin.
     * You call extend() on the API object above.
 
     This was done because we wanted to be able to provide arbitrary
@@ -833,7 +835,7 @@ class ReactorApiExtension(object):
     """
 
     def __init__(self, api):
-        super(ReactorApiExtension, self).__init__()
+        super(ReactorApiMixin, self).__init__()
 
         # Bind all base attributes from the API class.
         # After this point, you can freely add new stuff.

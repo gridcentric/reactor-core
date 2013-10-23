@@ -20,7 +20,7 @@ import traceback
 import reactor.loadbalancer.connection as loadbalancer
 import reactor.cloud.connection as cloud
 
-def _discover_submodules(mod, connection_fn, all=False):
+def _discover_submodules(mod, connection_fn, include_all=False):
     discovered = [""] # Include the base class.
     path = os.path.dirname(mod.__file__)
     for name in os.listdir(path):
@@ -28,7 +28,7 @@ def _discover_submodules(mod, connection_fn, all=False):
             # Check if it's a directory, and we can
             # successfully perform get_connection().
             if os.path.isdir(os.path.join(path, name)):
-                if not all:
+                if not include_all:
                     # Ensure it's importable.
                     connection_fn(name)
                 discovered.append(name)
@@ -56,14 +56,24 @@ def _build_options(mods, connection_fn):
 # We should really be querying the scale manager for the list
 # of enabled cloud and loadbalancer submodules, but the current
 # architecture does not easily allow for that.
-def cloud_submodules(all=False):
-    return _discover_submodules(cloud, cloud.get_connection, all=all)
+def cloud_submodules(include_all=False):
+    return _discover_submodules(
+        cloud,
+        cloud.get_connection,
+        include_all=include_all)
 
-def loadbalancer_submodules(all=False):
-    return _discover_submodules(loadbalancer, loadbalancer.get_connection, all=all)
+def loadbalancer_submodules(include_all=False):
+    return _discover_submodules(
+        loadbalancer,
+        loadbalancer.get_connection,
+        include_all=include_all)
 
 def cloud_options():
-    return _build_options(cloud_submodules(all=True), cloud.get_connection)
+    return _build_options(
+        cloud_submodules(include_all=True),
+        cloud.get_connection)
 
 def loadbalancer_options():
-    return _build_options(loadbalancer_submodules(all=True), loadbalancer.get_connection)
+    return _build_options(
+        loadbalancer_submodules(include_all=True),
+        loadbalancer.get_connection)

@@ -113,7 +113,7 @@ def is_running():
         proc = subprocess.Popen(
             ["service", "zookeeper", "status"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        (stdout, stderr) = proc.communicate()
+        (stdout, _) = proc.communicate()
         return "running" in stdout
 
 def ensure_stopped():

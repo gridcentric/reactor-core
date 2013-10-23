@@ -22,8 +22,9 @@ STATUS_ERROR = False
 
 class Instance(object):
 
-    def __init__(self, id, name, ips, status=STATUS_OKAY):
-        self._id = str(id)
+    def __init__(self, instance_id, name, ips, status=STATUS_OKAY):
+        super(Instance, self).__init__()
+        self._id = str(instance_id)
         self._name = name
         self._ips = ips
         self._status = status

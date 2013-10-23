@@ -22,7 +22,7 @@ from collections import namedtuple
 from . atomic import Atomic
 
 ConfigSpec = namedtuple("ConfigSpec", \
-    ["type",
+    ["data_type",
      "label",
      "default",
      "options",
@@ -86,7 +86,7 @@ class Config(object):
                     if spec.normalize:
                         value = spec.normalize(value)
                     self._set(k,
-                              type=spec.type,
+                              data_type=spec.data_type,
                               label=spec.label,
                               value=value,
                               default=spec.default,
@@ -225,9 +225,9 @@ class Config(object):
     def _get(self, key, default):
         return self._get_obj(key).get("value", default)
 
-    def _set(self, key, type, label, value, default, options, order, description):
+    def _set(self, key, data_type, label, value, default, options, order, description):
         self._get_obj(key).update([
-            ("type", type),
+            ("data_type", data_type),
             ("label", label),
             ("default", default),
             ("options", options),
@@ -247,7 +247,7 @@ class Config(object):
                 validate=None,
                 description="No description.",
                 alternates=None):
-        return ConfigSpec(type="integer",
+        return ConfigSpec(data_type="integer",
                           label=label,
                           default=default,
                           options=None,
@@ -264,7 +264,7 @@ class Config(object):
                validate=None,
                description="No description.",
                alternates=None):
-        return ConfigSpec(type="string",
+        return ConfigSpec(data_type="string",
                           label=label,
                           default=default,
                           options=None,
@@ -281,7 +281,7 @@ class Config(object):
              validate=None,
              description="No description.",
              alternates=None):
-        return ConfigSpec(type="text",
+        return ConfigSpec(data_type="text",
                           label=label,
                           default=default,
                           options=None,
@@ -304,7 +304,7 @@ class Config(object):
             elif isinstance(value, bool):
                 return value
             return False
-        return ConfigSpec(type="boolean",
+        return ConfigSpec(data_type="boolean",
                           label=label,
                           default=default,
                           options=None,
@@ -331,7 +331,7 @@ class Config(object):
             elif isinstance(value, list):
                 return value
             return []
-        return ConfigSpec(type="list",
+        return ConfigSpec(data_type="list",
                           label=label,
                           default=default,
                           options=None,
@@ -348,7 +348,7 @@ class Config(object):
                order=1, validate=None, description="No description.", alternates=None):
         if options is None:
             options = []
-        return ConfigSpec(type="select",
+        return ConfigSpec(data_type="select",
                           label=label,
                           default=default,
                           options=options,
@@ -378,7 +378,7 @@ class Config(object):
             elif isinstance(value, list):
                 return value
             return []
-        return ConfigSpec(type="multiselect",
+        return ConfigSpec(data_type="multiselect",
                           label=label,
                           default=default,
                           options=options,

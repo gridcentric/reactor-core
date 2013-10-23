@@ -244,6 +244,8 @@ class EndpointLog(EventLog):
         lambda args: "Errors on instance with IP %s" % _as_ip(args[0]))
     ERROR_INSTANCE = Event(
         lambda args: "Errors on instance %s" % args[0])
+    DROP_SESSION_ERROR = Event(
+        lambda args: "Unable to drop session %s" % args[0])
     UPDATE_ERROR = Event(
         lambda args: "Error updating endpoint: %s" % args[0])
     RELOADED = Event(
@@ -553,7 +555,12 @@ class Endpoint(Atomic):
 
     def drop_sessions(self, authoritative=False):
         for (client, backend) in self.zkobj.sessions().drop_map().items():
-            self.lb_conn.drop_session(client, backend)
+            try:
+                self.lb_conn.drop_session(client, backend)
+            except NotImplementedError:
+                self.logging.warn(
+                    self.logging.DROP_SESSION_ERROR,
+                    str((client, backend)))
             if authoritative:
                 self.zkobj.sessions().dropped(client)
 
@@ -581,17 +588,9 @@ class Endpoint(Atomic):
         """
         # Check if our configuration is about to change.
         old_url = self.config.url
-        old_static_addresses = self.config.static_ips()
-        old_port = self.config.port
-        old_weight = self.config.weight
-
         new_config = EndpointConfig(values=config_val)
         new_scaling = ScalingConfig(obj=new_config)
-
         new_url = new_config.url
-        new_static_addresses = new_config.static_ips()
-        new_port = new_config.port
-        new_weight = new_config.weight
 
         # NOTE: We used to take action on old static
         # addresses. This is no longer done, because it's
@@ -891,8 +890,7 @@ class Endpoint(Atomic):
             else:
                 active_instance_ids += [instance_id]
 
-        # TODO(dscannell): We also need to ensure that the confirmed IPs are
-        # still valid. In other words, we have a running instance for it.
+        # Check for confirmed IPs that don't have an instance.
         orphaned_ips = confirmed_ips.difference(associated_confirmed_ips)
         if len(orphaned_ips) > 0:
             # There are orphaned ip addresses. We need to drop them and then

@@ -310,11 +310,11 @@ def main():
         from reactor.api import ReactorApi
         api = ReactorApi(zk_servers)
         if cluster:
-            from . cluster import Cluster
-            api.extend(Cluster)
+            from . cluster import ClusterMixin
+            api.extend(ClusterMixin)
         if gui:
-            from . gui import ReactorGui
-            api.extend(ReactorGui)
+            from . gui import GuiMixin
+            api.extend(GuiMixin)
         return api
 
     try:

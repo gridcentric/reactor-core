@@ -133,7 +133,7 @@ function mergeConfig(context, spec, values) {
                     spec[spec_section][key]["value"] = item.default;
                     if (section.name == null) {
                         spec[spec_section][key]["present"] = true;
-                        spec[spec_section][key]["type"] = "hidden";
+                        spec[spec_section][key]["data_type"] = "hidden";
                     }
                 }
             });
@@ -346,7 +346,7 @@ function readConfig(context) {
                 return true;
             }
 
-            switch (config["type"]) {
+            switch (config["data_type"]) {
             case "boolean":
                 val = config["ref"].prop("checked");
                 break;
@@ -729,7 +729,7 @@ function generateSingleConfig(root, config_name, config)
     config["present"] = ("value" in config);
 
     // Perform any type-specific setup for the variable.
-    switch (config["type"]) {
+    switch (config["data_type"]) {
     case "list":
         input_elt = $("#conf-input-list").clone().appendTo(slot);
         if (config["present"]) {
@@ -743,7 +743,7 @@ function generateSingleConfig(root, config_name, config)
     case "string":
         input_elt = $("#conf-input-string").clone().appendTo(slot);
         if (contains(config_name.toLowerCase(), "password"))
-            input_elt.attr("type", "password");
+            input_elt.attr("data_type", "password");
         break;
     case "text":
         input_elt = $("#conf-input-text").clone().appendTo(slot);

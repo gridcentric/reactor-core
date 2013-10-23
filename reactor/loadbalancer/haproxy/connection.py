@@ -15,16 +15,7 @@
 
 import hashlib
 import os
-import signal
-import urlparse
-import shutil
-import glob
-import re
-import time
-import threading
-import logging
 import subprocess
-import tempfile
 
 from mako.template import Template
 
@@ -110,7 +101,7 @@ class Connection(LoadBalancerConnection):
     }
 
     def __init__(self, **kwargs):
-        LoadBalancerConnection.__init__(self, **kwargs)
+        super(Connection, self).__init__(**kwargs)
         template_file = os.path.join(os.path.dirname(__file__), 'haproxy.template')
         self.template = Template(filename=template_file)
         self.frontends = {}
@@ -222,7 +213,7 @@ class Connection(LoadBalancerConnection):
             close_fds=True,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE)
-        (stdout, stderr) = socat.communicate(command + '\n')
+        (stdout, _) = socat.communicate(command + '\n')
         if socat.returncode != 0:
             return None
         return stdout.split("\n")
@@ -258,9 +249,9 @@ class Connection(LoadBalancerConnection):
                 try:
                     int(v)
                     return True
-                except:
+                except (TypeError, ValueError):
                     return False
-            valid_data = dict([(k, int(v)) for (k,v) in all_data.items() if is_int(v)])
+            valid_data = dict([(k, int(v)) for (k, v) in all_data.items() if is_int(v)])
             results[port] = [valid_data]
 
             # Notify errors if status is DOWN.
@@ -270,3 +261,6 @@ class Connection(LoadBalancerConnection):
         # Reset counters for next time.
         self._sock_command("clear counters")
         return results
+
+    def drop_session(self, client, backend):
+        raise NotImplementedError()

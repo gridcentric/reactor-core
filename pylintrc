@@ -48,11 +48,14 @@ max-public-methods=100
 
 [FORMAT]
 max-line-length=100
-max-module-lines=1000
+max-module-lines=1200
 indent-string='    '
 
 [MISCELLANEOUS]
 notes=FIXME,XXX,TODO
+
+[TYPECHECK]
+ignore-mixin-members=yes
 
 [SIMILARITIES]
 min-similarity-lines=10

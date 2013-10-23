@@ -25,7 +25,7 @@ from . import iptables
 from . import ips
 from . api import connected
 from . api import authorized
-from . api import ReactorApiExtension
+from . api import ReactorApiMixin
 from . manager import ScaleManager
 from . zookeeper import config
 
@@ -52,10 +52,10 @@ class CleanerThread(threading.Thread):
     def stop(self):
         self.running = False
 
-class Cluster(ReactorApiExtension):
+class ClusterMixin(ReactorApiMixin):
 
     def __init__(self, api, *args, **kwargs):
-        super(Cluster, self).__init__(api, *args, **kwargs)
+        super(ClusterMixin, self).__init__(api, *args, **kwargs)
 
         # Save our manager state.
         self._managers = None

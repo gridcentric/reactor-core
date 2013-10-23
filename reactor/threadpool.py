@@ -33,6 +33,7 @@ class Worker(threading.Thread):
 class Job(object):
 
     def __init__(self, fn, args, kwargs):
+        super(Job, self).__init__()
         self._fn = fn
         self._args = args
         self._kwargs = kwargs
@@ -46,7 +47,7 @@ class Job(object):
 
         try:
             self._returnval = self._fn(*self._args, **self._kwargs)
-        except:
+        except BaseException:
             self._exc_info = sys.exc_info()
 
         self._cond.acquire()

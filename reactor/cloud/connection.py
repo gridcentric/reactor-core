@@ -17,9 +17,6 @@
 The generic cloud connection interface.
 """
 
-import logging
-import traceback
-
 from reactor import utils
 from reactor.config import Connection
 

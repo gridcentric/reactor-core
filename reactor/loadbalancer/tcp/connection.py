@@ -27,7 +27,6 @@ import netaddr
 from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
 from reactor.ips import is_local
-import reactor.loadbalancer.netstat as netstat
 from reactor.objects.ip_address import IPAddresses
 
 def close_fds(except_fds=None):
@@ -69,6 +68,7 @@ def _as_client(src_ip, src_port):
 class Accept(object):
 
     def __init__(self, sock):
+        super(Accept, self).__init__()
         (client, address) = sock.accept()
         # Ensure that the underlying socket is closed.
         # It's probably crazy pills -- but I saw weird
@@ -339,12 +339,6 @@ class ConnectionConsumer(threading.Thread):
         # Return the number of children reaped.
         # This means that callers can do if self.reap_children().
         return reaped
-
-    def sessions(self):
-        return self.consumer.sessions()
-
-    def drop_session(self, client, backend):
-        self.consumer.drop_session(client, backend)
 
     def pending(self):
         pending = {}

@@ -20,6 +20,7 @@ class Event(object):
     """ Implements a log event. """
 
     def __init__(self, formatfn=lambda args: "Unknown event."):
+        super(Event, self).__init__()
         self._formatfn = formatfn
 
     @property
@@ -44,6 +45,7 @@ class EventLog(object):
         lambda args: args[0])
 
     def __init__(self, zkobj, size=None):
+        super(EventLog, self).__init__()
         self.zkobj = zkobj
         self.size = size and int(size)
         self.type_rmap = {}

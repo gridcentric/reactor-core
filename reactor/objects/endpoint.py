@@ -16,7 +16,6 @@
 from uuid import uuid4
 
 from reactor.zookeeper.objects import JSONObject
-from reactor.zookeeper.objects import BinObject
 from reactor.zookeeper.objects import RawObject
 from reactor.zookeeper.objects import DatalessObject
 from reactor.zookeeper.objects import attr

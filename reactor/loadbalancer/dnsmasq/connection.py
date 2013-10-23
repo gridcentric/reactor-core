@@ -15,6 +15,7 @@
 
 import os
 import signal
+import subprocess
 
 from mako.template import Template
 
@@ -96,10 +97,13 @@ class Connection(LoadBalancerConnection):
 
         # Send a signal to dnsmasq to reload the configuration
         # (Note: we might need permission to do this!!).
-        pid = utils.read_pid(self._manager_config().pid_file)
+        pid = read_pid(self._manager_config().pid_file)
         if pid:
             os.kill(pid, signal.SIGHUP)
         else:
             subprocess.call(
                 ["service", "dnsmasq", "start"],
                 close_fds=True)
+
+    def drop_session(self, client, backend):
+        raise NotImplementedError()

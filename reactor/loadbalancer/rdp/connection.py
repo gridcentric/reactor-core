@@ -26,7 +26,6 @@ from ldap.controls import SimplePagedResultsControl
 
 from reactor.config import Config
 
-from reactor.loadbalancer.backend import Backend
 from reactor.loadbalancer.tcp.connection import TcpEndpointConfig
 from reactor.loadbalancer.tcp.connection import Connection as TcpConnection
 
@@ -152,18 +151,19 @@ class LdapConnection:
         if attrs is None:
             attrs = COMPUTER_ATTRS
 
-        filter = '(objectclass=computer)'
+        oc_filter = '(objectclass=computer)'
         desc = self.machine_description(name)
         page_size = 64
         lc = SimplePagedResultsControl(
             ldap.LDAP_CONTROL_PAGE_OID, True, (page_size,''))
         conn = self.open()
         msgid = conn.search_ext(
-            desc, ldap.SCOPE_SUBTREE, filter, attrs, serverctrls=[lc])
+            desc, ldap.SCOPE_SUBTREE, oc_filter, attrs, serverctrls=[lc])
         rval = {}
 
         while True:
-            rtype, rdata, rmsgid, serverctrls = conn.result3(msgid)
+            # (rtype, rdata, rmsgid, serverctrls)
+            _, rdata, _, serverctrls = conn.result3(msgid)
 
             # Synthesize the machines into a simple form.
             for machine in rdata:
@@ -174,7 +174,8 @@ class LdapConnection:
             # Read the next page of the result.
             pctrls = [ c for c in serverctrls if c.controlType == ldap.LDAP_CONTROL_PAGE_OID ]
             if pctrls:
-                est, cookie = pctrls[0].controlValue
+                # (est, cookie)
+                _, cookie = pctrls[0].controlValue
                 if cookie:
                     lc.controlValue = (page_size, cookie)
                     msgid = conn.search_ext(

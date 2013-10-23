@@ -84,6 +84,7 @@ class ZkNode(object):
     multithreaded environment.
     """
     def __init__(self, name=None, parent=None, data="", handle=None):
+        super(ZkNode, self).__init__()
         self._parent = parent
         self._name = name
         self._handle = handle

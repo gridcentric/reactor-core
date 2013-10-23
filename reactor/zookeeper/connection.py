@@ -13,7 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import sys
 import logging
 import threading
 import traceback
@@ -26,6 +25,23 @@ ZOO_CONNECT_WAIT_TIME = 60.0
 ZookeeperException = zookeeper.ZooKeeperException
 BadArgumentsException = zookeeper.BadArgumentsException
 
+def wrap_exceptions(fn):
+    # We wrap all system exceptions in the Zookeeper-specifc exception.
+    # Some versions of Zookeeper have python bindings that don't correctly
+    # throw errors for timed-out exceptions.
+    # See: https://issues.apache.org/jira/browse/ZOOKEEPER-1318
+    def wrapped_fn(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except ZookeeperException:
+            raise
+        except:
+            raise ZookeeperException("Unknown error: %s" % str(traceback.format_exc()))
+    wrapped_fn.__name__ = fn.__name__
+    wrapped_fn.__doc__ = fn.__doc__
+    return wrapped_fn
+
+@wrap_exceptions
 def connect(servers, timeout=ZOO_CONNECT_WAIT_TIME):
     cond = threading.Condition()
     connected = [False]
@@ -70,26 +86,19 @@ def connect(servers, timeout=ZOO_CONNECT_WAIT_TIME):
 
     return handle
 
-def wrap_exceptions(fn):
-    # We wrap all system exceptions in the Zookeeper-specifc exception.
-    # Some versions of Zookeeper have python bindings that don't correctly
-    # throw errors for timed-out exceptions.
-    # See: https://issues.apache.org/jira/browse/ZOOKEEPER-1318
-    def wrapped_fn(*args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except ZookeeperException:
-            raise
-        except:
-            raise ZookeeperException("Unknown error: %s" % str(traceback.format_exc()))
-    wrapped_fn.__name__ = fn.__name__
-    wrapped_fn.__doc__ = fn.__doc__
-    return wrapped_fn
-
 class ZookeeperConnection(object):
 
-    @wrap_exceptions
     def __init__(self, servers, acl=None):
+        # FIXME(amscanne): Something really funny is going
+        # on here. Unfortunately, I don't really have the
+        # energy to look into this right now, but basically
+        # when this is driven through the test framework,
+        # We will see an exception that self is not an instance
+        # of ZookeeperConnection for *some* tests. Now, I
+        # know we did the mocking underneath but I can't for
+        # the life of me figure out what's going on here.
+        # So -- no object constructor for this fella!
+        #   super(ZookeeperConnection, self).__init__()
         if acl is None:
             acl = ZOO_OPEN_ACL_UNSAFE
         self.cond = threading.Condition()
