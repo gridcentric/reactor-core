@@ -117,12 +117,19 @@ BACKUP_DATE=$(date +%Y%m%d%H%M%S)
 
 # Setup nginx, if it's installed.
 if [ -f /etc/nginx ]; then
+    # Ensure necessary directories exist.
+    mkdir -p /var/log/nginx
+    mkdir -p /etc/nginx/conf.d
+    mkdir -p /etc/nginx/sites-enabled
+
     # Clear out the default site, if it's there.
     rm -f /etc/nginx/sites-enabled/default
+
     if [ -f /etc/nginx/nginx.conf ]; then
         # Save the original configuration.
         mv /etc/nginx/nginx.conf /etc/nginx/nginx.conf.$BACKUP_DATE
     fi
+
     # Install the reactor configuration.
     cp -a /etc/reactor/example/nginx/nginx.conf /etc/nginx/nginx.conf
 fi
