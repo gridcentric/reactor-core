@@ -267,12 +267,8 @@ class ReactorApi(object):
         if endpoint_name is None:
             return False
 
-        # Load the endpoint config.
-        config = self.zkobj.endpoints().get(endpoint_name).get_config()
-        if config is None:
-            return False
-
         # Parse authentication details.
+        config = self.zkobj.endpoints().get(endpoint_name).get_config()
         endpoint_config = EndpointConfig(values=config)
         auth_hash, auth_salt, auth_algo = \
             endpoint_config.endpoint_auth()
@@ -283,6 +279,10 @@ class ReactorApi(object):
                 auth_token = self._create_endpoint_auth_token(\
                     auth_key, auth_salt, auth_algo)
                 return (auth_hash == auth_token)
+            else:
+                # An auth_hash was set on the endpoint,
+                # and the user did not provide one.
+                return False
 
         # We were not able to authenticate using the
         # credentials from any endpoint associated with
