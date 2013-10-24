@@ -1,4 +1,9 @@
 #!/bin/bash
+# Install Reactor in an Ubuntu or Centos6 environment.
+# Can be run interactively:
+#   sudo bash setup.sh
+# Or passed to an instance via cloud-init:
+#   nova boot ... --user-data setup.sh ...
 
 set -x
 set -e
@@ -10,6 +15,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# This is the GPG Gridcentric package signing public key.
 cat >$KEYFILE <<EOF
 -----BEGIN PGP PUBLIC KEY BLOCK-----
 Version: GnuPG v1.4.11 (GNU/Linux)
@@ -28,18 +34,18 @@ Bt/uTYW2wU9xO0S/AyRtwBUqjDP7Q9LKp2i5UrBCtQfXQ1WFvUgQzhcYwFkoO/oH
 bi4S4hcMsGBQjsrtQkorwj8Fp3QuUErvjnjT6+6RqO+W2SjYb7eFSBBHRD6Wnas4
 TDETaIfuEOonLXzRjaQ2QTprVIZDQkY9Qnp/BZXfWheXeIkq6jsWyV87Wmwm+V8e
 zGdl0Q==
+=DHFj
+-----END PGP PUBLIC KEY BLOCK-----
 EOF
 
-# We provide a full bash script to cater to both main repos.
 # Detect distro by finding out how core utils are provided.
-
 if dpkg -l coreutils >/dev/null 2>&1; then
 
     # Import the package key and add repos.
     apt-key add $KEYFILE
     cat >/etc/apt/sources.list.d/reactor.list <<-EOF
-	deb http://downloads.gridcentric.com/reactor/reactor-core/precise gridcentric multiverse
-	deb http://downloads.gridcentric.com/cobaltclient/grizzly/precise gridcentric multiverse
+	deb http://downloads.gridcentric.com/packages/reactor/reactor-core/precise gridcentric multiverse
+	deb http://downloads.gridcentric.com/packages/cobaltclient/grizzly/precise gridcentric multiverse
 	EOF
 
     # Install all packages.
@@ -65,7 +71,9 @@ elif rpm -ql coreutils >/dev/null 2>&1; then
 	enabled=1
 	EOF
 
-    # Add requisite EPEL repos.
+    # Add requisite EPEL repos, if not already installed.
+    # This is the EPEL public key. You can verify at
+    # https://fedoraproject.org/static/0608B895.txt
     cat >$KEYFILE <<-EOF
 	-----BEGIN PGP PUBLIC KEY BLOCK-----
 	Version: GnuPG v1.4.5 (GNU/Linux)
@@ -97,8 +105,9 @@ elif rpm -ql coreutils >/dev/null 2>&1; then
 	=V/6I
 	-----END PGP PUBLIC KEY BLOCK-----
 	EOF
-    rpm --import $KEYFILE
-    rpm -Uvh http://fedora.mirror.nexicom.net/epel/6/i386/epel-release-6-8.noarch.rpm
+    rpm -qi gpg-pubkey-0608b895-4bd22942 > /dev/null 2>&1 || rpm --import $KEYFILE
+    rpm -qa | grep -q epel-release || rpm -Uvh \
+            http://dl.fedoraproject.org/pub/epel/6/`uname -m`/epel-release-6-8.noarch.rpm
 
     # Loadbalancer soft dependencies.
     yum -y install nginx haproxy dnsmasq zookeeper socat
@@ -116,7 +125,7 @@ fi
 BACKUP_DATE=$(date +%Y%m%d%H%M%S)
 
 # Setup nginx, if it's installed.
-if [ -f /etc/nginx ]; then
+if [ -d /etc/nginx ]; then
     # Ensure necessary directories exist.
     mkdir -p /var/log/nginx
     mkdir -p /etc/nginx/conf.d
@@ -157,8 +166,10 @@ fi
 # This will generate the default configuration.
 reactor zk_servers
 
-# If this is the user running this script interactively,
-# they may want to generate the default endpoints here.
-# However, we can't really do that in many cases -- simply
-# because we're not sure how this script is being run.
-echo "run 'reactor-defaults' to install default endpoints."
+# If this is being run from an interactive shell, then we
+# install the reactor default endpoints. If it's not, then
+# we assume that the user will either create their own, or
+# install the defaults into the cluster at some point.
+if [ -t 0 ]; then
+    reactor-defaults
+fi
