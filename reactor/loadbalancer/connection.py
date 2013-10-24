@@ -68,7 +68,8 @@ class LoadBalancerConnection(Connection):
                 return exp(m)
 
         # This URL is not supported.
-        raise Exception("Invalid URL for loadbalancer.")
+        raise Exception("Valid URLs for balancer:\n%s" %
+            ("\n".join(self._SUPPORTED_URLS.keys()),))
 
     def change(self, url, backends, config=None):
         """
