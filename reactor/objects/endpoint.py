@@ -198,6 +198,33 @@ class Endpoint(ConfigObject):
     def confirmed_ips(self):
         return self._get_child(CONFIRMED_IPS, clazz=IPAddresses)
 
+    def instance_map(self):
+        return {
+            "active": self.instances().list(),
+            "decommissioned": self.decommissioned_instances().list(),
+            "errored": self.errored_instances().list(),
+        }
+
+    def associate(self, instance_id):
+        if instance_id in self.instances().list():
+            # Already an active instance?
+            return
+        if instance_id in self.decommissioned_instances().list():
+            # Already decomissioned?
+            return
+        if instance_id in self.errored_instances().list():
+            # Already errored?
+            return
+
+        # Add the instance (no value).
+        self.instances().add(instance_id)
+
+    def disassociate(self, instance_id):
+        # Remove from all collections.
+        self.instances().remove(instance_id)
+        self.decommissioned_instances().remove(instance_id)
+        self.errored_instances().remove(instance_id)
+
     def instances(self):
         return self._get_child(INSTANCES, clazz=Instances)
 

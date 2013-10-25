@@ -238,6 +238,44 @@ class ReactorApiClient(httplib2.Http):
         else:
             self.request('/v1.1/unregister/%s' % ip, 'POST')
 
+    def associate(self, endpoint_name=None, instance_id=None):
+        """
+        Associate an instance with an endpoint.
+        """
+        if instance_id is None:
+            raise Exception("Instance required!")
+        if endpoint_name is None:
+            _, body = self.request('/v1.1/endpoint/instances/%s' %
+                instance_id, 'POST')
+        else:
+            _, body = self.request('/v1.1/endpoints/%s/instances/%s' %
+                (endpoint_name, instance_id), 'POST')
+        return body
+
+    def disassociate(self, endpoint_name=None, instance_id=None):
+        """
+        Disassociate an instance from an endpoint.
+        """
+        if instance_id is None:
+            raise Exception("Instance required!")
+        if endpoint_name is None:
+            _, body = self.request('/v1.1/endpoint/instances/%s' %
+                instance_id, 'DELETE')
+        else:
+            _, body = self.request('/v1.1/endpoints/%s/instances/%s' %
+                (endpoint_name, instance_id), 'DELETE')
+        return body
+
+    def instances(self, endpoint_name=None):
+        """
+        Return a map of all instances.
+        """
+        if endpoint_name is None:
+            _, body = self.request('/v1.1/endpoint/instances', 'GET')
+        else:
+            _, body = self.request('/v1.1/endpoints/%s/instances' % endpoint_name, 'GET')
+        return body
+
     def api_key_set(self, api_key):
         """
         Changes the API key in the system.
