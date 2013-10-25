@@ -212,6 +212,16 @@ class ReactorApi(object):
         self._add('session-action-implicit', ['1.1'],
                   'endpoint/sessions/{session}', self.handle_session_action)
 
+        self._add('instance-list', ['1.1'],
+                  'endpoints/{endpoint_name}/instances', self.list_instances)
+        self._add('instance-list-implicit', ['1.1'],
+                  'endpoint/instances', self.list_instances)
+
+        self._add('instance-action', ['1.1'],
+                  'endpoints/{endpoint_name}/instances/{instance_id}', self.handle_instance_action)
+        self._add('instance-action-implicit', ['1.1'],
+                  'endpoint/instances/{instance_id}', self.handle_instance_action)
+
     def _add(self, name, versions, path, fn):
         for version in versions:
             route_name = "%s:%s" % (version, name)
@@ -776,6 +786,43 @@ class ReactorApi(object):
             endpoint_log = EndpointLog(
                 self.zkobj.endpoints().get(endpoint_name).log())
             return Response(body=json.dumps(endpoint_log.get(since=since)))
+        else:
+            return Response(status=403)
+
+    @log
+    @connected
+    @authorized(allow_endpoint=True)
+    def list_instances(self, context, request):
+        """
+        Return a state map for endpoint instances.
+        """
+        endpoint_name = request.matchdict['endpoint_name']
+
+        if request.method == "GET":
+            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            return Response(body=json.dumps(endpoint.instance_map()))
+        else:
+            return Response(status=403)
+
+    @log
+    @connected
+    @authorized()
+    def handle_instance_action(self, context, request):
+        """
+        Associate or disassociate an instance.
+        """
+        endpoint_name = request.matchdict['endpoint_name']
+        instance_id = request.matchdict['instance_id']
+
+        if request.method == "POST" or request.method == "PUT":
+            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint.associate(instance_id)
+            return Response()
+
+        elif request.method == "DELETE":
+            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint.disassociate(instance_id)
+            return Response()
         else:
             return Response(status=403)
 

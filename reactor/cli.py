@@ -141,6 +141,10 @@ def usage():
     print "    drop [ip]              Remove the given IP address."
     print "    ips [endpoint]         Displays confirmed IP addresses."
     print ""
+    print "    associate [endpoint] <instance>    Associate the given instance."
+    print "    disassociate [endpoint] <instance> Disassociate the instance."
+    print "    instances [endpoint]               Show all current instances."
+    print ""
     print "    state [endpoint]       Get the endpoint state."
     print ""
     print "    start [endpoint]       "
@@ -435,7 +439,7 @@ def main():
             else:
                 endpoint_name = None
             api_client = get_api_client()
-            ips = api_client.endpoint_ips(endpoint_name)
+            ips = api_client.endpoint_ips(endpoint_name=endpoint_name)
             for ip in ips:
                 print ip
 
@@ -455,13 +459,48 @@ def main():
             api_client = get_api_client()
             api_client.drop_ip(ip)
 
+        elif command == "associate":
+            if len(args) > 2:
+                endpoint_name = get_arg(1)
+                instance_id = get_arg(2)
+            else:
+                endpoint_name = None
+                instance_id = get_arg(1)
+            api_client = get_api_client()
+            api_client.associate(
+                endpoint_name=endpoint_name,
+                instance_id=instance_id)
+
+        elif command == "disassociate":
+            if len(args) > 2:
+                endpoint_name = get_arg(1)
+                instance_id = get_arg(2)
+            else:
+                endpoint_name = None
+                instance_id = get_arg(1)
+            api_client = get_api_client()
+            api_client.disassociate(
+                endpoint_name=endpoint_name,
+                instance_id=instance_id)
+
+        elif command == "instances":
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
+            api_client = get_api_client()
+            instances = api_client.instances(endpoint_name=endpoint_name)
+            for (state, instance_list) in instances.items():
+                for instance_id in instance_list:
+                    print instance_id, state
+
         elif command == "state":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
                 endpoint_name = None
             api_client = get_api_client()
-            state = api_client.endpoint_state(endpoint_name)
+            state = api_client.endpoint_state(endpoint_name=endpoint_name)
             print json.dumps(state, indent=2)
 
         elif command == "start" or command == "stop" or command == "pause":
@@ -547,7 +586,7 @@ def main():
             else:
                 endpoint_name = None
             api_client = get_api_client()
-            sessions = api_client.session_list(endpoint_name)
+            sessions = api_client.session_list(endpoint_name=endpoint_name)
             for client, backend in sessions.items():
                 print client, backend
 
@@ -559,7 +598,9 @@ def main():
                 endpoint_name = None
                 session = get_arg(1)
             api_client = get_api_client()
-            api_client.session_kill(endpoint_name, session)
+            api_client.session_kill(
+                endpoint_name=endpoint_name,
+                session=session)
 
         elif command == "passwd":
             if len(args) > 1:
