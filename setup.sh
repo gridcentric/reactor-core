@@ -133,6 +133,7 @@ if [ -d /etc/nginx ]; then
 
     # Clear out the default site, if it's there.
     rm -f /etc/nginx/sites-enabled/default
+    rm -f /etc/nginx/conf.d/default.conf
 
     if [ -f /etc/nginx/nginx.conf ]; then
         # Save the original configuration.
