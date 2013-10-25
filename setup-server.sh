@@ -1,9 +1,9 @@
 #!/bin/bash
-# Install Reactor in an Ubuntu or Centos6 environment.
+# Install the Reactor server in an Ubuntu or Centos6 environment.
 # Can be run interactively:
-#   sudo bash setup.sh
+#   sudo bash setup-server.sh
 # Or passed to an instance via cloud-init:
-#   nova boot ... --user-data setup.sh ...
+#   nova boot ... --user-data setup-server.sh ...
 
 set -x
 set -e

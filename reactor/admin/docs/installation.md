@@ -2,19 +2,23 @@
 
 [TOC]
 
-# Via setup.sh
+# Via Setup Script
 
-You can install reactor automatically via a [setup script](/assets/setup.sh).
+You can install reactor automatically via a [setup script](/assets/setup-server.sh).
 
-    curl https://raw.github.com/gridcentric/reactor-core/master/setup.sh | sudo bash -
+    curl https://raw.github.com/gridcentric/reactor-core/master/setup-server.sh | sudo bash -
+
+Note that you can similarly install the client packages via a [setup script](/assets/setup-client.sh).
+
+    curl https://raw.github.com/gridcentric/reactor-core/master/setup-client.sh | sudo bash -
 
 # Via cloud-init
 
-Reactor installed via a cloud-init, using the [setup script](/assets/setup.sh).
+Reactor installed via a cloud-init, using the [setup script](/assets/setup-server.sh).
 
 Simply download this file, and pass it as the user-data to a new instance.
 
-    nova boot --user-data setup.sh reactor-instance
+    nova boot --user-data setup-server.sh reactor-instance
 
 # From Packages
 
