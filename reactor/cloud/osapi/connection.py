@@ -71,9 +71,12 @@ class BaseOsEndpointConfig(Config):
     # Cached client.
     _client = None
 
-    # Cached list values.
-    _list_cache = []
-    _last_refresh = None
+    def __init__(self, *args, **kwargs):
+        super(BaseOsEndpointConfig, self).__init__(*args, **kwargs)
+
+        # Initialize our list cache.
+        self._list_cache = []
+        self._last_refresh = None
 
     # Common authentication elements.
     auth_url = Config.string(label="OpenStack Auth URL",
