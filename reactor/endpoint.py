@@ -42,6 +42,12 @@ class EndpointConfig(Config):
     url = Config.string(label="Endpoint URL", order=0,
         description="The URL for this endpoint.")
 
+    instances_source = Config.string("Instances Source", order=3,
+        description="The source endpoint for loadbalancer instances.")
+
+    metrics_source = Config.string(label="Metrics Source", order=3,
+        description="The source endpoint for metrics.")
+
     port = Config.integer(label="Backend Port", order=1,
         validate=lambda self: self.port >= 0 or \
             Config.error("Port must not be negative."),
@@ -188,9 +194,6 @@ class ScalingConfig(Config):
         validate=lambda self: self.ramp_limit > 0 or \
             Config.error("Ramp limit must be positive."),
         description="The maximum operations (start and stop instances) per round.")
-
-    url = Config.string(label="Metrics URL", order=3,
-        description="The source url for metrics.")
 
 def _as_ip(ips):
     if isinstance(ips, list):
@@ -365,14 +368,6 @@ class Endpoint(Atomic):
             return sha_hash(self.config.loadbalancer)
         else:
             return sha_hash("")
-
-    @Atomic.sync
-    def metric_key(self):
-        source_url = self.scaling.url
-        if source_url:
-            return sha_hash(source_url)
-        else:
-            return self.key()
 
     def managed(self, uuid):
         # Mark that this is our manager.
