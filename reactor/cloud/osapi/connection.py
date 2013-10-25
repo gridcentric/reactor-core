@@ -66,12 +66,6 @@ def mime_type(data):
             return mime
     return "plain"
 
-class BaseOsManagerConfig(Config):
-
-    reactor = Config.string(label="Reactor address",
-        default="localhost", order=0,
-        description="Used internally by Reactor.")
-
 class BaseOsEndpointConfig(Config):
 
     # Cached client.
@@ -153,7 +147,6 @@ class BaseOsEndpointConfig(Config):
 
 class BaseOsConnection(CloudConnection):
 
-    _MANAGER_CONFIG_CLASS = BaseOsManagerConfig
     _ENDPOINT_CONFIG_CLASS = BaseOsEndpointConfig
 
     def __init__(self, *args, **kwargs):
