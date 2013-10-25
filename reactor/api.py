@@ -149,13 +149,11 @@ class ReactorApi(object):
 
         self._add('register-implicit', ['1.0', '1.1'],
                   'register', self.register_ip_implicit)
-
         self._add('register', ['1.0', '1.1'],
                   'register/{endpoint_ip}', self.register_ip_address)
 
         self._add('unregister-implicit',  ['1.0', '1.1'],
                   'unregister', self.unregister_ip_implicit)
-
         self._add('unregister',  ['1.0', '1.1'],
                   'unregister/{endpoint_ip}', self.unregister_ip_address)
 
@@ -170,9 +168,13 @@ class ReactorApi(object):
 
         self._add('endpoint-action',  ['1.0', '1.1'],
                   'endpoints/{endpoint_name}', self.handle_endpoint_action)
+        self._add('endpoint-action-implicit',  ['1.0', '1.1'],
+                  'endpoint', self.handle_endpoint_action)
 
         self._add('endpoint-alias-action',  ['1.1'],
                   'endpoints/{endpoint_name}/alias', self.handle_alias_action)
+        self._add('endpoint-alias-action-implicit',  ['1.1'],
+                  'endpoint/alias', self.handle_alias_action)
 
         self._add('endpoint-list',  ['1.0', '1.1'],
                   'endpoints', self.list_endpoints)

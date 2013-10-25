@@ -125,17 +125,17 @@ def usage():
     print ""
     print "    list                   List all managed endpoints."
     print ""
-    print "    manage <endpoint>      Create or update the given endpoint."
+    print "    manage [endpoint]      Create or update the given endpoint."
     print "                           (The endpoint configuration is read from stdin.)"
-    print "    unmanage <endpoint>    Delete the endpoint with the given name."
-    print "    show <endpoint>        Show the current configuration for the endpoint."
+    print "    unmanage [endpoint]    Delete the endpoint with the given name."
+    print "    show [endpoint]        Show the current configuration for the endpoint."
     print ""
-    print "    rename <endpoint> new-name>  Rename the givern endpoint."
-    print "    alias <endpoint> <new-name>  Alias the given endpoint."
-    print "                                 The endpoints will share all state."
+    print "    rename [endpoint] <new-name>  Rename the givern endpoint."
+    print "    alias [endpoint] <new-name>   Alias the given endpoint."
+    print "                                  The endpoints will share all state."
     print ""
-    print "    get <endpoint> <section> <key>"
-    print "    set <endpoint> <section> <key> <value>"
+    print "    get [endpoint] <section> <key>"
+    print "    set [endpoint] <section> <key> <value>"
     print ""
     print "    register [ip]          Register the given IP address."
     print "    drop [ip]              Remove the given IP address."
@@ -346,59 +346,102 @@ def main():
                 print server
 
         elif command == "manage":
-            endpoint_name = get_arg(1)
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
+
             new_conf = ""
             for line in sys.stdin.readlines():
                 new_conf += line
 
             api_client = get_api_client()
-            api_client.endpoint_manage(endpoint_name, new_conf)
+            api_client.endpoint_manage(
+                endpoint_name=endpoint_name,
+                config=new_conf)
 
         elif command == "unmanage":
-            endpoint_name = get_arg(1)
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
+
             api_client = get_api_client()
-            api_client.endpoint_unmanage(endpoint_name)
+            api_client.endpoint_unmanage(endpoint_name=endpoint_name)
 
         elif command == "show":
-            endpoint_name = get_arg(1)
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
+
             api_client = get_api_client()
-            config = api_client.endpoint_config(endpoint_name)
+            config = api_client.endpoint_config(endpoint_name=endpoint_name)
             print json.dumps(config, indent=2)
 
         elif command == "rename":
-            endpoint_name = get_arg(1)
-            new_name = get_arg(2)
+            if len(args) > 2:
+                endpoint_name = get_arg(1)
+                new_name = get_arg(2)
+            else:
+                endpoint_name = None
+                new_name = get_arg(1)
+
             api_client = get_api_client()
-            api_client.endpoint_alias(endpoint_name, new_name)
-            api_client.endpoint_unmanage(endpoint_name)
+            api_client.endpoint_alias(
+                endpoint_name=endpoint_name,
+                new_name=new_name)
+            api_client.endpoint_unmanage(endpoint_name=endpoint_name)
 
         elif command == "alias":
-            endpoint_name = get_arg(1)
-            new_name = get_arg(2)
+            if len(args) > 2:
+                endpoint_name = get_arg(1)
+                new_name = get_arg(2)
+            else:
+                endpoint_name = None
+                new_name = get_arg(1)
+
             api_client = get_api_client()
-            api_client.endpoint_alias(endpoint_name, new_name)
+            api_client.endpoint_alias(
+                endpoint_name=endpoint_name,
+                new_name=new_name)
 
         elif command == "get":
-            endpoint_name = get_arg(1)
-            section = get_arg(2)
-            key = get_arg(3)
+            if len(args) > 3:
+                endpoint_name = get_arg(1)
+                section = get_arg(2)
+                key = get_arg(3)
+            else:
+                endpoint_name = None
+                section = get_arg(1)
+                key = get_arg(2)
+
             api_client = get_api_client()
-            config = api_client.endpoint_config(endpoint_name)
+            config = api_client.endpoint_config(endpoint_name=endpoint_name)
             section_config = config.get(section, {})
             if section_config.has_key(key):
                 print section_config[key]
 
         elif command == "set":
-            endpoint_name = get_arg(1)
-            section = get_arg(2)
-            key = get_arg(3)
-            value = get_arg(4)
+            if len(args) > 4:
+                endpoint_name = get_arg(1)
+                section = get_arg(2)
+                key = get_arg(3)
+                value = get_arg(4)
+            else:
+                endpoint_name = None
+                section = get_arg(1)
+                key = get_arg(2)
+                value = get_arg(3)
+
             api_client = get_api_client()
-            config = api_client.endpoint_config(endpoint_name)
+            config = api_client.endpoint_config(endpoint_name=endpoint_name)
             if not section in config:
                 config[section] = {}
             config[section][key] = value
-            api_client.endpoint_manage(endpoint_name, config)
+            api_client.endpoint_manage(
+                endpoint_name=endpoint_name,
+                config=config)
 
         elif command == "managers":
             api_client = get_api_client()
@@ -438,6 +481,7 @@ def main():
                 endpoint_name = get_arg(1)
             else:
                 endpoint_name = None
+
             api_client = get_api_client()
             ips = api_client.endpoint_ips(endpoint_name=endpoint_name)
             for ip in ips:
@@ -448,6 +492,7 @@ def main():
                 ip = get_arg(1)
             else:
                 ip = None
+
             api_client = get_api_client()
             api_client.register_ip(ip)
 
@@ -456,6 +501,7 @@ def main():
                 ip = get_arg(1)
             else:
                 ip = None
+
             api_client = get_api_client()
             api_client.drop_ip(ip)
 
@@ -466,6 +512,7 @@ def main():
             else:
                 endpoint_name = None
                 instance_id = get_arg(1)
+
             api_client = get_api_client()
             api_client.associate(
                 endpoint_name=endpoint_name,
@@ -478,6 +525,7 @@ def main():
             else:
                 endpoint_name = None
                 instance_id = get_arg(1)
+
             api_client = get_api_client()
             api_client.disassociate(
                 endpoint_name=endpoint_name,
@@ -488,6 +536,7 @@ def main():
                 endpoint_name = get_arg(1)
             else:
                 endpoint_name = None
+
             api_client = get_api_client()
             instances = api_client.instances(endpoint_name=endpoint_name)
             for (state, instance_list) in instances.items():
@@ -499,6 +548,7 @@ def main():
                 endpoint_name = get_arg(1)
             else:
                 endpoint_name = None
+
             api_client = get_api_client()
             state = api_client.endpoint_state(endpoint_name=endpoint_name)
             print json.dumps(state, indent=2)
@@ -508,6 +558,7 @@ def main():
                 endpoint_name = get_arg(1)
             else:
                 endpoint_name = None
+
             api_client = get_api_client()
             api_client.endpoint_action(
                 endpoint_name=endpoint_name,
@@ -518,6 +569,7 @@ def main():
                 endpoint_name = get_arg(1)
             else:
                 endpoint_name = None
+
             api_client = get_api_client()
             metrics = api_client.endpoint_metrics(
                 endpoint_name=endpoint_name)
@@ -543,6 +595,7 @@ def main():
                 endpoint_name = get_arg(1)
             else:
                 endpoint_name = None
+
             api_client = get_api_client()
             entries = api_client.endpoint_log(endpoint_name=endpoint_name)
             for (ts, level, message) in entries:
@@ -553,6 +606,7 @@ def main():
                 endpoint_name = get_arg(1)
             else:
                 endpoint_name = None
+
             api_client = get_api_client()
             delay = 2.0
             last_ts = 0.0
@@ -585,6 +639,7 @@ def main():
                 endpoint_name = get_arg(1)
             else:
                 endpoint_name = None
+
             api_client = get_api_client()
             sessions = api_client.session_list(endpoint_name=endpoint_name)
             for client, backend in sessions.items():
@@ -597,6 +652,7 @@ def main():
             else:
                 endpoint_name = None
                 session = get_arg(1)
+
             api_client = get_api_client()
             api_client.session_kill(
                 endpoint_name=endpoint_name,

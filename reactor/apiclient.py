@@ -60,29 +60,45 @@ class ReactorApiClient(httplib2.Http):
         _, body = self.request('/v1.1/endpoints', 'GET')
         return body
 
-    def endpoint_manage(self, endpoint_name, config):
+    def endpoint_manage(self, endpoint_name=None, config=None):
         """
         Manage the endpoint using the given configuration.
         """
-        self.request('/v1.1/endpoints/%s' % endpoint_name, 'POST', body=config)
+        if config is None:
+            raise Exception("Config required!")
+        if endpoint_name is None:
+            self.request('/v1.1/endpoint', 'POST', body=config)
+        else:
+            self.request('/v1.1/endpoints/%s' % endpoint_name, 'POST', body=config)
 
-    def endpoint_unmanage(self, endpoint_name):
+    def endpoint_unmanage(self, endpoint_name=None):
         """
         Unmanage the endpoint.
         """
-        self.request('/v1.1/endpoints/%s' % endpoint_name, 'DELETE')
+        if endpoint_name is None:
+            self.request('/v1.1/endpoint', 'DELETE')
+        else:
+            self.request('/v1.1/endpoints/%s' % endpoint_name, 'DELETE')
 
-    def endpoint_alias(self, endpoint_name, new_name):
+    def endpoint_alias(self, endpoint_name=None, new_name=None):
         """
         Alias the endpoint.
         """
-        self.request('/v1.1/endpoints/%s/alias' % endpoint_name, 'POST', body=new_name)
+        if new_name is None:
+            raise Exception("New name required!")
+        if endpoint_name is None:
+            self.request('/v1.1/endpoint/alias', 'POST', body=new_name)
+        else:
+            self.request('/v1.1/endpoints/%s/alias' % endpoint_name, 'POST', body=new_name)
 
-    def endpoint_config(self, endpoint_name):
+    def endpoint_config(self, endpoint_name=None):
         """
         Return the endpoint's configuration.
         """
-        _, body = self.request('/v1.1/endpoints/%s' % endpoint_name, 'GET')
+        if endpoint_name is None:
+            _, body = self.request('/v1.1/endpoint', 'GET')
+        else:
+            _, body = self.request('/v1.1/endpoints/%s' % endpoint_name, 'GET')
         return body
 
     def manager_list(self, active=False):
@@ -245,12 +261,9 @@ class ReactorApiClient(httplib2.Http):
         if instance_id is None:
             raise Exception("Instance required!")
         if endpoint_name is None:
-            _, body = self.request('/v1.1/endpoint/instances/%s' %
-                instance_id, 'POST')
+            self.request('/v1.1/endpoint/instances/%s' % instance_id, 'POST')
         else:
-            _, body = self.request('/v1.1/endpoints/%s/instances/%s' %
-                (endpoint_name, instance_id), 'POST')
-        return body
+            self.request('/v1.1/endpoints/%s/instances/%s' % (endpoint_name, instance_id), 'POST')
 
     def disassociate(self, endpoint_name=None, instance_id=None):
         """
@@ -259,12 +272,10 @@ class ReactorApiClient(httplib2.Http):
         if instance_id is None:
             raise Exception("Instance required!")
         if endpoint_name is None:
-            _, body = self.request('/v1.1/endpoint/instances/%s' %
-                instance_id, 'DELETE')
+            self.request('/v1.1/endpoint/instances/%s' % instance_id, 'DELETE')
         else:
-            _, body = self.request('/v1.1/endpoints/%s/instances/%s' %
+            self.request('/v1.1/endpoints/%s/instances/%s' %
                 (endpoint_name, instance_id), 'DELETE')
-        return body
 
     def instances(self, endpoint_name=None):
         """
