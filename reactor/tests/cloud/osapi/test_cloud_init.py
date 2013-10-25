@@ -12,21 +12,37 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+
+from email import message_from_string
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from reactor.cloud.osapi.connection import BaseOsConnection
 from reactor.cloud.osapi.connection import REACTOR_SCRIPT
 
-from mock_ud_handler import walk_userdata
+def walk_userdata(input):
+    """This mocks the code that runs on the cloud-init guest service when
+       passing user data."""
+
+    if "mime-version:" in input[0:4096].lower():
+        msg = message_from_string(input)
+    else:
+        msg = MIMEText(input, _subtype = 'x-not-multipart')
+
+    parts = []
+    count = 0
+
+    for part in msg.walk():
+        if part.get_content_maintype() != 'multipart':
+            parttype = part.get_content_type() or 'application/octet-stream'
+            filename = part.get_filename() or 'part-%03d' % count
+            count += 1
+            parts.append((parttype, filename, part.get_payload(decode=True)))
+
+    return parts
 
 fake_name = 'test-cloud-init'
 fake_url = 'http://test.gc.ca'
-
-# The user data walker will call back into this, with data
-# provided by us
-def walk_callback(data, ctype, filename, payload):
-    assert (ctype, filename, payload) in data
 
 def test_basic_cloud_init():
     conn = BaseOsConnection(fake_name, this_url = fake_url)
@@ -39,7 +55,7 @@ def test_basic_cloud_init():
                 REACTOR_SCRIPT % { 'url' : fake_url,
                                    'timeout' : 300 }) ]
 
-    walk_userdata(conn._user_data(), walk_callback, expect)
+    assert walk_userdata(conn._user_data()) == expect
 
 def test_cloud_init_user_script():
     script = "#/bin/sh\ntouch /tmp/foo"
@@ -51,7 +67,7 @@ def test_cloud_init_user_script():
                 REACTOR_SCRIPT % { 'url' : fake_url,
                                    'timeout' : 300 }) ]
 
-    walk_userdata(conn._user_data(script), walk_callback, expect)
+    assert walk_userdata(conn._user_data(script)) == expect
 
 def test_cloud_init_user_multipart():
     # http://cloudinit.readthedocs.org/en/latest/topics/examples.html
@@ -95,5 +111,4 @@ echo "This will run as soon as possible in the boot sequence"
                 REACTOR_SCRIPT % { 'url' : fake_url,
                                    'timeout' : 300 }) ]
 
-    walk_userdata(conn._user_data(msg.as_string()),
-                    walk_callback, expect)
+    assert walk_userdata(conn._user_data(msg.as_string())) == expect
