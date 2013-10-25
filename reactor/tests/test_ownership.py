@@ -18,10 +18,20 @@ import unittest
 
 import reactor.endpoint as endpoint
 
-def test_single_manager(endpoint, manager):
+def test_one_endpoint_single_manager(endpoint, manager):
     assert manager.endpoint_owned(endpoint)
 
-def test_multiple_managers(endpoint, managers):
+def test_one_endpoint_multiple_managers(endpoint, managers):
     assert len(managers) > 1
     owners = [m for m in managers if m.endpoint_owned(endpoint)]
     assert len(owners) == 1
+
+def test_multi_endpoints_single_manager(endpoints, manager):
+    for endpoint in endpoints:
+        assert manager.endpoint_owned(endpoint)
+
+def test_multi_endpoints_multiple_managers(endpoints, managers):
+    assert len(managers) > 1
+    for endpoint in endpoints:
+        owners = [m for m in managers if m.endpoint_owned(endpoint)]
+        assert len(owners) == 1

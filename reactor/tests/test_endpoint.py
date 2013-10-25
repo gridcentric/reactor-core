@@ -35,7 +35,7 @@ def test_key(endpoint):
 def test_managed(reactor, endpoint):
     def _assert_manager(is_value):
         managers = map(
-            lambda x: reactor.endpoints().get(x).manager,
+            lambda x: reactor.endpoints().get(x)[0].manager,
             reactor.endpoints().list())
         assert managers == [ is_value ] * len(managers)
 

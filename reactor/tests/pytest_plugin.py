@@ -149,7 +149,7 @@ def endpoints(request, n=5):
 
     # Create the collection of endpoints.
     from reactor.endpoint import Endpoint
-    endpoints = map(lambda x: Endpoint(r.endpoints().get(x)), names)
+    endpoints = map(lambda x: Endpoint(r.endpoints().get(x)[0]), names)
 
     # Ensure all watches have fired to
     # synchronize manager's active state.
@@ -159,7 +159,7 @@ def endpoints(request, n=5):
 
 @fixture()
 def endpoint(request):
-    """ A single endpoint. """
+    """ A single boring endpoint. """
     return endpoints(request, n=1)[0]
 
 @fixture()

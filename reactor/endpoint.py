@@ -340,6 +340,9 @@ class Endpoint(Atomic):
     def _update_confirmed(self):
         self.reload()
 
+    def uuid(self):
+        return self.zkobj.uuid()
+
     @Atomic.sync
     def key(self):
         # Some loadbalancers supported operation with
@@ -348,11 +351,11 @@ class Endpoint(Atomic):
         # different loadbalancers without a URL, we will
         # hash the loadbalancer name if no URL is provided.
         if self.config.url:
-            return utils.sha_hash(self.config.url)
+            return utils.sha_hash("url:%s" % self.config.url)
         elif self.config.loadbalancer:
-            return utils.sha_hash(self.config.loadbalancer)
+            return utils.sha_hash("loadbalancer:%s" % self.config.loadbalancer)
         else:
-            return utils.sha_hash("")
+            return utils.sha_hash("uuid:%s" % self.uuid())
 
     def managed(self, uuid):
         # Mark that this is our manager.

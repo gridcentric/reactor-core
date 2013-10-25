@@ -13,6 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import uuid
+
 from reactor.tests.pytest_plugin import fixture, zk_client
 
 from reactor.objects.endpoint import Instances

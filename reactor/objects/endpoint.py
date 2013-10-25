@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import os
 from uuid import uuid4
 
 from reactor.zookeeper.objects import JSONObject
@@ -76,55 +77,71 @@ class EndpointNotFound(Exception):
 
 class Endpoints(DatalessObject):
 
+    def __init__(self, *args, **kwargs):
+        super(Endpoints, self).__init__(*args, **kwargs)
+        self._names = self._get_child(NAMES, clazz=RawObject)
+        self._data = self._get_child(DATA, clazz=Endpoint)
+
     def get(self, name):
-        # Get the endpoint UUID from the names directory.
-        uuid = self._get_child(NAMES)._get_child(
-            name, clazz=RawObject)._get_data()
+        # Get the endpoint object & UUID from the directory.
+        uuid = self._names._get_child(name)._get_data()
         if uuid:
-            return self._get_child(DATA)._get_child(
-                uuid, clazz=Endpoint)
+            return (self._data._get_child(uuid), uuid)
         else:
             raise EndpointNotFound(name)
 
+    def get_names(self, uuid):
+        # Do a reverse lookup to find the name.
+        # NOTE: This isn't efficient in the slighest. The user
+        # of this interface should use aggressive caching to ensure
+        # that this isn't called frequently or in the hot path.
+        # (Particularly if you're managing hundreds of thousands
+        # of endpoints, this can be a pretty slow operation).
+        return [
+            name for (name, endpoint_uuid) in
+            map(lambda x:
+                (x, self._names._get_child(x)._get_data()),
+                self._names._list_children())
+            if endpoint_uuid == uuid
+        ]
+
     def list(self, **kwargs):
         # List the endpoints as names.
-        return self._get_child(NAMES)._list_children(**kwargs)
+        return self._names._list_children(**kwargs)
 
     def manage(self, name, config):
         # Generate a UUID if one doesn't exist.
         uuid = str(uuid4())
-        self._get_child(NAMES)._get_child(
-            name, clazz=RawObject)._set_data(uuid, exclusive=True)
+        self._names._get_child(name)._set_data(uuid, exclusive=True)
 
         # Set the configuration for this endpoint.
-        self.get(name).set_config(config)
+        endpoint, _ = self.get(name)
+        endpoint.set_config(config)
 
     def unmanage(self, name):
         # Delete the given endpoint.
-        self._get_child(NAMES)._get_child(name)._delete()
+        self._names._get_child(name)._delete()
 
     def clean(self):
-        uuids = self._get_child(DATA)._list_children()
-        names = self._get_child(NAMES)._list_children()
+        uuids = self._data._list_children()
+        names = self._names._list_children()
 
         # Get all the available endpoints.
         active_uuids = map(lambda x:
-            self._get_child(NAMES)._get_child(x, clazz=RawObject)._get_data(),
+            self._names._get_child(x)._get_data(),
             names)
 
         # Ensure there are no unused endpoints.
         for uuid in uuids:
             if not uuid in active_uuids:
-                self._get_child(DATA)._get_child(uuid)._delete()
+                self._data._get_child(uuid)._delete()
 
     def alias(self, name, new_name):
         # Get the current endpoint UUID.
-        uuid = self._get_child(NAMES)._get_child(
-            name, clazz=RawObject)._get_data()
+        uuid = self._names._get_child(name)._get_data()
 
         if uuid is not None:
-            self._get_child(NAMES)._get_child(
-                new_name, clazz=RawObject)._set_data(uuid)
+            self._names._get_child(new_name)._set_data(uuid, exclusive=True)
             return True
         else:
             return False
@@ -132,7 +149,8 @@ class Endpoints(DatalessObject):
     def state_counts(self):
         result = {}
         for name in self.list():
-            state = self.get(name).state().current()
+            endpoint, _ = self.get(name)
+            state = endpoint.state().current()
             if not state in result:
                 result[state] = 1
             else:
@@ -175,6 +193,9 @@ class Endpoint(ConfigObject):
     def __init__(self, *args, **kwargs):
         super(Endpoint, self).__init__(*args, **kwargs)
         self._state = self._get_child(STATE, clazz=State)
+
+    def uuid(self):
+        return os.path.basename(self._path)
 
     def get_config(self, **kwargs):
         return self._get_data(**kwargs)

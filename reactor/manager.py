@@ -14,10 +14,10 @@
 #    under the License.
 
 import time
-import uuid
 import bisect
 import traceback
 import logging
+import uuid
 
 from . import cli
 from . import utils
@@ -190,8 +190,9 @@ class ScaleManager(AtomicRunnable):
         # Our configuration.
         self.config = ManagerConfig()
 
-        # Endpoint map.
-        self._endpoints = {}
+        # Endpoint maps.
+        self._endpoint_names = {}
+        self._endpoint_data = {}
 
         # The ring.
         # In order to minimize disruption and keep services
@@ -201,8 +202,10 @@ class ScaleManager(AtomicRunnable):
 
         self._keys = []         # Our local manager keys.
         self._key_to_uuid = {}  # Map of manager key -> uuid.
-        self._key_to_owned = {} # Endpoint to ownership.
         self._uuid_to_info = {} # Map of manager uuid -> info.
+
+        # Endpoint to ownership cache.
+        self._uuid_to_owned = {}
 
         # The connections.
         # Each scale manager will auto-discover available
@@ -217,7 +220,6 @@ class ScaleManager(AtomicRunnable):
         # We persistent some state to zookeeper, but it's
         # very efficiently to only write deltas. We maintain
         # some information here that helps us to reduce writes.
-
         self._url = None
         self._sessions = {}
 
@@ -286,8 +288,7 @@ class ScaleManager(AtomicRunnable):
                 # manager that is capable of managing this object.
                 index = (index+1) % len(keys)
                 if index == orig_index:
-                    self.logging.error(
-                        self.logging.NO_MANAGER_AVAILABLE, key)
+                    self.logging.error(self.logging.NO_MANAGER_AVAILABLE, key)
                     break
 
         # Return the found key.
@@ -296,18 +297,19 @@ class ScaleManager(AtomicRunnable):
     @Atomic.sync
     def endpoint_owned(self, endpoint):
         # Is it in the cache?
-        if endpoint.key() in self._key_to_owned:
-            return self._key_to_owned[endpoint.key()]
+        endpoint_uuid = endpoint.uuid()
+        if endpoint_uuid in self._uuid_to_owned:
+            return self._uuid_to_owned[endpoint_uuid]
 
         # Cache whether or not this endpoint is owned by us.
         is_owned = self._is_owned(
-            endpoint.key(),
+            endpoint_uuid,
             cloud=endpoint.config.cloud,
             loadbalancer=endpoint.config.loadbalancer)
-        self._key_to_owned[endpoint.key()] = is_owned
+        self._uuid_to_owned[endpoint_uuid] = is_owned
         self.logging.info(
             self.logging.ENDPOINT_MANAGED,
-            endpoint.key(),
+            endpoint_uuid,
             is_owned)
 
         if is_owned:
@@ -325,45 +327,64 @@ class ScaleManager(AtomicRunnable):
         # spurious event fire in this case, and we'd like to
         # avoid doing a bunch of extra work.
         endpoints.sort()
-        current_endpoints = self._endpoints.keys()
+        current_endpoints = self._endpoint_names.keys()
         current_endpoints.sort()
-        if endpoints == current_endpoints:
-            return
 
         # Clear out the ownership cache.
-        self._key_to_owned = {}
+        self._uuid_to_owned = {}
 
         to_add = []
         for endpoint_name in endpoints:
-            if endpoint_name not in self._endpoints:
+            if endpoint_name not in self._endpoint_names:
                 to_add.append(endpoint_name)
 
         to_remove = []
-        for endpoint_name in self._endpoints.keys():
+        for endpoint_name in self._endpoint_names.keys():
             if not endpoint_name in endpoints:
                 to_remove.append(endpoint_name)
+            else:
+                # Check a change in the uuid of the endpoint.
+                # This could happen if the user is doing a bunch
+                # renaming and a bunch of aliases and we end up
+                # missing some watches being fired. We have to
+                # teardown the old endpoints and build up new ones.
+                _, endpoint_uuid = self._endpoints_zkobj.get(endpoint_name)
+                if self._endpoint_names[endpoint_name] != endpoint_uuid:
+                    to_remove.append(endpoint_name)
+                    to_add.append(endpoint_name)
 
         for endpoint_name in to_remove:
-            self._endpoints[endpoint_name].reload(exclude=True)
-            # This trick is necessary to order to break the
-            # reference cycle that the endpoint might have.
-            # Because we've passed in _find_*_connection()
-            # as well as self.collect, the endpoint has a
-            # reference to this scale manager that needs to
-            # be broken before it will be garbage collected.
-            del self._endpoints[endpoint_name]
+            endpoint_uuid = self._endpoint_names[endpoint_name]
+            del self._endpoint_names[endpoint_name]
+
+            # Remove the endpoint object if there's only one mapping.
+            if len(filter(
+                lambda x: x == endpoint_uuid,
+                self._endpoint_names.values())) == 0:
+
+                # Remove from the loadbalancer.
+                self._endpoint_data[endpoint_uuid].reload(exclude=True)
+                del self._endpoint_data[endpoint_uuid]
 
         for endpoint_name in to_add:
             try:
-                endpoint = Endpoint(
-                        self.zkobj.endpoints().get(endpoint_name),
+                zkobj, endpoint_uuid = self.zkobj.endpoints().get(endpoint_name)
+                if endpoint_uuid not in self._endpoint_data:
+                    endpoint = Endpoint(
+                        zkobj,
                         collect=self.collect,
                         find_cloud_connection=self._find_cloud_connection,
                         find_loadbalancer_connection=self._find_loadbalancer_connection)
+                else:
+                    # See below, we don't need to access this
+                    # underlying endpoint because it already exists.
+                    endpoint = None
+
             except EndpointNotFound:
                 # Perhaps we just caught a race condition,
                 # with the endpoint being deleted?
                 continue
+
             except Exception:
                 # This isn't expected.
                 traceback.print_exc()
@@ -373,15 +394,13 @@ class ScaleManager(AtomicRunnable):
             # on startup. But we aren't tracking it yet, so it will
             # be excluded. So after we add it to our collection, we
             # do another reload() to ensure that it's included.
-            self._endpoints[endpoint_name] = endpoint
-            self._endpoints[endpoint_name].reload()
+            self._endpoint_names[endpoint_name] = endpoint_uuid
+            if endpoint_uuid not in self._endpoint_data:
+                self._endpoint_data[endpoint_uuid] = endpoint
+                endpoint.reload()
 
         # Log the change.
-        self.logging.info(
-                self.logging.ENDPOINTS_CHANGED,
-                dict(map(
-                    lambda x: (x, self._endpoints[x].key()),
-                    self._endpoints.keys())))
+        self.logging.info(self.logging.ENDPOINTS_CHANGED, self._endpoint_names)
 
         # If we've lost endpoints, we need to make sure that
         # we clean up the leftover endpoint IPs. This is done
@@ -552,14 +571,14 @@ class ScaleManager(AtomicRunnable):
     def _manager_change(self, managers):
         # Clear out the ownership cache.
         self._key_to_uuid = {}
-        self._key_to_owned = {}
         self._uuid_to_info = {}
+        self._uuid_to_owned = {}
 
         # Rebuild our manager info.
         # NOTE: We should be included in this list ourselves. If
         # we're not -- something is definitely up and the system
         # should catch up shortly.
-        # NOTE: We allow the key_to_owned cache above to repopulate
+        # NOTE: We allow the uuid_to_owned cache above to repopulate
         # lazily -- there's no rush to get it all done immediately.
         info_map = self._managers_zkobj.info_map()
         for (manager, info) in info_map.items():
@@ -588,7 +607,7 @@ class ScaleManager(AtomicRunnable):
     @Atomic.sync
     def register_ip(self, ips):
         for ip in ips:
-            endpoint_name = None
+            matching_uuid = None
 
             # Skip the IP if we don't own it.
             if not self._is_owned(utils.sha_hash(ip)):
@@ -596,14 +615,14 @@ class ScaleManager(AtomicRunnable):
 
             # Find the owning endpoint for this
             # IP and confirmed it there.
-            for (name, endpoint) in self._endpoints.items():
+            for (endpoint_uuid, endpoint) in self._endpoint_data.items():
                 if endpoint.ip_confirmed(ip):
-                    endpoint_name = name
+                    matching_uuid = endpoint_uuid
                     break
 
-            if endpoint_name:
+            if matching_uuid:
                 # Write out the set of matching endpoints.
-                self.endpoint_ips.add(ip, endpoint_name)
+                self.endpoint_ips.add(ip, matching_uuid)
 
             # Always remove the IP.
             self._new_ips_zkobj.remove(ip)
@@ -611,7 +630,7 @@ class ScaleManager(AtomicRunnable):
     @Atomic.sync
     def drop_ip(self, ips):
         for ip in ips:
-            endpoint_name = None
+            matching_uuid = None
 
             # Skip the IP if we don't own it.
             if not self._is_owned(utils.sha_hash(ip)):
@@ -619,12 +638,12 @@ class ScaleManager(AtomicRunnable):
 
             # Find the owning endpoint for this
             # IP and confirmed it there.
-            for (name, endpoint) in self._endpoints.items():
+            for (endpoint_uuid, endpoint) in self._endpoint_data.items():
                 if endpoint.ip_dropped(ip):
-                    endpoint_name = name
+                    matching_uuid = endpoint_uuid
                     break
 
-            if endpoint_name:
+            if matching_uuid:
                 # Remove the ip from the ip address set.
                 self.endpoint_ips.remove(ip)
 
@@ -638,7 +657,7 @@ class ScaleManager(AtomicRunnable):
 
     def error_notify(self, ip):
         # Call into the endpoint to notify of the error.
-        for endpoint in self._endpoints.values():
+        for endpoint in self._endpoint_data.values():
             if endpoint.ip_errored(ip):
                 return True
 
@@ -655,9 +674,13 @@ class ScaleManager(AtomicRunnable):
         # has been specified here. If this is *not* a valid
         # endpoint then we will fall back to using this endpoint.
         if endpoint.config.instances_source:
-            endpoint = self._endpoints.get(
-                endpoint.config.instances_source,
-                endpoint)
+            endpoint_uuid = self._endpoint_names.get(
+                endpoint.config.instances_source)
+            if endpoint_uuid is not None:
+                endpoint = self._endpoint_data.get(
+                    endpoint_uuid, endpoint)
+
+        # Index based on the key.
         key = endpoint.key()
 
         # Map through all endpoints.
@@ -665,7 +688,7 @@ class ScaleManager(AtomicRunnable):
         # key needs to be collected in order to ensure that
         # we have all the backend instances we need.
         ips = []
-        for e in self._endpoints.values():
+        for e in self._endpoint_data.values():
             if exclude and endpoint == e:
                 continue
             elif e.key() == key:
@@ -791,9 +814,11 @@ class ScaleManager(AtomicRunnable):
         # has been specified here. If this is *not* a valid
         # endpoint then we will fall back to using this endpoint.
         if endpoint.config.metrics_source:
-            endpoint = self._endpoints.get(
-                endpoint.config.metrics_source,
-                endpoint)
+            endpoint_uuid = self._endpoint_names.get(
+                endpoint.config.metrics_source)
+            if endpoint_uuid is not None:
+                endpoint = self._endpoint_data.get(
+                    endpoint_uuid, endpoint)
 
         endpoint_active_ips = endpoint.active_ips()
         endpoint_inactive_ips = endpoint.inactive_ips()
@@ -833,25 +858,25 @@ class ScaleManager(AtomicRunnable):
 
     def _find_endpoint(self, ip):
         # Try looking it up.
-        endpoint_name = self.endpoint_ips.get(ip)
-        if endpoint_name is not None:
-            return endpoint_name
+        endpoint_uuid = self.endpoint_ips.get(ip)
+        if endpoint_uuid is not None:
+            return endpoint_uuid
 
         # If there a port that we should strip?
         if ":" in ip:
             ip = ip.split(":", 1)[0]
-            endpoint_name = self.endpoint_ips.get(ip)
-            if endpoint_name is not None:
-                return endpoint_name
+            endpoint_uuid = self.endpoint_ips.get(ip)
+            if endpoint_uuid is not None:
+                return endpoint_uuid
 
         # Try static addresses.
         # NOTE: This isn't really safe, it's more of
         # a best guess. This is why we return None if
         # we've got multiple matches.
         static_matches = []
-        for (name, endpoint) in self._endpoints.items():
+        for (endpoint_uuid, endpoint) in self._endpoint_data.items():
             if ip in endpoint.config.static_ips():
-                static_matches.append(name)
+                static_matches.append(endpoint_uuid)
         if len(static_matches) == 1:
             return static_matches[0]
         elif len(static_matches) > 1:
@@ -871,18 +896,18 @@ class ScaleManager(AtomicRunnable):
             # For each session,
             for backend, clients in sessions.items():
                 # Look up the endpoint.
-                endpoint_name = self._find_endpoint(backend)
+                endpoint_uuid = self._find_endpoint(backend)
 
                 # If no endpoint,
-                if not endpoint_name:
+                if not endpoint_uuid:
                     continue
 
                 # Match it to all endpoints.
-                endpoint_sessions = my_sessions.get(endpoint_name, {})
+                endpoint_sessions = my_sessions.get(endpoint_uuid, {})
                 for client in clients:
                     # Add to the sesssions list.
                     endpoint_sessions[client] = backend
-                    my_sessions[endpoint_name] = endpoint_sessions
+                    my_sessions[endpoint_uuid] = endpoint_sessions
 
         return my_sessions
 
@@ -893,18 +918,18 @@ class ScaleManager(AtomicRunnable):
         old_sessions = self._sessions
 
         # Write out our sessions.
-        for endpoint_name in my_sessions:
-            for (client, backend) in my_sessions[endpoint_name].items():
+        for endpoint_uuid in my_sessions:
+            for (client, backend) in my_sessions[endpoint_uuid].items():
                 if old_sessions.get(client, None) != backend:
-                    endpoint = self._endpoints.get(endpoint_name)
+                    endpoint = self._endpoint_data.get(endpoint_uuid)
                     if endpoint:
                         endpoint.session_opened(client, backend)
 
         # Cull old sessions.
-        for endpoint_name in old_sessions:
-            for (client, backend) in old_sessions[endpoint_name].items():
-                if my_sessions.get(endpoint_name, {}).get(client, None) != backend:
-                    endpoint = self._endpoints.get(endpoint_name)
+        for endpoint_uuid in old_sessions:
+            for (client, backend) in old_sessions[endpoint_uuid].items():
+                if my_sessions.get(endpoint_uuid, {}).get(client, None) != backend:
+                    endpoint = self._endpoint_data.get(endpoint_uuid)
                     if endpoint:
                         endpoint.session_closed(client, backend)
 
@@ -915,17 +940,17 @@ class ScaleManager(AtomicRunnable):
     def check_endpoint_ips(self):
         # Ensure that there are no stale endpoint IPs.
         endpoint_ips = self.endpoint_ips.as_map()
-        for (ip, endpoint_name) in endpoint_ips.items():
-            if not endpoint_name in self._endpoints or \
-               not ip in self._endpoints[endpoint_name].endpoint_ips():
+        for (ip, endpoint_uuid) in endpoint_ips.items():
+            if not endpoint_uuid in self._endpoint_data or \
+               not ip in self._endpoint_data[endpoint_uuid].endpoint_ips():
                 self.endpoint_ips.remove(ip)
 
         # Ensure existing endpoints are correctly represented.
-        for (endpoint_name, endpoint) in self._endpoints.items():
+        for (endpoint_uuid, endpoint) in self._endpoint_data.items():
             ips = endpoint.endpoint_ips()
             for ip in ips:
-                if not endpoint_ips.get(ip) == endpoint_name:
-                    self.endpoint_ips.add(ip, endpoint_name)
+                if not endpoint_ips.get(ip) == endpoint_uuid:
+                    self.endpoint_ips.add(ip, endpoint_uuid)
 
     def update(self, elapsed=None):
         # Update the list of sessions.
@@ -949,7 +974,7 @@ class ScaleManager(AtomicRunnable):
         total_active = 0
 
         # Does a health check on all the endpoints that are being managed.
-        for (name, endpoint) in self._endpoints.items():
+        for (endpoint_uuid, endpoint) in self._endpoint_data.items():
 
             # Check ownership for the healthcheck.
             owned = self.endpoint_owned(endpoint)
@@ -957,9 +982,17 @@ class ScaleManager(AtomicRunnable):
             # Drop any sessions indicated by manager.
             endpoint.drop_sessions(authoritative=owned)
 
+            # Grab all names.
+            endpoint_names = [
+                endpoint_name
+                for (endpoint_name, other_uuid)
+                in self._endpoint_names.items()
+                if endpoint_uuid == other_uuid
+            ]
+
             # Do not kick the endpoint if it is not currently owned by us.
             if not(owned):
-                self.logging.info(self.logging.ENDPOINT_SKIPPED, name)
+                self.logging.info(self.logging.ENDPOINT_SKIPPED, endpoint_names)
                 continue
 
             metrics, metric_ports, active_ports = \
@@ -980,21 +1013,22 @@ class ScaleManager(AtomicRunnable):
                     metrics["pending"] = metrics["pending"] / len(metric_ports)
 
             # Do the endpoint update.
-            update_jobs[name] = self._threadpool.submit(
+            job = self._threadpool.submit(
                 endpoint.update,
                 metrics=metrics,
                 metric_instances=len(metric_ports),
                 active_ports=active_ports,
                 update_interval=elapsed)
+            update_jobs[endpoint_uuid] = (endpoint_names, job)
 
         # Wait for all updates to finish.
-        for (name, job) in update_jobs.items():
+        for (endpoint_uuid, (endpoint_names, job)) in update_jobs.items():
             try:
                 job.join()
-                self.logging.info(self.logging.ENDPOINT_UPDATED, name)
+                self.logging.info(self.logging.ENDPOINT_UPDATED, endpoint_names)
             except Exception:
                 error = traceback.format_exc()
-                self.logging.warn(self.logging.ENDPOINT_ERROR, name, error)
+                self.logging.warn(self.logging.ENDPOINT_ERROR, endpoint_names, error)
 
         # Return the total active connections.
         return total_active

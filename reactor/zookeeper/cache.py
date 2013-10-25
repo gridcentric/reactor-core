@@ -16,8 +16,6 @@
 from reactor import utils
 from reactor.atomic import Atomic
 
-from . objects import Collection
-
 class Cache(Atomic):
 
     def __init__(self, zkobj, populate=None, update=None):
@@ -41,13 +39,14 @@ class Cache(Atomic):
         else:
             self._update_hook = utils.callback(update)
 
-        # NOTE: We require that this object is a zookeeper
-        # collection object. Past this point, it's safe to
-        # copy the add(), remove() methods to ourselves.
-        assert isinstance(zkobj, Collection)
-        self.add = zkobj.add
-        self.remove = zkobj.remove
-        self.as_map = zkobj.as_map
+        # NOTE: We provide some convenience methods
+        # here if this happens to be a collection.
+        if hasattr(zkobj, 'add'):
+            self.add = zkobj.add
+        if hasattr(zkobj, 'remove'):
+            self.remove = zkobj.remove
+        if hasattr(zkobj, 'as_map'):
+            self.as_map = zkobj.as_map
         self._get_child = zkobj._get_child
 
         # Start the watch.
@@ -104,6 +103,9 @@ class Cache(Atomic):
     def update(self, values):
         if self._update(values):
             self._update_hook()
+
+    def clear(self):
+        self._update([])
 
     def _default_update_hook(self):
         pass

@@ -42,7 +42,7 @@ max-returns=12
 max-branchs=30
 max-statements=100
 max-parents=7
-max-attributes=25
+max-attributes=30
 min-public-methods=0
 max-public-methods=100
 

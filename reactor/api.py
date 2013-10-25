@@ -38,6 +38,7 @@ from . objects.root import Reactor
 from . objects.endpoint import EndpointNotFound
 from . zookeeper.connection import ZookeeperException
 from . zookeeper.client import ZookeeperClient
+from . zookeeper.cache import Cache
 
 def authorized(forbidden_view=None, allow_endpoint=False):
     """
@@ -119,6 +120,8 @@ class ReactorApi(AtomicRunnable):
         self.zkobj = Reactor(self.client)
         self.config = Configurator()
         self._extensions = []
+        self._lookup_cache = None
+        self._endpoints_zkobj = self.zkobj.endpoints()
 
         # Set up auth-ticket authentication.
         self.config.set_authentication_policy(
@@ -237,6 +240,7 @@ class ReactorApi(AtomicRunnable):
         self._extensions.append(extension_class(self))
 
     def disconnect(self):
+        self._lookup_cache = None
         self.client.disconnect()
 
     def reconnect(self, zk_servers):
@@ -244,6 +248,24 @@ class ReactorApi(AtomicRunnable):
 
     def connect(self):
         self.client.connect()
+        self._lookup_cache = Cache(
+            self.zkobj.endpoint_ips(),
+            populate=self._endpoint_name_for_ip)
+        self._endpoints_zkobj.list(watch=self._endpoint_names_purge)
+
+    def _endpoint_name_for_ip(self, ip):
+        uuid = self.zkobj.endpoint_ips().get(ip)
+        if uuid:
+            endpoint_names = self.zkobj.endpoints().get_names(uuid)
+            if endpoint_names and len(endpoint_names) > 0:
+                return endpoint_names[0]
+        return None
+
+    def _endpoint_names_purge(self, endpoints=None):
+        # Regardless of the currently available endpoints,
+        # we purge all cached IPs values. Things may have
+        # changed UUID, or become invalidated in other ways.
+        self._lookup_cache.clear()
 
     def servers(self):
         return self.client.servers()
@@ -277,8 +299,8 @@ class ReactorApi(AtomicRunnable):
             auth_hash = self._create_admin_auth_token(self._req_get_auth_key(request))
             return (self.zkobj.auth_hash == auth_hash)
         else:
-            # If there is no auth hash then authentication has not been turned
-            # on so all requests are allowed by default.
+            # If there is no auth hash then authentication has not
+            # been turned on so all requests are allowed by default.
             return True
 
     def _req_get_auth_key(self, request):
@@ -299,14 +321,14 @@ class ReactorApi(AtomicRunnable):
                 # address -- this is for security reasons. You can't add
                 # arbitrary IPs to your endpoint by simply changing your
                 # configuration.
-                endpoint_name = self.zkobj.endpoint_ips().get(endpoint_ip)
+                endpoint_name = self._lookup_cache.get(endpoint_ip)
 
         if endpoint_name is None:
             return False
 
         # Parse authentication details.
-        config = self.zkobj.endpoints().get(endpoint_name).get_config()
-        endpoint_config = EndpointConfig(values=config)
+        endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
+        endpoint_config = EndpointConfig(values=endpoint.get_config())
         auth_hash, auth_salt, auth_algo = \
             endpoint_config.endpoint_auth()
 
@@ -359,8 +381,8 @@ class ReactorApi(AtomicRunnable):
                 # we will update the request to confine it to the endpoint with
                 # this address.
                 request_ip = self._extract_remote_ip(context, request)
-                endpoint_name = self.zkobj.endpoint_ips().get(request_ip)
-                if endpoint_name is not None:
+                endpoint_name = self._lookup_cache.get(request_ip)
+                if endpoint_name:
                     # Authorize this request and set the endpoint_name.
                     request.matchdict['endpoint_name'] = endpoint_name
                     request.matchdict['endpoint_ip'] = request_ip
@@ -596,7 +618,7 @@ class ReactorApi(AtomicRunnable):
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
-            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             return Response(body=json.dumps(endpoint.get_config()))
 
         elif request.method == "POST" or request.method == "PUT":
@@ -648,7 +670,7 @@ class ReactorApi(AtomicRunnable):
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
-            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             state = endpoint.state().current()
             active = endpoint.active
             manager = endpoint.manager
@@ -661,7 +683,7 @@ class ReactorApi(AtomicRunnable):
 
         elif request.method == "POST" or request.method == "PUT":
             state_action = json.loads(request.body)
-            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             endpoint.state().action(state_action.get('action'))
             return Response()
 
@@ -681,11 +703,11 @@ class ReactorApi(AtomicRunnable):
         endpoint_ip = request.matchdict.get('endpoint_ip', None)
 
         if request.method == "GET":
-            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             return Response(body=json.dumps(endpoint.metrics or {}))
 
         elif request.method == "POST" or request.method == "PUT":
-            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             metrics = json.loads(request.body)
             if endpoint_ip is not None:
                 ip_metrics = endpoint.ip_metrics()
@@ -704,7 +726,7 @@ class ReactorApi(AtomicRunnable):
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
-            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             return Response(body=json.dumps(endpoint.confirmed_ips().list()))
         else:
             return Response(status=403)
@@ -798,8 +820,8 @@ class ReactorApi(AtomicRunnable):
         if request.method == "POST" or request.method == "PUT":
             level = request.params.get('level', None)
             message = str(json.loads(request.body))
-            endpoint_log = EndpointLog(
-                self.zkobj.endpoints().get(endpoint_name).log())
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
+            endpoint_log = EndpointLog(endpoint.log())
             endpoint_log.post(message, level=level)
             return Response()
 
@@ -810,8 +832,8 @@ class ReactorApi(AtomicRunnable):
                     since = float(since)
                 except ValueError:
                     since = None
-            endpoint_log = EndpointLog(
-                self.zkobj.endpoints().get(endpoint_name).log())
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
+            endpoint_log = EndpointLog(endpoint.log())
             return Response(body=json.dumps(endpoint_log.get(since=since)))
         else:
             return Response(status=403)
@@ -826,7 +848,7 @@ class ReactorApi(AtomicRunnable):
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
-            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             return Response(body=json.dumps(endpoint.instance_map()))
         else:
             return Response(status=403)
@@ -842,12 +864,12 @@ class ReactorApi(AtomicRunnable):
         instance_id = request.matchdict['instance_id']
 
         if request.method == "POST" or request.method == "PUT":
-            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             endpoint.associate(instance_id)
             return Response()
 
         elif request.method == "DELETE":
-            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             endpoint.disassociate(instance_id)
             return Response()
         else:
@@ -863,7 +885,7 @@ class ReactorApi(AtomicRunnable):
         endpoint_name = request.matchdict['endpoint_name']
 
         if request.method == "GET":
-            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             return Response(body=json.dumps(endpoint.sessions().active_map()))
         else:
             return Response(status=403)
@@ -879,11 +901,11 @@ class ReactorApi(AtomicRunnable):
         session = request.matchdict['session']
 
         if request.method == "GET":
-            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             return Response(body=json.dumps(endpoint.sessions().backend(session)))
 
         elif request.method == "DELETE":
-            endpoint = self.zkobj.endpoints().get(endpoint_name)
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             endpoint.sessions().drop(session)
             return Response()
         else:
