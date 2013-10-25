@@ -74,9 +74,14 @@ class BaseOsEndpointConfig(Config):
     def __init__(self, *args, **kwargs):
         super(BaseOsEndpointConfig, self).__init__(*args, **kwargs)
 
+        # Last refresh for the cache.
+        self._last_refresh = None
+
         # Initialize our list cache.
         self._list_cache = []
-        self._last_refresh = None
+
+        # Initialize our floating IP cache.
+        self._float_cache = {}
 
     # Common authentication elements.
     auth_url = Config.string(label="OpenStack Auth URL",
@@ -124,6 +129,10 @@ class BaseOsEndpointConfig(Config):
         default=False, order=7,
         description="Use only instances that match image, flavor, etc.")
 
+    floating_ips = Config.list(label="Floating IPs",
+        order=7, validate=lambda self: self.validate_floating_ips(),
+        description="Floating IPs to distribute.")
+
     def novaclient(self):
         if self._client is None:
             extensions = shell.OpenStackComputeShell()._discover_extensions("1.1")
@@ -152,6 +161,17 @@ class BaseOsEndpointConfig(Config):
                 return False
         return True
 
+    def validate_floating_ips(self):
+        if self.validate_connection_params(False):
+            avail = map(lambda x: x._info['ip'], self.novaclient().floating_ips.list())
+            bad_ips = list(set(self.floating_ips).difference(set(avail)))
+            if len(bad_ips) > 0:
+                Config.error("Floating IPs not found: %s" % str(bad_ips))
+            return True
+        else:
+            # Can't connect to cloud, ignore this param for now
+            return True
+
 class BaseOsConnection(CloudConnection):
 
     _ENDPOINT_CONFIG_CLASS = BaseOsEndpointConfig
@@ -166,6 +186,17 @@ class BaseOsConnection(CloudConnection):
         (This is implemented by the different subclasses).
         """
         raise NotImplementedError()
+
+    def _refresh_floating_ips(self, config):
+        """
+        Refresh the mapping of floating IPs.
+        """
+        config._float_cache = {}
+        for floating_ip in config.novaclient().floating_ips.list():
+            ip = getattr(floating_ip, 'ip')
+            instance_id = getattr(floating_ip, 'instance_id')
+            if instance_id is not None:
+                config._float_cache[instance_id] = ip
 
     def list_instances(self, config, instance_id=None):
         """
@@ -185,6 +216,8 @@ class BaseOsConnection(CloudConnection):
         else:
             instances = self._list_instances(config, None)
             config._list_cache = instances
+            if config.floating_ips:
+                self._refresh_floating_ips(config)
             config._last_refresh = time.time()
 
         instances = sorted(instances, key=lambda x: x._info.get("created", ""))
@@ -318,6 +351,64 @@ class BaseOsConnection(CloudConnection):
         # update and get the latest available data.
         config = self._endpoint_config(config)
         config._last_refresh = None
+
+    def rebalance(self, config, instance_ids):
+        if len(instance_ids) == 0:
+            return
+
+        # Ensure that all floating IPs are spread
+        # across the set of listed instance_ids.
+        config = self._endpoint_config(config)
+        if not config.floating_ips:
+            return
+
+        # Collect all the currently distributed floating
+        # IPs. The floating cache is indexed by instance.
+        assigned = []
+        to_remove = {}
+        free_instances = []
+
+        # Collect all IPs that are assigned.
+        for (instance_id, ip) in config._float_cache.items():
+            if instance_id in instance_ids:
+                assigned.append(ip)
+            else:
+                to_remove[instance_id] = ip
+
+        # Collect all instances that are free.
+        for instance_id in instance_ids:
+            if not instance_id in config._float_cache:
+                free_instances.append(instance_id)
+
+        # Remove all IPs that are not assigned to
+        # instances in the set above (or are free).
+        for (instance_id, ip) in to_remove.items():
+            try:
+                server = config.novaclient().servers.get(instance_id)
+                server.remove_floating_ip(ip)
+            except novaclient.exceptions.NotFound:
+                # If the server no longer exists,
+                # then the IPs have been disassociated.
+                pass
+
+        # Balance the remaining floating IPs.
+        for ip in config.floating_ips:
+            if ip in assigned:
+                continue
+
+            elif len(free_instances) > 0:
+                # Associate this IP.
+                target_id = free_instances.pop()
+                config.novaclient().servers.get(target_id).add_floating_ip(ip)
+
+                # Account for it.
+                config._float_cache[target_id] = ip
+                assigned.append(ip)
+            else:
+                # No more instances, unfortunately
+                # we'll just need to bring some back
+                # or maintain a bigger pool ...
+                break
 
 class OsApiEndpointConfig(BaseOsEndpointConfig):
 

@@ -48,6 +48,14 @@ class CloudConnection(Connection):
         """
         return []
 
+    def rebalance(self, config, instance_ids):
+        """
+        Called to rebalance any floating resources over this set of instances.
+        This is called when decommissioned instances, or when new instances
+        have become active.
+        """
+        pass
+
     def start_instance(self, config, params=None):
         """
         Starts a new instance in the cloud using the endpoint.

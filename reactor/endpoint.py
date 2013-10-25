@@ -243,6 +243,8 @@ class EndpointLog(EventLog):
         lambda args: "Deleting instance with IP %s." % _as_ip(args[0]))
     DELETE_FAILURE = Event(
         lambda args: "Failure deleting instance with IP %s." % _as_ip(args[0]))
+    REBALANCE_FAILURE = Event(
+        lambda args: "Failure rebalancing instances: %s" % args[0])
     CONFIRM_IP = Event(
         lambda args: "Confirmed instance with IP %s (%s)." %
             (_as_ip(args[0]), len(args) > 1 and args[1] or "unknown"))
@@ -552,6 +554,24 @@ class Endpoint(Atomic):
             # Take all the instances that we can.
             to_do = min(len(candidates), ramp_limit, num_instances - target)
             self._decommission_instances(candidates[:to_do])
+            for candidate in candidates[:to_do]:
+                instances.remove(candidate)
+
+        try:
+            # Try to rebalance all active instances.
+            # NOTE: This will take into account instances above
+            # that have been decommissioned, but having this rebalance
+            # here means that instances that come up will not *immediately*
+            # have floating IPs associated with them. That's okay. This
+            # is not intended to be an ideal load balancing solution, but
+            # is instead designed for slow-to-scale services -- as it's
+            # basically impossible to reason about active connections when
+            # you move around floating IPs (i.e. what balance() does).
+            cloud_conn = self._find_cloud_connection(self.config.cloud)
+            if cloud_conn is not None:
+                cloud_conn.rebalance(self.config, instances)
+        except Exception, e:
+            self.logging.warn(self.logging.REBALANCE_FAILURE, str(e))
 
     def session_opened(self, client, backend):
         self.zkobj.sessions().opened(client, backend)
