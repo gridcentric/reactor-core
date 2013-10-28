@@ -640,6 +640,13 @@ class ScaleManager(Atomic):
 
     @Atomic.sync
     def collect(self, endpoint, exclude=False):
+        # Remap the endpoint if a different instances_source
+        # has been specified here. If this is *not* a valid
+        # endpoint then we will fall back to using this endpoint.
+        if endpoint.config.instances_source:
+            endpoint = self._endpoints.get(
+                endpoint.config.instances_source,
+                endpoint)
         key = endpoint.key()
 
         # Map through all endpoints.
@@ -768,6 +775,14 @@ class ScaleManager(Atomic):
         def _ips_to_ports(ips):
             # Return a list that has the configured port added for all entries.
             return map(lambda x: x if ":" in x else "%s:%d" % (x, endpoint.config.port), ips)
+
+        # Remap the endpoint if a different metrics_source
+        # has been specified here. If this is *not* a valid
+        # endpoint then we will fall back to using this endpoint.
+        if endpoint.config.metrics_source:
+            endpoint = self._endpoints.get(
+                endpoint.config.metrics_source,
+                endpoint)
 
         endpoint_active_ips = endpoint.active_ips()
         endpoint_inactive_ips = endpoint.inactive_ips()

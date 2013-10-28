@@ -32,13 +32,6 @@ def test_key(endpoint):
     assert key3
     assert key1 == key3
 
-def test_metric_key(endpoint):
-    assert endpoint.key() == endpoint.metric_key()
-    endpoint.scaling.url = "http://different"
-    assert endpoint.key() != endpoint.metric_key()
-    endpoint.config.url = endpoint.scaling.url
-    assert endpoint.key() == endpoint.metric_key()
-
 def test_managed(reactor, endpoint):
     def _assert_manager(is_value):
         managers = map(
