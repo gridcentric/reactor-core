@@ -40,6 +40,25 @@ class ZookeeperObject(object):
     def __del__(self):
         self._unwatch()
 
+    def _dump(self, indent=None, clazz=None):
+        if indent is None:
+            indent = ""
+
+        try:
+            data = self._get_data()
+        except (AssertionError, Exception):
+            data = None
+
+        if data is None:
+            sys.stdout.write("%s%s\n" % (indent, self._path))
+        else:
+            sys.stdout.write("%s%s -> %s\n" % (indent, self._path, data))
+
+        children = self._list_children()
+        for child in children:
+            node = self._get_child(child, clazz=clazz)
+            node._dump(indent=indent+"  ")
+
     def _unwatch(self):
         client = self._zk_client.connect()
         with self._lock:
@@ -96,9 +115,9 @@ class ZookeeperObject(object):
 
     def _get_child(self, child, clazz=None):
         if clazz is None:
-            return self.__class__(self._zk_client, os.path.join(self._path, child))
+            return self.__class__(self._zk_client, path=os.path.join(self._path, child))
         else:
-            return clazz(self._zk_client, os.path.join(self._path, child))
+            return clazz(self._zk_client, path=os.path.join(self._path, child))
 
     def _delete(self):
         client = self._zk_client.connect()

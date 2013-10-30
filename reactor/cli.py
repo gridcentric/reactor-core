@@ -337,6 +337,14 @@ def main():
             for server in zk_servers:
                 print server
 
+        elif command == "zk_dump":
+            from . zookeeper.client import ZookeeperClient
+            from . objects.root import Reactor
+
+            client = ZookeeperClient(zk_servers)
+            root = Reactor(client)
+            root.dump()
+
         elif command == "manage":
             if len(args) > 1:
                 endpoint_name = get_arg(1)

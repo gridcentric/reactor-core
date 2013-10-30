@@ -107,3 +107,6 @@ class Reactor(DatalessObject):
 
     def new_ips(self):
         return self._get_child(NEW_IPS, clazz=ip_address.IPAddresses)
+
+    def dump(self):
+        self._dump(clazz=RawObject)

@@ -307,3 +307,4 @@ def _sync():
     # This exists to faciliate testing and is not part
     # of the standard zookeeper interface.
     TASKS.join()
+    dump()
