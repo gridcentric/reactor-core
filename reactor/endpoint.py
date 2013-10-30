@@ -25,7 +25,6 @@ from . config import Config
 from . submodules import cloud_submodules, cloud_options
 from . submodules import loadbalancer_submodules, loadbalancer_options
 from . eventlog import EventLog, Event
-from . utils import sha_hash
 from . cloud import connection as cloud_connection
 from . cloud import instance as cloud_instance
 from . loadbalancer import connection as lb_connection
@@ -349,11 +348,11 @@ class Endpoint(Atomic):
         # different loadbalancers without a URL, we will
         # hash the loadbalancer name if no URL is provided.
         if self.config.url:
-            return sha_hash(self.config.url)
+            return utils.sha_hash(self.config.url)
         elif self.config.loadbalancer:
-            return sha_hash(self.config.loadbalancer)
+            return utils.sha_hash(self.config.loadbalancer)
         else:
-            return sha_hash("")
+            return utils.sha_hash("")
 
     def managed(self, uuid):
         # Mark that this is our manager.
