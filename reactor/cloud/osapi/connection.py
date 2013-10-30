@@ -312,6 +312,13 @@ class BaseOsConnection(CloudConnection):
         config = self._endpoint_config(config)
         config._last_refresh = None
 
+    def reset_caches(self, config):
+        # Just reset the refresh cache, so that the
+        # next calls to list_instances will do a real
+        # update and get the latest available data.
+        config = self._endpoint_config(config)
+        config._last_refresh = None
+
 class OsApiEndpointConfig(BaseOsEndpointConfig):
 
     instance_name = Config.string(label="Instance Name", order=2,

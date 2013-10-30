@@ -73,19 +73,25 @@ class EndpointConfig(Config):
         default=1, order=2,
         validate=lambda self: self.error_marks >= 0 or \
             Config.error("Errors must be non-negative."),
-        description="Maximum error count for active VMs.")
+        description="Maximum error count for active instances.")
 
     unregistered_timeout = Config.integer(label="Unregistered Timeout (s)",
         default=36, order=2,
         validate=lambda self: self.unregistered_timeout > 0 or \
             Config.error("Timeout must be positive."),
-        description="Timeout for unregistered VMs.")
+        description="Timeout for unregistered instances.")
 
     decommissioned_timeout = Config.integer(label="Decommissioned Timeout (s)",
         default=18, order=2,
         validate=lambda self: self.decommissioned_timeout > 0 or \
             Config.error("Timeout must be positive."),
-        description="Timeout for decomissioned VMs.")
+        description="Timeout for decomissioned instances.")
+
+    unknown_timeout = Config.integer(label="Unknown Timeout (s)",
+        default=36, order=2,
+        validate=lambda self: self.unknown_timeout > 0 or \
+            Config.error("Timeout must be positive."),
+        description="Timeout for unknown instances.")
 
     auth_hash = Config.string(label="Auth Hash Token", default=None, order=3,
         description="The authentication token for this endpoint.")
@@ -284,7 +290,7 @@ class Endpoint(Atomic):
         self.scaling = ScalingConfig()
 
         # Instances is a cache which maps instances to their names.
-        self.instances = Cache(self.zkobj.instances())
+        self.instances = Cache(self.zkobj.instances(), update=self._clear_cloud_cache)
 
         # Instance IPs is a separate cache which maps to the cloud IP address.
         self.instance_ips = Cache(self.zkobj.instances(), populate=self._ips_for_instance)
@@ -307,6 +313,18 @@ class Endpoint(Atomic):
 
         # Start watching our state.
         self.update_state(self.zkobj.state().current(watch=self.update_state))
+
+    # This method will simply reset any caching on the cloud
+    # connection. It may interfere with our ability to query
+    # new instances that have appeared (or disappeared).
+    def _clear_cloud_cache(self):
+        # Grab our currect cloud connection.
+        cloud_conn = self._find_cloud_connection(self.config.cloud)
+        if cloud_conn is None:
+            return
+
+        # Cloud any caching on the cloud connection.
+        cloud_conn.reset_caches(self.config)
 
     # This method is a simple method used for populating our
     # instance IP cache. All the cached (decommissioned instances,
@@ -833,16 +851,20 @@ class Endpoint(Atomic):
         # scale data, which may result in clogging up Zookeeper.
         # (The internet is a series of tubes).
         for instance_id in self.instances.list():
-            if not(instance_id in instance_ids):
+            if not(instance_id in instance_ids) and \
+               self._mark_instance(instance_id, 'unknown', marks=update_interval):
                 self._clean_instance(instance_id)
         for instance_id in self.decommissioned.list():
-            if not(instance_id in instance_ids):
+            if not(instance_id in instance_ids) and \
+               self._mark_instance(instance_id, 'unknown', marks=update_interval):
                 self._clean_instance(instance_id, decommissioned=True)
         for instance_id in self.errored.list():
-            if not(instance_id in instance_ids):
+            if not(instance_id in instance_ids) and \
+               self._mark_instance(instance_id, 'unknown', marks=update_interval):
                 self._clean_instance(instance_id, errored=True)
         for instance_id in self.zkobj.marked_instances().list():
-            if not(instance_id in instance_ids):
+            if not(instance_id in instance_ids) and \
+               self._mark_instance(instance_id, 'unknown', marks=update_interval):
                 self.zkobj.marked_instances().remove(instance_id)
 
         # There are the confirmed ips that are actually associated with an
@@ -1008,6 +1030,7 @@ class Endpoint(Atomic):
         mark_counter += marks
 
         max_counter = {
+            "unknown": self.config.unknown_timeout,
             "unregistered": self.config.unregistered_timeout,
             "decommissioned": self.config.decommissioned_timeout,
             "error": self.config.error_marks,

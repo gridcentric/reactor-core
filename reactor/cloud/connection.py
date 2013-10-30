@@ -60,3 +60,9 @@ class CloudConnection(Connection):
         Remove the instance from the cloud.
         """
         raise NotImplementedError()
+
+    def reset_caches(self):
+        """
+        Reset any caching, we want to see fresh instances.
+        """
+        pass
