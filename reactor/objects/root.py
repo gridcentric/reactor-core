@@ -80,7 +80,7 @@ class URLObject(RawObject):
 class Reactor(DatalessObject):
 
     def __init__(self, client, path=REACTOR):
-        super(Reactor, self).__init__(client, path=REACTOR)
+        super(Reactor, self).__init__(client, path=path)
 
     auth_hash = attr(AUTH_HASH, clazz=JSONObject)
 
