@@ -28,6 +28,7 @@ from pyramid.authorization import ACLAuthorizationPolicy
 from . import utils
 from . import ips as ips_mod
 from . log import log
+from . atomic import AtomicRunnable
 from . config import fromstr
 from . manager import ManagerConfig
 from . manager import ManagerLog
@@ -108,7 +109,7 @@ def connected(fn):
     wrapper_fn.__doc__ = fn.__doc__
     return wrapper_fn
 
-class ReactorApi(object):
+class ReactorApi(AtomicRunnable):
 
     AUTH_SALT = 'gridcentricreactor'
 
@@ -238,11 +239,35 @@ class ReactorApi(object):
     def disconnect(self):
         self.client.disconnect()
 
+    def reconnect(self, zk_servers):
+        self.client.reconnect(zk_servers)
+
     def connect(self):
         self.client.connect()
 
+    def servers(self):
+        return self.client.servers()
+
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
+
+    def run(self, **kwargs):
+        for ext in self._extensions:
+            ext.start()
+
+        # NOTE: For whatever annoying reason,
+        # serve() will catch keyboard interrupts
+        # and not raise them further. So, we have
+        # to take the end of the function as the
+        # sign that we should stop running.
+        app = self.get_wsgi_app()
+        from paste.httpserver import serve
+        serve(app, **kwargs)
+
+    def stop(self):
+        for ext in self._extensions:
+            ext.stop()
+        super(ReactorApi, self).stop()
 
     @connected
     def authorize_admin_access(self, context, request):
@@ -899,3 +924,9 @@ class ReactorApiMixin(object):
         for attr in dir(api):
             if not attr.startswith('__') and not hasattr(self, attr):
                 setattr(self, attr, getattr(api, attr))
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass

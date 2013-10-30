@@ -19,13 +19,14 @@ import shutil
 import glob
 import re
 import time
-import threading
 import logging
 import subprocess
 import tempfile
 
 from mako.template import Template
 
+from reactor.atomic import Atomic
+from reactor.atomic import AtomicRunnable
 from reactor.config import Config
 from reactor.utils import sha_hash
 from reactor.loadbalancer.utils import read_pid
@@ -79,40 +80,39 @@ class NginxLogReader(object):
 
         return line
 
-class NginxLogWatcher(threading.Thread):
+class NginxLogWatcher(AtomicRunnable):
     """
     This will monitor the nginx access log.
     """
+
+    LOG_FILTER = "reactor> " \
+               + "\[([^\]]*)\]" \
+               + "[^<]*" \
+               + "<([^>]*?)>" \
+               + "[^<]*" \
+               + "<([^>]*?)>" \
+               + "[^<]*" \
+               + "<([^>]*?)>" \
+               + ".*"
+
     def __init__(self, access_logfile):
         super(NginxLogWatcher, self).__init__()
-        self.daemon = True
-        log_filter = "reactor> " \
-                   + "\[([^\]]*)\]" \
-                   + "[^<]*" \
-                   + "<([^>]*?)>" \
-                   + "[^<]*" \
-                   + "<([^>]*?)>" \
-                   + "[^<]*" \
-                   + "<([^>]*?)>" \
-                   + ".*"
-        self.log = NginxLogReader(access_logfile, log_filter=log_filter)
-        self.execute = True
-        self.lock = threading.Lock()
+        self.log = NginxLogReader(access_logfile, log_filter=self.LOG_FILTER)
         self.last_update = time.time()
         self.record = {}
 
-    def stop(self):
-        self.execute = False
-
-    def pull(self):
+    @Atomic.sync
+    def swap(self):
         # Swap out the records.
-        self.lock.acquire()
         now = time.time()
         delta = now - self.last_update
         self.last_update = now
-        record = self.record
+        cur = self.record
         self.record = {}
-        self.lock.release()
+        return (cur, delta)
+
+    def pull(self):
+        (record, delta) = self.swap()
 
         # Compute the response times.
         for host in record:
@@ -127,16 +127,16 @@ class NginxLogWatcher(threading.Thread):
 
         return record
 
+    @Atomic.sync
     def run(self):
-        while self.execute:
+        while self.is_running():
             line = self.log.nextline()
             if not(line):
                 # No updates.
-                time.sleep(1.0)
+                self._wait(1.0)
             else:
                 # We have some information.
                 (_, host, body, response) = line
-                self.lock.acquire()
                 try:
                     if not(host in self.record):
                         self.record[host] = [0, 0, 0.0]
@@ -145,8 +145,6 @@ class NginxLogWatcher(threading.Thread):
                     self.record[host][2] += float(response)
                 except ValueError:
                     continue
-                finally:
-                    self.lock.release()
 
 class NginxManagerConfig(Config):
 

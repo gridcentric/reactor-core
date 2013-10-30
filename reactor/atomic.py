@@ -25,15 +25,15 @@ class Atomic(object):
     A simple mixin-type class, which provides basic synchronization.
     """
 
-    def __init__(self):
-        super(Atomic, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(Atomic, self).__init__(*args, **kwargs)
         self._cond = threading.Condition()
 
     def _notify(self):
         self._cond.notify()
 
-    def _wait(self):
-        self._cond.wait()
+    def _wait(self, timeout=None):
+        self._cond.wait(timeout=timeout)
 
     @staticmethod
     def sync(fn):
@@ -46,3 +46,22 @@ class Atomic(object):
         wrapper_fn.__name__ = fn.__name__
         wrapper_fn.__doc__ = fn.__doc__
         return wrapper_fn
+
+class AtomicRunnable(threading.Thread, Atomic):
+
+    def __init__(self, *args, **kwargs):
+        threading.Thread.__init__(self)
+        Atomic.__init__(self, *args, **kwargs)
+        self._running = True
+
+    @Atomic.sync
+    def is_running(self):
+        return self._running
+
+    @Atomic.sync
+    def stop(self):
+        self._running = False
+        self._notify()
+
+    def run(self, *args, **kwargs):
+        raise NotImplementedError()

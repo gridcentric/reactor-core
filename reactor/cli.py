@@ -299,27 +299,19 @@ def main():
         return args[n]
     def get_args():
         return args[1:]
-    def ready():
+
+    def server_ready():
         log.configure(loglevel, logfile)
         if pidfile:
             daemonize(pidfile)
 
-    command = get_arg(0)
 
     def get_api_client():
+        # Grab the client.
         from reactor.apiclient import ReactorApiClient
         return ReactorApiClient(api_server, password)
 
-    def get_api():
-        from reactor.api import ReactorApi
-        api = ReactorApi(zk_servers)
-        if cluster:
-            from . cluster import ClusterMixin
-            api.extend(ClusterMixin)
-        if gui:
-            from . gui import GuiMixin
-            api.extend(GuiMixin)
-        return api
+    command = get_arg(0)
 
     try:
         if command == "version":
@@ -671,18 +663,27 @@ def main():
 
             from . manager import ScaleManager
             manager = ScaleManager(zk_servers, get_args())
-            ready()
-            manager.run()
+            server_ready()
+            try:
+                manager.run()
+            finally:
+                manager.stop()
 
         elif command == "runapi":
 
-            api = get_api()
-            app = api.get_wsgi_app()
-
-            from paste.httpserver import serve
-            logging.info("Preparing API...")
-            ready()
-            serve(app, host='0.0.0.0', port=DEFAULT_PORT)
+            from reactor.api import ReactorApi
+            api = ReactorApi(zk_servers)
+            if cluster:
+                from . cluster import ClusterMixin
+                api.extend(ClusterMixin)
+            if gui:
+                from . gui import GuiMixin
+                api.extend(GuiMixin)
+            server_ready()
+            try:
+                api.run(host='0.0.0.0', port=DEFAULT_PORT)
+            finally:
+                api.stop()
 
         else:
             usage()

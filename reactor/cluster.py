@@ -17,27 +17,28 @@ import threading
 import traceback
 import logging
 import json
-import time
 
 from pyramid.response import Response
 
 from . import iptables
 from . import ips
+from . atomic import Atomic
+from . atomic import AtomicRunnable
 from . api import connected
 from . api import authorized
 from . api import ReactorApiMixin
 from . manager import ScaleManager
 from . zookeeper import config
 
-class CleanerThread(threading.Thread):
+class CleanerThread(AtomicRunnable):
 
     def __init__(self):
         super(CleanerThread, self).__init__()
         self.daemon = True
-        self.running = True
 
+    @Atomic.sync
     def run(self):
-        while self.running:
+        while self.is_running():
             # Without pruning, the zookeeper snapshots
             # and log files can grow unbounded. It's the
             # admin's responsibility to prune these logs
@@ -46,11 +47,8 @@ class CleanerThread(threading.Thread):
             # other external configs, we call the built-in
             # helper to prune these logs as frequently
             # we reasonably can.
-            time.sleep(60.0)
             config.clean_logs()
-
-    def stop(self):
-        self.running = False
+            self._wait(60.0)
 
 class ClusterMixin(ReactorApiMixin):
 
@@ -64,21 +62,26 @@ class ClusterMixin(ReactorApiMixin):
         self._manager_thread = None
 
         # Add a Zookeeper cleaner.
-        self._cleaner_thread = CleanerThread()
-        self._cleaner_thread.start()
+        self._cleaner_thread = None
 
         # Add route for changing the API servers.
         api.config.add_route('api-servers', '/zk_servers')
         api.config.add_view(self.set_zk_servers, route_name='api-servers')
 
-        # Check that everything is up and running.
-        self.check_zookeeper(api.client.servers())
-        self.check_manager(api.client.servers())
-        logging.info("Cluster ready.")
+    def start(self):
+        # Start the cleaner.
+        self._cleaner_thread = CleanerThread()
+        self._cleaner_thread.start()
 
-    def __del__(self):
+        # Check that everything is up and running.
+        self.check_zookeeper(self.client.servers())
+        self.check_manager(self.client.servers())
+
+    def stop(self):
         self.stop_manager()
-        self._cleaner_thread.stop()
+        if self._cleaner_thread:
+            self._cleaner_thread.stop()
+            self._cleaner_thread = None
 
     @connected
     @authorized()
@@ -94,14 +97,14 @@ class ClusterMixin(ReactorApiMixin):
                 return Response(status=403)
 
             self.check_zookeeper(zk_servers)
-            self.client.reconnect(zk_servers)
+            self.reconnect(zk_servers)
             self.check_manager(zk_servers)
             return Response()
 
         elif request.method == 'GET':
             # Return the current set of API servers.
             return Response(body=json.dumps(
-                { "zk_servers" : self.client.servers() }))
+                { "zk_servers" : self.servers() }))
 
         else:
             return Response(status=403)
@@ -135,7 +138,7 @@ class ClusterMixin(ReactorApiMixin):
 
     def setup_iptables(self, managers, zk_servers=None):
         if zk_servers is None:
-            zk_servers = self.client.servers()
+            zk_servers = self.servers()
         hosts = list(set(managers + zk_servers))
         iptables.setup(hosts)
 

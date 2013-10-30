@@ -13,7 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import threading
 import time
 import uuid
 import bisect
@@ -24,6 +23,7 @@ from . import cli
 from . import ips as ips_mod
 from . import submodules
 from . atomic import Atomic
+from . atomic import AtomicRunnable
 from . config import Config
 from . eventlog import EventLog, Event
 from . zookeeper.client import ZookeeperClient
@@ -128,7 +128,7 @@ class ManagerLog(EventLog):
 # functions. Note to check the full call chain to ensure that a higher level
 # function is not setting the lock.
 
-class ScaleManager(Atomic):
+class ScaleManager(AtomicRunnable):
 
     def __init__(self, zk_servers, names=None):
         super(ScaleManager, self).__init__()
@@ -178,10 +178,6 @@ class ScaleManager(Atomic):
         # via the manager info block (see _register() below). This way,
         # clients can look up the right place for each manager.
         self.logging = ManagerLog(self.zkobj.managers().log(self._ip))
-
-        # Runtime state.
-        self._running = True
-        self._cond = threading.Condition()
 
         # Ppersistent objects.
         self._url_zkobj = self.zkobj.url()
@@ -985,8 +981,17 @@ class ScaleManager(Atomic):
         # Return the total active connections.
         return total_active
 
+    @Atomic.sync
+    def sleep_until(self, until):
+        while self.is_running():
+            cur_time = time.time()
+            if cur_time >= until:
+                break
+            else:
+                self._wait(until-cur_time)
+
     def run(self):
-        while self._running:
+        while self.is_running():
             try:
                 # Reconnect to the Zookeeper servers.
                 self.serve()
@@ -999,7 +1004,7 @@ class ScaleManager(Atomic):
 
                 # Perform continuous health checks.
                 elapsed = None
-                while self._running:
+                while self.is_running():
                     start_time = time.time()
                     self.check_endpoint_ips()
                     self.update(elapsed=elapsed)
@@ -1012,22 +1017,16 @@ class ScaleManager(Atomic):
                     # and we have a few dozens endpoints we could do a
                     # decent job of calling in to each endpoint every ten
                     # seconds.
+                    self.sleep_until(start_time + self.config.interval)
                     elapsed = (time.time() - start_time)
-                    if self._running and elapsed < self.config.interval:
-                        time.sleep(float(self.config.interval) - elapsed)
 
             except ZookeeperException:
                 # Sleep on ZooKeeper exception and retry.
                 error = traceback.format_exc()
                 logging.error("Received ZooKeeper exception: %s", error)
-                if self._running:
-                    time.sleep(self.config.interval)
+                self.sleep_until(time.time() + self.config.interval)
 
         # If we've stopped, make sure we clear out all endpoints.
         # Since we've passed our methods to those objects on creation,
         # there is currently a reference cycle there.
         self.unserve()
-        self.client.disconnect()
-
-    def stop(self):
-        self._running = False

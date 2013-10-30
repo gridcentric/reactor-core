@@ -191,17 +191,9 @@ class ConnectionConsumerTests(unittest.TestCase):
 
     def test_set(self):
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         connection.ConnectionConsumer.set(mock_consumer, FAKE_PORTS)
         self.assertEquals(mock_consumer.portmap, FAKE_PORTS)
-
-    def test_stop(self):
-        mock_producer = mock.Mock(spec=connection.ConnectionProducer)
-        mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
-        mock_consumer.producer = mock_producer
-        connection.ConnectionConsumer.stop(mock_consumer)
-        self.assertFalse(mock_consumer.execute)
 
     def test_handle_exclusive_locked(self):
         mock_accept = mock.Mock(spec=connection.Accept)
@@ -210,9 +202,10 @@ class ConnectionConsumerTests(unittest.TestCase):
         mock_accept.dst = FAKE_SOCKNAME
         mock_accept.redirect.return_value = FAKE_GRANDCHILD_PID
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.locks = mock.Mock()
         mock_consumer.locks.find.return_value = ["%s:%d" % (FAKE_BACKEND_IP, FAKE_PORT)]
+        mock_consumer.error_notify = mock.Mock()
         mock_consumer.portmap = {}
         mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, FAKE_RECONNECT, [FAKE_BACKEND], [])
         mock_consumer.children = {}
@@ -230,10 +223,11 @@ class ConnectionConsumerTests(unittest.TestCase):
         mock_accept.dst = FAKE_SOCKNAME
         mock_accept.redirect.return_value = FAKE_GRANDCHILD_PID
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.locks = mock.Mock()
         mock_consumer.locks.find.return_value = []
         mock_consumer.locks.lock.return_value = FAKE_BACKEND_ID
+        mock_consumer.error_notify = mock.Mock()
         mock_consumer.portmap = {}
         mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, FAKE_RECONNECT, [FAKE_BACKEND], [])
         mock_consumer.children = {}
@@ -249,10 +243,11 @@ class ConnectionConsumerTests(unittest.TestCase):
         mock_accept.src = FAKE_CLIENT_SOCKNAME
         mock_accept.dst = FAKE_SOCKNAME
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.locks = mock.Mock()
         mock_consumer.locks.find.return_value = []
         mock_consumer.locks.lock.return_value = None
+        mock_consumer.error_notify = mock.Mock()
         mock_consumer.portmap = {}
         mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, FAKE_RECONNECT, [FAKE_BACKEND], [])
         mock_consumer.children = {}
@@ -267,10 +262,11 @@ class ConnectionConsumerTests(unittest.TestCase):
         mock_accept.dst = FAKE_SOCKNAME
         mock_accept.redirect.return_value = FAKE_GRANDCHILD_PID
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.portmap = {}
         mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, False, 0, [FAKE_BACKEND], [])
         mock_consumer.children = {}
+        mock_consumer.error_notify = mock.Mock()
         handled = connection.ConnectionConsumer.handle(mock_consumer, mock_accept)
         self.assertTrue(handled)
         self.assertEquals(mock_accept.redirect.call_count, 1)
@@ -283,7 +279,7 @@ class ConnectionConsumerTests(unittest.TestCase):
         mock_accept.src = FAKE_CLIENT_SOCKNAME
         mock_accept.dst = FAKE_SOCKNAME
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.portmap = {}
         mock_consumer.children = {}
         handled = connection.ConnectionConsumer.handle(mock_consumer, mock_accept)
@@ -298,7 +294,7 @@ class ConnectionConsumerTests(unittest.TestCase):
         mock_accept.dst = FAKE_SOCKNAME
         mock_accept.redirect.return_value = None
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.portmap = {}
         mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, False, 0, [FAKE_BACKEND], [])
         mock_consumer.children = {}
@@ -322,14 +318,15 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.src = FAKE_CLIENT_SOCKNAME
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-            mock_consumer.execute = True
+            mock_consumer.is_running.side_effect = True
             mock_consumer.handle.return_value = True
             mock_consumer.producer = mock.Mock()
             mock_consumer.producer.next.side_effect = [ mock_accept, None ]
             mock_consumer.postponed = []
-            mock_consumer.cond = mock.Mock()
+            mock_consumer._cond = mock.Mock()
             mock_consumer.locks = mock.Mock()
-            type(mock_consumer).execute = mock.PropertyMock(side_effect = [True, True, False])
+            mock_consumer.error_notify = mock.Mock()
+            mock_consumer.is_running.side_effect = [True, True, False]
             mock_consumer.children = {}
             connection.ConnectionConsumer.run(mock_consumer)
             self.assertEquals(mock_consumer.handle.call_count, 1)
@@ -344,42 +341,17 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.src = FAKE_CLIENT_SOCKNAME
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-            type(mock_consumer).execute = mock.PropertyMock(side_effect = [True, False])
+            mock_consumer.is_running.side_effect = [True, False]
             mock_consumer.handle.return_value = False
             mock_consumer.producer = mock.Mock()
             mock_consumer.producer.next.side_effect = [ mock_accept, None ]
             mock_consumer.children = {}
             mock_consumer.postponed = []
-            mock_consumer.cond = mock.Mock()
+            mock_consumer._cond = mock.Mock()
             connection.ConnectionConsumer.run(mock_consumer)
             self.assertEquals(mock_consumer.handle.call_count, 1)
             self.assertEquals(mock_consumer.producer.next.call_count, 1)
             self.assertEquals(len(mock_consumer.postponed), 1)
-
-    def test_run_clean_all(self):
-        mock_producer = mock.Mock(spec=connection.ConnectionProducer)
-        mock_accept = mock.Mock(spec=connection.Accept)
-        mock_accept.fd = FAKE_CLIENT_FD
-        mock_accept.src = FAKE_CLIENT_SOCKNAME
-        mock_accept.dst = FAKE_SOCKNAME
-        mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, FAKE_BACKEND_PORT, mock_accept, 0 ) }
-        mock_consumer.producer = mock_producer
-        mock_consumer.cond = mock.Mock()
-        connection.ConnectionConsumer.stop(mock_consumer)
-        self.assertEquals(mock_consumer.kill_children.call_count, 1)
-
-    def test_run_reap_all(self):
-        with mock.patch('os.kill') as mock_kill:
-            mock_accept = mock.Mock(spec=connection.Accept)
-            mock_accept.fd = FAKE_CLIENT_FD
-            mock_accept.src = FAKE_CLIENT_SOCKNAME
-            mock_accept.dst = FAKE_SOCKNAME
-            mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, FAKE_BACKEND_PORT, mock_accept, 0 ) }
-            connection.ConnectionConsumer.kill_children(mock_consumer)
-            self.assertEquals(mock_kill.call_count, 1)
-            self.assertEquals(mock_kill.call_args_list[0][0][0], FAKE_GRANDCHILD_PID)
 
     def test_reap_children(self):
         with mock.patch('os.kill') as mock_kill:
@@ -388,8 +360,9 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.src = FAKE_CLIENT_SOCKNAME
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-            mock_consumer.cond = mock.Mock()
+            mock_consumer._cond = mock.Mock()
             mock_consumer.locks = mock.Mock()
+            mock_consumer.error_notify = mock.Mock()
             mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, FAKE_BACKEND_PORT, mock_accept, 0 ) }
             mock_kill.side_effect = OSError()
             connection.ConnectionConsumer.reap_children(mock_consumer)
@@ -398,8 +371,9 @@ class ConnectionConsumerTests(unittest.TestCase):
     def test_reap_children_no_children(self):
         with mock.patch('os.kill') as mock_kill:
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-            mock_consumer.cond = mock.Mock()
+            mock_consumer._cond = mock.Mock()
             mock_consumer.locks = mock.Mock()
+            mock_consumer.error_notify = mock.Mock()
             mock_consumer.children = {}
             connection.ConnectionConsumer.reap_children(mock_consumer)
             self.assertEquals(mock_kill.call_count, 0)
@@ -411,7 +385,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.src = FAKE_CLIENT_SOCKNAME
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-            mock_consumer.cond = mock.Mock()
+            mock_consumer._cond = mock.Mock()
             mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, FAKE_BACKEND_PORT, mock_accept, 0 ) }
             mock_ac.return_value = FAKE_CLIENT_SESSION
             sessions = connection.ConnectionConsumer.sessions(mock_consumer)
@@ -420,7 +394,7 @@ class ConnectionConsumerTests(unittest.TestCase):
 
     def test_sessions_no_clients(self):
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.children = {}
         sessions = connection.ConnectionConsumer.sessions(mock_consumer)
         self.assertEquals(sessions, {})
@@ -433,7 +407,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.src = FAKE_CLIENT_SOCKNAME
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-            mock_consumer.cond = mock.Mock()
+            mock_consumer._cond = mock.Mock()
             mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, FAKE_BACKEND_PORT, mock_accept, 0 ) }
             mock_ac.return_value = FAKE_CLIENT_SESSION
             connection.ConnectionConsumer.drop_session(mock_consumer, FAKE_CLIENT_SESSION, FAKE_BACKEND_ID)
@@ -448,7 +422,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.src = FAKE_CLIENT_SOCKNAME
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-            mock_consumer.cond = mock.Mock()
+            mock_consumer._cond = mock.Mock()
             mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, FAKE_BACKEND_PORT, mock_accept, 0 ) }
             mock_ac.return_value = FAKE_CLIENT_SESSION
             connection.ConnectionConsumer.drop_session(mock_consumer, FAKE_CLIENT_SESSION_BOGUS, FAKE_BACKEND_ID)
@@ -460,16 +434,10 @@ class ConnectionProducerTests(unittest.TestCase):
         # No logic in the ConnectionProducer constructor
         pass
 
-    def test_stop(self):
-        mock_producer = mock.Mock(spec=connection.ConnectionProducer)
-        mock_producer.execute = True
-        connection.ConnectionProducer.stop(mock_producer)
-        self.assertFalse(mock_producer.execute)
-
     def test_set_add_one(self):
         with mock.patch('socket.socket') as mock_socket:
             mock_producer = mock.Mock(spec=connection.ConnectionProducer)
-            mock_producer.cond = mock.Mock()
+            mock_producer._cond = mock.Mock()
             mock_producer.sockets = {}
             mock_producer.filemap = {}
             mock_socket_obj = mock.Mock()
@@ -486,7 +454,7 @@ class ConnectionProducerTests(unittest.TestCase):
     def test_set_add_one_cant_bind(self):
         with mock.patch('socket.socket') as mock_socket:
             mock_producer = mock.Mock(spec=connection.ConnectionProducer)
-            mock_producer.cond = mock.Mock()
+            mock_producer._cond = mock.Mock()
             mock_producer.sockets = {}
             mock_producer.filemap = {}
             mock_socket_obj = mock.Mock()
@@ -501,7 +469,7 @@ class ConnectionProducerTests(unittest.TestCase):
     def test_set_add_two_cant_bind(self):
         with mock.patch('socket.socket') as mock_socket:
             mock_producer = mock.Mock(spec=connection.ConnectionProducer)
-            mock_producer.cond = mock.Mock()
+            mock_producer._cond = mock.Mock()
             mock_producer.sockets = {}
             mock_producer.filemap = {}
             mock_socket_obj = mock.Mock()
@@ -522,7 +490,7 @@ class ConnectionProducerTests(unittest.TestCase):
             mock_socket_obj.fileno.return_value = FAKE_SOCK_FD
             mock_socket.return_value = mock_socket_obj
             mock_producer = mock.Mock(spec=connection.ConnectionProducer)
-            mock_producer.cond = mock.Mock()
+            mock_producer._cond = mock.Mock()
             mock_producer.sockets = { FAKE_PORT : mock_socket_obj }
             mock_producer.filemap = { FAKE_SOCK_FD : mock_socket_obj }
             connection.ConnectionProducer.set(mock_producer, [] )
@@ -540,7 +508,7 @@ class ConnectionProducerTests(unittest.TestCase):
             mock_socket_obj_2.fileno.return_value = FAKE_SOCK_FD_2
             mock_socket.return_value = mock_socket_obj_2
             mock_producer = mock.Mock(spec=connection.ConnectionProducer)
-            mock_producer.cond = mock.Mock()
+            mock_producer._cond = mock.Mock()
             mock_producer.sockets = { FAKE_PORT : mock_socket_obj }
             mock_producer.filemap = { FAKE_SOCK_FD : mock_socket_obj }
             connection.ConnectionProducer.set(mock_producer, [FAKE_PORT_2] )
@@ -565,7 +533,7 @@ class ConnectionProducerTests(unittest.TestCase):
             mock_socket_obj_2.bind.side_effect = IOError()
             mock_socket.return_value = mock_socket_obj_2
             mock_producer = mock.Mock(spec=connection.ConnectionProducer)
-            mock_producer.cond = mock.Mock()
+            mock_producer._cond = mock.Mock()
             mock_producer.sockets = { FAKE_PORT : mock_socket_obj }
             mock_producer.filemap = { FAKE_SOCK_FD : mock_socket_obj }
             connection.ConnectionProducer.set(mock_producer, [FAKE_PORT_2] )
@@ -589,7 +557,7 @@ class ConnectionProducerTests(unittest.TestCase):
             mock_socket_obj = mock.Mock()
             mock_socket_obj.fileno.return_value = FAKE_SOCK_FD
             mock_producer = mock.Mock(spec=connection.ConnectionProducer)
-            mock_producer.cond = mock.Mock()
+            mock_producer._cond = mock.Mock()
             mock_producer.sockets = { FAKE_PORT : mock_socket_obj }
             mock_producer.filemap = { FAKE_SOCK_FD : mock_socket_obj }
             connection.ConnectionProducer._update_epoll(mock_producer)
@@ -600,12 +568,12 @@ class ConnectionProducerTests(unittest.TestCase):
         with mock.patch(connection.__name__ + ".Accept") as mock_accept:
             mock_socket_obj = mock.Mock()
             mock_producer = mock.Mock(spec=connection.ConnectionProducer)
-            mock_producer.cond = mock.Mock()
+            mock_producer._cond = mock.Mock()
             mock_producer.queue = Queue.Queue()
             mock_producer.notifiers = []
             mock_producer.sockets = { FAKE_PORT : mock_socket_obj }
             mock_producer.filemap = { FAKE_SOCK_FD : mock_socket_obj }
-            type(mock_producer).execute = mock.PropertyMock(side_effect = [True, False])
+            mock_producer.is_running.side_effect = [True, False]
             mock_producer.epoll = mock.Mock()
             mock_producer.epoll.poll.return_value = [(FAKE_SOCK_FD, GARBAGE)]
             connection.ConnectionProducer.run(mock_producer)
@@ -614,10 +582,10 @@ class ConnectionProducerTests(unittest.TestCase):
 
     def test_run_epoll_stale_sock(self):
         mock_producer = mock.Mock(spec=connection.ConnectionProducer)
-        mock_producer.cond = mock.Mock()
+        mock_producer._cond = mock.Mock()
         mock_producer.sockets = {}
         mock_producer.filemap = {}
-        type(mock_producer).execute = mock.PropertyMock(side_effect = [True, False])
+        mock_producer.is_running.side_effect = [True, False]
         mock_producer.epoll = mock.Mock()
         mock_producer.epoll.poll.return_value = [(FAKE_SOCK_FD, GARBAGE)]
         connection.ConnectionProducer.run(mock_producer)
@@ -684,9 +652,10 @@ class ConnectionTests(unittest.TestCase):
         mock_accept.src = FAKE_CLIENT_SOCKNAME
         mock_accept.dst = FAKE_SOCKNAME
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.locks = mock.Mock()
         mock_consumer.locks.find.return_value = [FAKE_BACKEND_ID]
+        mock_consumer.error_notify = mock.Mock()
         mock_consumer.portmap = {}
         mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, FAKE_RECONNECT, [FAKE_BACKEND], [])
         mock_consumer.children = {}
@@ -702,9 +671,10 @@ class ConnectionTests(unittest.TestCase):
         mock_accept.src = FAKE_CLIENT_SOCKNAME
         mock_accept.dst = FAKE_SOCKNAME
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.locks = mock.Mock()
         mock_consumer.locks.find.return_value = ["%s:%d" % (FAKE_BACKEND_IP, FAKE_PORT)]
+        mock_consumer.error_notify = mock.Mock()
         mock_consumer.portmap = {}
         mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, FAKE_RECONNECT, [FAKE_BACKEND], ["%s/32" % FAKE_CLIENT_IP])
         mock_consumer.children = {}
@@ -720,9 +690,10 @@ class ConnectionTests(unittest.TestCase):
         mock_accept.src = FAKE_CLIENT_SOCKNAME
         mock_accept.dst = FAKE_SOCKNAME
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.locks = mock.Mock()
         mock_consumer.locks.find.return_value = ["%s:%d" % (FAKE_BACKEND_IP, FAKE_PORT)]
+        mock_consumer.error_notify = mock.Mock()
         mock_consumer.portmap = {}
         mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, FAKE_RECONNECT, [FAKE_BACKEND], ["1.2.3.4/24", "%s/32" % FAKE_CLIENT_IP])
         mock_consumer.children = {}
@@ -738,7 +709,7 @@ class ConnectionTests(unittest.TestCase):
         mock_accept.src = FAKE_CLIENT_SOCKNAME
         mock_accept.dst = FAKE_SOCKNAME
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.portmap = {}
         mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, FAKE_RECONNECT, [FAKE_BACKEND], ["1.2.3.4/24"])
         mock_consumer.children = {}
@@ -754,7 +725,7 @@ class ConnectionTests(unittest.TestCase):
         mock_accept.src = FAKE_CLIENT_SOCKNAME
         mock_accept.dst = FAKE_SOCKNAME
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.portmap = {}
         mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, FAKE_RECONNECT, [FAKE_BACKEND], ["1.2.3.4/24", "5.6.7.8/16"])
         mock_consumer.children = {}
@@ -770,7 +741,7 @@ class ConnectionTests(unittest.TestCase):
         mock_accept.src = FAKE_CLIENT_SOCKNAME
         mock_accept.dst = FAKE_SOCKNAME
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
-        mock_consumer.cond = mock.Mock()
+        mock_consumer._cond = mock.Mock()
         mock_consumer.portmap = {}
         mock_consumer.children = {}
         mock_consumer.standby = {}
