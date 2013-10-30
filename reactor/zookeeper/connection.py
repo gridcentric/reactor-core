@@ -21,7 +21,7 @@ import zookeeper
 from reactor.log import log
 
 ZOO_OPEN_ACL_UNSAFE = {"perms":0x1f, "scheme":"world", "id":"anyone"}
-ZOO_CONNECT_WAIT_TIME = 60.0
+ZOO_CONNECT_WAIT_TIME = 10.0
 
 # Save the exception for use in other modules.
 ZookeeperException = zookeeper.ZooKeeperException
@@ -75,7 +75,7 @@ def connect(servers, timeout=ZOO_CONNECT_WAIT_TIME):
 
     try:
         cond.acquire()
-        handle = zookeeper.init(server_list, connect_watcher, 10000)
+        handle = zookeeper.init(server_list, connect_watcher, int(ZOO_CONNECT_WAIT_TIME * 1000))
         cond.wait(timeout)
     except Exception as e:
         raise ZookeeperException("Exception while connecting to zookeeper: %s" % e.message)
