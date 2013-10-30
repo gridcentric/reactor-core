@@ -583,9 +583,11 @@ class Endpoint(Atomic):
         """
         # Check if our configuration is about to change.
         old_url = self.config.url
+        old_loadbalancer = self.config.loadbalancer
         new_config = EndpointConfig(values=config_val)
         new_scaling = ScalingConfig(obj=new_config)
         new_url = new_config.url
+        new_loadbalancer = new_config.loadbalancer
 
         # NOTE: We used to take action on old static
         # addresses. This is no longer done, because it's
@@ -595,7 +597,7 @@ class Endpoint(Atomic):
 
         # Remove all old instances from loadbalancer,
         # (Only necessary if we've changed the endpoint URL).
-        if old_url != new_url:
+        if old_url != new_url or old_loadbalancer != new_loadbalancer:
             self.reload(exclude=True)
 
         # Reload the configuration.
