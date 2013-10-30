@@ -20,6 +20,7 @@ import traceback
 import logging
 
 from . import cli
+from . import utils
 from . import ips as ips_mod
 from . import submodules
 from . atomic import Atomic
@@ -31,7 +32,6 @@ from . zookeeper.connection import ZookeeperException
 from . zookeeper.cache import Cache
 from . objects.root import Reactor
 from . objects.endpoint import EndpointNotFound
-from . utils import random_key
 from . threadpool import Threadpool
 from . endpoint import Endpoint
 from . metrics.calculator import calculate_weighted_averages
@@ -253,7 +253,7 @@ class ScaleManager(AtomicRunnable):
         self._threadpool.clear()
 
     @Atomic.sync
-    def _manager_select(self, endpoint):
+    def _is_owned(self, key, cloud=None, loadbalancer=None):
         # Find the closest key.
         # If there are no keys available, we still go
         # through and track that there is no manager for
@@ -263,10 +263,10 @@ class ScaleManager(AtomicRunnable):
         manager_key = None
         keys = self._key_to_uuid.keys()
         if len(keys) == 0:
-            self.logging.error(self.logging.NO_MANAGER_AVAILABLE, endpoint.key())
+            self.logging.error(self.logging.NO_MANAGER_AVAILABLE, key)
         else:
             keys.sort()
-            index = bisect.bisect(keys, endpoint.key())
+            index = bisect.bisect(keys, key)
             orig_index = index
 
             while True:
@@ -276,38 +276,45 @@ class ScaleManager(AtomicRunnable):
                 this_uuid = self._key_to_uuid[key]
                 (clouds, loadbalancers) = self._uuid_to_info[this_uuid]
 
-                if (not endpoint.config.cloud or \
-                    endpoint.config.cloud in clouds) and \
-                   (not endpoint.config.loadbalancer or \
-                    endpoint.config.loadbalancer in loadbalancers):
+                if (not cloud or cloud in clouds) and \
+                   (not loadbalancer or loadbalancer in loadbalancers):
                     manager_key = this_uuid
                     break
 
                 # Continue on to the next manager.
-                # It's quite possible that we are unable to find
-                # any manager that is capable of managing this endpoint.
+                # It's quite possible that we are unable to find any
+                # manager that is capable of managing this object.
                 index = (index+1) % len(keys)
                 if index == orig_index:
                     self.logging.error(
-                        self.logging.NO_MANAGER_AVAILABLE, endpoint.key())
+                        self.logging.NO_MANAGER_AVAILABLE, key)
                     break
 
-        # Track whether or not this endpoint is owned by us.
-        self._key_to_owned[endpoint.key()] = (manager_key == self._uuid)
-        self.logging.info(
-            self.logging.ENDPOINT_MANAGED,
-            endpoint.key(),
-            self.endpoint_owned(endpoint))
-
-        # Check if it is one of our own.
-        # Start the endpoint if necessary (now owned).
-        endpoint.managed(self._uuid)
+        # Return the found key.
+        return (manager_key == self._uuid)
 
     @Atomic.sync
     def endpoint_owned(self, endpoint):
-        if not endpoint.key() in self._key_to_owned:
-            self._manager_select(endpoint)
-        return self._key_to_owned[endpoint.key()]
+        # Is it in the cache?
+        if endpoint.key() in self._key_to_owned:
+            return self._key_to_owned[endpoint.key()]
+
+        # Cache whether or not this endpoint is owned by us.
+        is_owned = self._is_owned(
+            endpoint.key(),
+            cloud=endpoint.config.cloud,
+            loadbalancer=endpoint.config.loadbalancer)
+        self._key_to_owned[endpoint.key()] = is_owned
+        self.logging.info(
+            self.logging.ENDPOINT_MANAGED,
+            endpoint.key(),
+            is_owned)
+
+        if is_owned:
+            # Mark the endpoint as our own.
+            endpoint.managed(self._uuid)
+
+        return is_owned
 
     @Atomic.sync
     def _endpoint_change(self, endpoints):
@@ -383,6 +390,8 @@ class ScaleManager(AtomicRunnable):
         self.check_endpoint_ips()
 
     def endpoint_change(self, endpoints):
+        if endpoints is None:
+            endpoints = []
         self._endpoint_change(endpoints)
         self._watch_ips()
 
@@ -430,7 +439,7 @@ class ScaleManager(AtomicRunnable):
     def _determine_keys(self, key_num):
         while len(self._keys) < key_num:
             # Generate keys.
-            self._keys.append(random_key())
+            self._keys.append(utils.random_key())
         while len(self._keys) > key_num:
             # Drop keys while we're too high.
             del self._keys[len(self._keys) - 1]
@@ -567,7 +576,12 @@ class ScaleManager(AtomicRunnable):
             for key in keys:
                 self._key_to_uuid[key] = manager
 
-    def manager_change(self, managers):
+        # Print our the new managers (with clouds and loadbalancers).
+        self.logging.info(self.logging.MANAGERS_CHANGED, self._uuid_to_info)
+
+    def manager_change(self, managers=None):
+        if managers is None:
+            managers = []
         self._manager_change(managers)
         self._watch_ips()
 
@@ -576,11 +590,13 @@ class ScaleManager(AtomicRunnable):
         for ip in ips:
             endpoint_name = None
 
+            # Skip the IP if we don't own it.
+            if not self._is_owned(utils.sha_hash(ip)):
+                continue
+
             # Find the owning endpoint for this
             # IP and confirmed it there.
             for (name, endpoint) in self._endpoints.items():
-                if not self.endpoint_owned(endpoint):
-                    continue
                 if endpoint.ip_confirmed(ip):
                     endpoint_name = name
                     break
@@ -597,11 +613,13 @@ class ScaleManager(AtomicRunnable):
         for ip in ips:
             endpoint_name = None
 
+            # Skip the IP if we don't own it.
+            if not self._is_owned(utils.sha_hash(ip)):
+                continue
+
             # Find the owning endpoint for this
             # IP and confirmed it there.
             for (name, endpoint) in self._endpoints.items():
-                if not self.endpoint_owned(endpoint):
-                    continue
                 if endpoint.ip_dropped(ip):
                     endpoint_name = name
                     break
