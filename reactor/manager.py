@@ -162,7 +162,7 @@ class ScaleManager(AtomicRunnable):
             self._ip = ips_mod.find_default()
         else:
             self._names = names
-            self._ip = names[0]
+            self._ip = len(names) > 0 and names[0]
         if not self._names:
             raise Exception("Manager has no persistent names!")
 
