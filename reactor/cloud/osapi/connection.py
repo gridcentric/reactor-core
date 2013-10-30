@@ -120,6 +120,10 @@ class BaseOsEndpointConfig(Config):
     user_data = Config.text("User Data",
         order=6, description="Script or cloud-config for new instances.")
 
+    filter_instances = Config.boolean("Filter Instances",
+        default=False, order=7,
+        description="Use only instances that match image, flavor, etc.")
+
     def novaclient(self):
         if self._client is None:
             extensions = shell.OpenStackComputeShell()._discover_extensions("1.1")
@@ -420,11 +424,14 @@ class Connection(BaseOsConnection):
         """
         config = self._endpoint_config(config)
         if instance_id is None:
-            search_opts = {
-                'name': config.instance_name,
-                'flavor': config.flavor_id,
-                'image': config.image_id
-            }
+            if config.filter_instances:
+                search_opts = {
+                    'name': config.instance_name,
+                    'flavor': config.flavor_id,
+                    'image': config.image_id
+                }
+            else:
+                search_opts = None
             return config.novaclient().servers.list(search_opts=search_opts)
         else:
             try:

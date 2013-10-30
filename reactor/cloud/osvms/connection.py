@@ -38,8 +38,11 @@ class Connection(BaseOsConnection):
         """
         config = self._endpoint_config(config)
         if instance_id is None:
-            server = config.novaclient().cobalt.get(config.instance_id)
-            return server.list_launched()
+            if config.filter_instances:
+                server = config.novaclient().cobalt.get(config.instance_id)
+                return server.list_launched()
+            else:
+                return config.novaclient().servers.list()
         else:
             try:
                 return [config.novaclient().servers.get(instance_id)]
