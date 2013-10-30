@@ -37,11 +37,14 @@ def calculate_weighted_averages(metrics):
                 weight = float(weight)
                 value = float(value)
             except TypeError:
+                # info is not a tuple?
                 try:
                     (weight, value) = (1.0, float(info))
                 except ValueError:
+                    # info is also not a number?
                     continue
-            except:
+            except ValueError:
+                # weight / value are not numbers?
                 continue
             totals[key] = totals.get(key, 0) + weight * value
             total_weights[key] = total_weights.get(key, 0) + weight
