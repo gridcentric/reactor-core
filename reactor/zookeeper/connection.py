@@ -326,7 +326,6 @@ class ZookeeperConnection(object):
             self.cond.release()
         return rval
 
-    @wrap_exceptions
     def zookeeper_watch(self, zh, event, state, path):
         self.cond.acquire()
         try:
