@@ -167,10 +167,5 @@ fi
 # This will generate the default configuration.
 reactor-server zk_servers
 
-# If this is being run from an interactive shell, then we
-# install the reactor default endpoints. If it's not, then
-# we assume that the user will either create their own, or
-# install the defaults into the cluster at some point.
-if [ -t 0 ]; then
-    reactor-defaults
-fi
+# Important: defaults should only be run for one reactor in a clustered setup.
+reactor-defaults
