@@ -544,6 +544,8 @@ class TcpEndpointConfig(Config):
         description="Each Instance is used exclusively to serve a single connection.")
 
     reconnect = Config.integer(label="Reconnect Timeout", default=60,
+        validate=lambda self: self.reconnect >= 0 or \
+            Config.error("The reconnect must be non-negative."),
         description="Amount of time a disconnected client has to reconnect before" \
                     + " the VM is returned to the pool.")
 
