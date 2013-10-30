@@ -176,10 +176,6 @@ class Endpoint(ConfigObject):
         super(Endpoint, self).__init__(*args, **kwargs)
         self._state = self._get_child(STATE, clazz=State)
 
-    def unwatch(self):
-        self._state.unwatch()
-        super(Endpoint, self).unwatch()
-
     def get_config(self, **kwargs):
         return self._get_data(**kwargs)
 

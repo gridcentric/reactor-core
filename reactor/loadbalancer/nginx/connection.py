@@ -218,6 +218,7 @@ class Connection(LoadBalancerConnection):
 
     def __del__(self):
         self.log_reader.stop()
+        self.log_reader.join()
 
     def _generate_ssl(self, uniq_id, config):
         key = config.ssl_key

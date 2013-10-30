@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from reactor import utils
 from reactor.atomic import Atomic
 
 from . objects import Collection
@@ -34,11 +35,11 @@ class Cache(Atomic):
         if populate is None:
             self._populate = self._default_populate
         else:
-            self._populate = populate
+            self._populate = utils.callback(populate)
         if update is None:
             self._update_hook = self._default_update_hook
         else:
-            self._update_hook = update
+            self._update_hook = utils.callback(update)
 
         # NOTE: We require that this object is a zookeeper
         # collection object. Past this point, it's safe to
@@ -51,9 +52,6 @@ class Cache(Atomic):
 
         # Start the watch.
         self._update(zkobj._list_children(watch=self.update))
-
-    def __del__(self):
-        self.zkobj.unwatch()
 
     @Atomic.sync
     def _get_cache(self, name):

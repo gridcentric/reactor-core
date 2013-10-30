@@ -19,6 +19,7 @@ import sys
 import traceback
 import math
 
+from . import utils
 from . atomic import Atomic
 from . config import Config
 from . submodules import cloud_submodules, cloud_options
@@ -269,25 +270,15 @@ class Endpoint(Atomic):
         self.zkobj = zkobj
 
         # Values from our scale manager.
-        # NOTE: See the note in endpoint_change() within the
-        # manager. Because these callbacks come the manager class,
-        # the manager will call break_refs() to ensure that this
-        # object will be garbage collected properly.
-        self._collect = collect
-        self._find_cloud_connection = find_cloud_connection
-        self._find_loadbalancer_connection = find_loadbalancer_connection
+        self._collect = utils.callback(collect)
+        self._find_cloud_connection = utils.callback(find_cloud_connection)
+        self._find_loadbalancer_connection = utils.callback(find_loadbalancer_connection)
 
         # Initialize endpoint-specific logging.
         self.logging = EndpointLog(zkobj.log())
 
         # Endpoint state.
         self.state = State.default
-
-        # Default to no cloud connection.
-        self.cloud_conn = cloud_connection.get_connection(None)
-
-        # Default to no load balancer.
-        self.lb_conn = lb_connection.get_connection(None)
 
         # Initialize configuration.
         self.config = EndpointConfig()
@@ -318,24 +309,19 @@ class Endpoint(Atomic):
         # Start watching our state.
         self.update_state(self.zkobj.state().current(watch=self.update_state))
 
-    def __del__(self):
-        self.zkobj.unwatch()
-
-    def break_refs(self):
-        # See NOTE above.
-        self.zkobj.unwatch()
-        if hasattr(self, '_collect'):
-            del self._collect
-            del self._find_cloud_connection
-            del self._find_loadbalancer_connection
-
     # This method is a simple method used for populating our
     # instance IP cache. All the cached (decommissioned instances,
     # confirmed ips, instance names) are populated and maintained
     # automatically by the Cache class, but here we need to be able
     # to pass in a bit more data when necessary.
     def _ips_for_instance(self, instance_id):
-        instances = self.cloud_conn.list_instances(self.config, instance_id=instance_id)
+        # Grab our currect cloud connection.
+        cloud_conn = self._find_cloud_connection(self.config.cloud)
+        if cloud_conn is None:
+            return []
+
+        # Get the reference for this specific instance.
+        instances = cloud_conn.list_instances(self.config, instance_id=instance_id)
 
         # Probably a race condition.
         # We just ignore this and populate() will get
@@ -402,11 +388,16 @@ class Endpoint(Atomic):
             self.zkobj.metrics = metrics
             self.zkobj.active = active_ports
 
+            # Get our cloud connection.
+            cloud_conn = self._find_cloud_connection(self.config.cloud)
+            if cloud_conn is None:
+                return False
+
             # Grab the current collection of instances.
             # This includes all instances, depending on what
             # you are doing with this list it will be necessary
             # to filter it through decomissioned, etc.
-            instances = self.cloud_conn.list_instances(self.config)
+            instances = cloud_conn.list_instances(self.config)
 
             # Run a healthcheck to reap old instances,
             # decomissioned instances, unable to launch, etc.
@@ -549,9 +540,14 @@ class Endpoint(Atomic):
         self.zkobj.sessions().closed(client)
 
     def drop_sessions(self, authoritative=False):
+        # Ensure we still have a valid loadbalancer connection.
+        lb_conn = self._find_loadbalancer_connection(self.config.loadbalancer)
+        if lb_conn is None:
+            return
+
         for (client, backend) in self.zkobj.sessions().drop_map().items():
             try:
-                self.lb_conn.drop_session(client, backend)
+                lb_conn.drop_session(client, backend)
             except NotImplementedError:
                 self.logging.warn(
                     self.logging.DROP_SESSION_ERROR,
@@ -603,16 +599,6 @@ class Endpoint(Atomic):
         # Reload the configuration.
         self.config = new_config
         self.scaling = new_scaling
-
-        # Reconnect to the cloud controller.
-        if self._find_cloud_connection:
-            self.cloud_conn = self._find_cloud_connection(
-                new_config.cloud)
-
-        # Get a new loadbalancer connection.
-        if self._find_loadbalancer_connection:
-            self.lb_conn = self._find_loadbalancer_connection(
-                new_config.loadbalancer)
 
         # We can't really know if loadbalancer settings
         # have changed in the backend, so we really need
@@ -698,6 +684,12 @@ class Endpoint(Atomic):
                 self.confirmed_ips.remove(ip)
 
     def _delete_instance(self, instance_id, cloud=True, errored=False, decommissioned=False):
+        # Grab our cloud connection.
+        cloud_conn = self._find_cloud_connection(self.config.cloud)
+        if cloud_conn is None:
+            # Nope, can't delete anything now.
+            return False
+
         # NOTE: Because we're going to lose this instance from
         # the cloud, we do our best to populate the caches here.
         # The only real state that we rely on coming from the cloud
@@ -708,10 +700,11 @@ class Endpoint(Atomic):
         # Log our message.
         self.logging.info(self.logging.DELETE_INSTANCE, ips)
 
+
         if cloud:
             try:
                 # Try the cloud call first thing.
-                self.cloud_conn.delete_instance(self.config, instance_id)
+                cloud_conn.delete_instance(self.config, instance_id)
             except Exception:
                 # Not much we can do? Log and return.
                 # Hopefully at some point the user will
@@ -732,9 +725,11 @@ class Endpoint(Atomic):
         else:
             name = self.instances.get(instance_id)
 
-        if name:
+        # Grab our loadbalancer connection.
+        lb_conn = self._find_loadbalancer_connection(self.config.loadbalancer)
+        if name and lb_conn is not None:
             # Cleanup any loadbalancer artifacts.
-            self.lb_conn.cleanup(self.config, name)
+            lb_conn.cleanup(self.config, name)
 
         # Clear out all IP data.
         # NOTE: There may also be decommissioned data
@@ -759,13 +754,21 @@ class Endpoint(Atomic):
         # Launch the instance.
         self.logging.info(self.logging.LAUNCH_INSTANCE)
 
+        # Grab our cloud connection.
+        cloud_conn = self._find_cloud_connection(self.config.cloud)
+        if cloud_conn is None:
+            # Nope, unable to launch.
+            return False
+
         # Start with the loadbalancer parameters.
-        start_params = self.lb_conn.start_params(self.config)
+        lb_conn = self._find_loadbalancer_connection(self.config.loadbalancer)
+        if lb_conn is not None:
+            start_params = lb_conn.start_params(self.config)
 
         try:
             # Try to start the instance via our cloud connection.
             (instance, ips) = \
-                self.cloud_conn.start_instance(
+                cloud_conn.start_instance(
                     self.config, params=start_params)
 
             if ips:
@@ -778,7 +781,8 @@ class Endpoint(Atomic):
             self.logging.error(self.logging.LAUNCH_FAILURE, str(e))
 
             # Cleanup the start params.
-            self.lb_conn.cleanup_start_params(self.config, start_params)
+            if lb_conn is not None:
+                lb_conn.cleanup_start_params(self.config, start_params)
             return
 
         # Save basic instance data.
@@ -1027,28 +1031,18 @@ class Endpoint(Atomic):
         return remove_instance
 
     def reload(self, exclude=False):
-        # Depending on whether or not we have a collect()
-        # available (whether this object was created by a
-        # scale manager or not), we will grab the set of ips
-        # in different ways. If we have a collect(), then
-        # we will it to ensure that all relevant endpoints are
-        # included.
-        # If not, then we use only our local active IPs to
-        # construct a reasonable collection of IPs to send to
-        # the loadbalancer.
+        ips = self._collect(self, exclude=exclude)
+        lb_conn = self._find_loadbalancer_connection(self.config.loadbalancer)
 
-        if not hasattr(self, '_collect'):
+        if ips is None or lb_conn is None:
+            # No longer a valid reference.
+            # This happens when the manager object has
+            # already been cleaned up, so we're done.
             return
-        elif self._collect:
-            ips = self._collect(self, exclude=exclude)
-        elif exclude:
-            ips = []
-        else:
-            ips = self.backends()
 
         try:
-            self.lb_conn.change(self.config.url, ips, config=self.config)
-            self.lb_conn.save()
+            lb_conn.change(self.config.url, ips, config=self.config)
+            lb_conn.save()
             self.logging.info(self.logging.RELOADED)
         except NotImplementedError:
             # Oh well, just using the stub.

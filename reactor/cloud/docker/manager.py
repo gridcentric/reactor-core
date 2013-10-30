@@ -58,7 +58,7 @@ SLOTS_ENVIRONMENT_KEY = '_REACTOR_SCHEDULER_SLOTS'
 
 class DockerManager(object):
 
-    def __init__(self, zkobj, this_ip, config, register_ip):
+    def __init__(self, zkobj, this_ip, config):
         super(DockerManager, self).__init__()
         self.this_ip = this_ip
         self.zkobj = zkobj and zkobj._cast_as(Docker)
@@ -76,15 +76,6 @@ class DockerManager(object):
 
         self._load()
         self._update_scheduler_info()
-
-    def break_refs(self):
-        self.zkobj.unwatch()
-        if hasattr(self, '_containers'):
-            self._scheduler_info.remove(self.uuid)
-            del self._containers
-            del self._to_start
-            del self._starting
-            del self._scheduler_info
 
     def _extract_ip(self, instance_id):
         try:
@@ -225,7 +216,6 @@ class DockerManager(object):
             finally:
                 cond.release()
         finally:
-            ref.unwatch()
             ref._delete()
 
         # No success.

@@ -24,6 +24,7 @@ import select
 import logging
 import netaddr
 
+from reactor import utils
 from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
 from reactor.ips import is_local
@@ -110,11 +111,10 @@ class ConnectionConsumer(threading.Thread):
 
     def __init__(self, locks, error_notify, producer):
         super(ConnectionConsumer, self).__init__()
-        self.daemon = True
         self.execute = True
 
         self.locks = locks
-        self.error_notify = error_notify
+        self.error_notify = utils.callback(error_notify)
         self.producer = producer
 
         self.portmap = {}
@@ -426,7 +426,6 @@ class ConnectionProducer(threading.Thread):
 
     def __init__(self):
         super(ConnectionProducer, self).__init__()
-        self.daemon = True
         self.execute = True
 
         self.epoll = None

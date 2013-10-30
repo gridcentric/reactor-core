@@ -73,7 +73,6 @@ def _task_run(fn, *args, **kwargs):
         fn(*args, **kwargs)
         TASKS.task_done()
     thread = threading.Thread(target=_run)
-    thread.daemon = True
     thread.start()
 
 class ZkNode(object):

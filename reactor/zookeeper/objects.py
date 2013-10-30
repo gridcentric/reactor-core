@@ -14,11 +14,14 @@
 #    under the License.
 
 import os
+import sys
 import json
 import binascii
 import array
 import threading
 import random
+
+from reactor import utils
 
 class ZookeeperObject(object):
 
@@ -35,9 +38,9 @@ class ZookeeperObject(object):
         self._lock = threading.RLock()
 
     def __del__(self):
-        self.unwatch()
+        self._unwatch()
 
-    def unwatch(self):
+    def _unwatch(self):
         client = self._zk_client.connect()
         with self._lock:
             if self._watch_content:
@@ -60,9 +63,13 @@ class ZookeeperObject(object):
         client = self._zk_client.connect()
         if watch:
             with self._lock:
+                watch = utils.callback(watch)
+                def _fn(value):
+                    return watch(self._deserialize(value))
+                _fn.__name__ = watch.__name__
                 if self._watch_content:
                     client.clear_watch_fn(self._watch_content)
-                self._watch_content = lambda x: watch(self._deserialize(x))
+                self._watch_content = _fn
                 return self._deserialize(
                     client.watch_contents(self._path, self._watch_content))
         else:
@@ -76,9 +83,13 @@ class ZookeeperObject(object):
         client = self._zk_client.connect()
         if watch:
             with self._lock:
+                watch = utils.callback(watch)
+                def _fn(children):
+                    return watch(children or [])
+                _fn.__name__ = watch.__name__
                 if self._watch_children:
                     client.clear_watch_fn(self._watch_children)
-                self._watch_children = lambda x: watch(x or [])
+                self._watch_children = _fn
                 return client.watch_children(self._path, self._watch_children) or []
         else:
             return client.list_children(self._path) or []
@@ -91,11 +102,6 @@ class ZookeeperObject(object):
 
     def _delete(self):
         client = self._zk_client.connect()
-        with self._lock:
-            if self._watch_content:
-                client.clear_watch_fn(self._watch_content)
-            if self._watch_children:
-                client.clear_watch_fn(self._watch_children)
         client.delete(self._path)
 
 class DatalessObject(ZookeeperObject):

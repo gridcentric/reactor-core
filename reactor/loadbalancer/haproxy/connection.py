@@ -19,6 +19,7 @@ import subprocess
 
 from mako.template import Template
 
+from reactor import utils
 from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
 from reactor.loadbalancer.utils import read_pid
@@ -107,7 +108,7 @@ class Connection(LoadBalancerConnection):
         self.frontends = {}
         self.http_backends = {}
         self.tcp_backends = {}
-        self.error_notify = kwargs.get("error_notify")
+        self.error_notify = utils.callback(kwargs.get("error_notify"))
 
     def change(self, url, backends, config=None):
         # We use a simple hash of the URL as the backend key.
@@ -255,7 +256,7 @@ class Connection(LoadBalancerConnection):
             results[port] = [valid_data]
 
             # Notify errors if status is DOWN.
-            if all_data.get('status') == 'DOWN' and self.error_notify:
+            if all_data.get('status') == 'DOWN':
                 self.error_notify(port)
 
         # Reset counters for next time.

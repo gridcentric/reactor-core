@@ -17,6 +17,10 @@ import uuid
 import hashlib
 import traceback
 import sys
+import types
+import weakref
+
+from . log import log
 
 def import_class(import_str):
     module_str, _, class_str = import_str.rpartition('.')
@@ -35,3 +39,31 @@ def sha_hash(input_str):
 
 def random_key():
     return sha_hash(str(uuid.uuid4()))
+
+def callback(fn):
+
+    def closure(ref, name=None, im_func=None):
+        @log
+        def cb(*args, **kwargs):
+            real_obj = ref()
+
+            if real_obj is not None:
+                if im_func is not None:
+                    return im_func(real_obj, *args, **kwargs)
+                else:
+                    return real_obj(*args, **kwargs)
+            else:
+                return None
+
+        if name:
+            cb.__name__ = name
+        return cb
+
+    if isinstance(fn, types.MethodType):
+        name = fn.__name__
+        return closure(weakref.ref(fn.im_self), name=name, im_func=fn.im_func)
+    elif fn is not None:
+        name = hasattr(fn, "__name__") and fn.__name__
+        return closure(weakref.ref(fn), name=name)
+    else:
+        return closure(lambda: None)

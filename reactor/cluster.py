@@ -124,7 +124,6 @@ class ClusterMixin(ReactorApiMixin):
         if not(self._manager_running):
             self._manager = ScaleManager(zk_servers)
             self._manager_thread = threading.Thread(target=manager_run)
-            self._manager_thread.daemon = True
             self._manager_thread.start()
             self._manager_running = True
 

@@ -51,14 +51,6 @@ class Managers(DatalessObject, Atomic):
         self._configured = self._get_child(CONFIGS, clazz=JSONObject)
         self._configs = {}
 
-    def unwatch(self):
-        self._ips.unwatch()
-        self._info.unwatch()
-        self._configured.unwatch()
-        for obj in self._configs.values():
-            obj.unwatch()
-        super(Managers, self).unwatch()
-
     def list(self, **kwargs):
         # List available configured managers.
         return self._configured._list_children()
@@ -105,6 +97,18 @@ class Managers(DatalessObject, Atomic):
         self._info._get_child(uuid)._set_data(info, ephemeral=True)
 
         return self._info._get_child(uuid)._get_data()
+
+    def unregister(self, uuid, ips):
+        """
+        Remove the given uuid from the list of keys.
+        This will be called when the manager is not longer serving
+        in a capacity as a scale manager (i.e. is shutting down).
+        """
+        for ip in ips:
+            ip_obj = self._ips._get_child(ip)
+            if ip_obj._get_data() == uuid:
+                ip_obj._delete()
+        self._info._get_child(uuid)._delete()
 
     def key(self, name):
         return self._ips._get_child(name)._get_data()

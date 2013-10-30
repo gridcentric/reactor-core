@@ -31,7 +31,7 @@ attr-rgx=[a-z_][a-z0-9_]{1,30}$
 argument-rgx=[a-z_][a-z0-9_]{1,40}$
 variable-rgx=[a-z_][a-z0-9_]{1,40}$
 inlinevar-rgx=[A-Za-z_][A-Za-z0-9_]*$
-good-names=a,b,c,d,e,f,i,j,k,v,l,m,n,ex,p,id,fd,rc,o,r,s,t,rv,u,w,x,y,z,_,fn,ip
+good-names=a,b,c,d,e,f,i,j,k,v,l,m,n,ex,p,id,fd,rc,o,r,s,t,rv,u,w,x,y,z,_,fn,cb,ip
 bad-names=
 bad-functions=
 

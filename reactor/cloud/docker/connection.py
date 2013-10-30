@@ -110,12 +110,7 @@ class Connection(CloudConnection):
             self._docker = DockerManager(
                 zkobj=kwargs.get('zkobj'),
                 this_ip=kwargs.get('this_ip'),
-                config=self._manager_config(),
-                register_ip=kwargs.get('register_ip'))
-
-    def __del__(self):
-        if hasattr(self, '_docker'):
-            self._docker.break_refs()
+                config=self._manager_config())
 
     def list_instances(self, config, instance_id=None):
         """

@@ -16,6 +16,8 @@
 import sys
 import threading
 
+from . atomic import Atomic
+
 class Worker(threading.Thread):
 
     def __init__(self, queue):
@@ -29,6 +31,7 @@ class Worker(threading.Thread):
             if not job:
                 break
             job.run()
+            del job
 
 class Job(object):
 
@@ -107,24 +110,31 @@ class Queue(object):
             self._waiting -= 1
             self._cond.release()
 
-class Threadpool(object):
+class Threadpool(Atomic):
 
     def __init__(self):
         super(Threadpool, self).__init__()
-        self._workers = []
         self._queue = Queue()
+        self._workers = 0
 
     def __del__(self):
-        for _ in self._workers:
+        self.clear()
+
+    @Atomic.sync
+    def clear(self):
+        for _ in range(self._workers):
             self._queue.push(None)
-        for w in self._workers:
-            w.join()
+        self._workers = 0
+
+    @Atomic.sync
+    def new_worker(self):
+        self._workers += 1
+        w = Worker(self._queue)
+        w.start()
 
     def submit(self, fn, *args, **kwargs):
         job = Job(fn, args, kwargs)
         if self._queue.spare() == 0:
-            w = Worker(self._queue)
-            w.start()
-            self._workers.append(w)
+            self.new_worker()
         self._queue.push(job)
         return job

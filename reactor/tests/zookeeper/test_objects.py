@@ -58,7 +58,7 @@ def test_watch_removed(zk_conn, zk_object):
     def watch_fired(value):
         watch_ref[0] = value
     assert not zk_object._get_data(watch=watch_fired)
-    zk_object.unwatch()
+    zk_object._unwatch()
     zk_object._set_data(test_obj)
     zk_conn.sync()
     assert watch_ref[0] == False
@@ -86,7 +86,7 @@ def test_watch_children(zk_conn, zk_object):
     def watch_fired(value):
         watch_ref[0] = value
     assert zk_object._list_children(watch=watch_fired) == []
-    zk_object.unwatch()
+    zk_object._unwatch()
     child = zk_object._get_child("child")
     child._set_data()
     zk_conn.sync()

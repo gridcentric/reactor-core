@@ -36,9 +36,7 @@ class CloudConnection(Connection):
         zkobj=None,
         config=None,
         this_ip=None,
-        this_url=None,
-        register_ip=None,
-        drop_ip=None):
+        this_url=None):
 
         super(CloudConnection, self).__init__(
             object_class="cloud", name=name, config=config)

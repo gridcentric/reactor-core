@@ -212,8 +212,8 @@ class ScaleManager(Atomic):
         # These will factor into the ring above, because we
         # won't own an endpoint that is not suitable.
 
-        self.loadbalancers = {} # Load balancer connections.
-        self.clouds = {}        # Cloud connections.
+        self._loadbalancers = {} # Load balancer connections.
+        self._clouds = {}        # Cloud connections.
 
         # Caches.
         # We persistent some state to zookeeper, but it's
@@ -222,10 +222,6 @@ class ScaleManager(Atomic):
 
         self._url = None
         self._sessions = {}
-
-    def __del__(self):
-        if hasattr(self, 'zkobj'):
-            self.unserve()
 
     @Atomic.sync
     def _reconnect(self):
@@ -253,17 +249,10 @@ class ScaleManager(Atomic):
         self.drop_ip(self._drop_ips_zkobj.list(watch=self.drop_ip))
 
     def unserve(self):
-        self._url_zkobj.unwatch()
-        self._managers_zkobj.unwatch()
-        self._endpoints_zkobj.unwatch()
-        self._new_ips_zkobj.unwatch()
-        self._drop_ips_zkobj.unwatch()
-        self.zkobj.unwatch()
-        self._endpoint_change([])
-
-        # Reset loadbalancers and clouds.
-        self.loadbalancers = {}
-        self.clouds = {}
+        self._managers_zkobj.unregister(self._uuid, self._names)
+        self._setup_cloud_connections()
+        self._setup_loadbalancer_connections()
+        self._threadpool.clear()
 
     @Atomic.sync
     def _manager_select(self, endpoint):
@@ -357,7 +346,6 @@ class ScaleManager(Atomic):
             # as well as self.collect, the endpoint has a
             # reference to this scale manager that needs to
             # be broken before it will be garbage collected.
-            self._endpoints[endpoint_name].break_refs()
             del self._endpoints[endpoint_name]
 
         for endpoint_name in to_add:
@@ -430,8 +418,10 @@ class ScaleManager(Atomic):
         # Load the loadbalancer and cloud connections.
         # NOTE: We do this at this point because these connections
         # are very dependent on the underlying configuration.
-        loadbalancers = self._setup_loadbalancer_connections(config)
-        clouds = self._setup_cloud_connections(config)
+        loadbalancers = self._setup_loadbalancer_connections(
+            config=config, loadbalancers=config.loadbalancers)
+        clouds = self._setup_cloud_connections(
+            config=config, clouds=config.clouds)
 
         # Save our configuration.
         self.config = config
@@ -449,20 +439,24 @@ class ScaleManager(Atomic):
         return self._keys
 
     @Atomic.sync
-    def _setup_loadbalancer_connections(self, config):
+    def _setup_loadbalancer_connections(self, config=None, loadbalancers=None):
+        if loadbalancers is None:
+            loadbalancers = []
+
         # Create the loadbalancer connections.
         # NOTE: Any old loadbalancer object should be cleaned
         # up automatically (i.e. the objects should implement
         # fairly sensible __del__ methods when necessary).
-        self.loadbalancers = {}
-        for name in config.loadbalancers:
+        self._loadbalancers = {}
+        for name in loadbalancers:
+
             # Skip unavailable loadbalancers.
             if not name in submodules.loadbalancer_submodules():
                 continue
 
             try:
                 # Create the loadbalancer connection.
-                self.loadbalancers[name] = \
+                self._loadbalancers[name] = \
                     lb_connection.get_connection( \
                         name,
                         config=config,
@@ -475,19 +469,21 @@ class ScaleManager(Atomic):
                 continue
 
         # Return the set of supported loadbalancers.
-        return self.loadbalancers.keys()
+        return self._loadbalancers.keys()
 
     @Atomic.sync
     def _find_loadbalancer_connection(self, name=None):
         # Try to find a matching loadbalancer connection, or return an unconfigured stub.
-        return self.loadbalancers.get(name, lb_connection.LoadBalancerConnection(name))
+        return self._loadbalancers.get(name, lb_connection.LoadBalancerConnection(name))
 
     @Atomic.sync
-    def _setup_cloud_connections(self, config):
+    def _setup_cloud_connections(self, config=None, clouds=None):
+        if clouds is None:
+            clouds = []
+
         # Create the cloud connections.
-        # NOTE: Same restrictions apply to cloud connections.
-        self.clouds = {}
-        for name in config.clouds:
+        for name in clouds:
+
             # Skip unavailable clouds.
             if not name in submodules.cloud_submodules():
                 continue
@@ -499,27 +495,25 @@ class ScaleManager(Atomic):
                 # and is constructed from the current IP and the default port,
                 # or (ideally) a URL that has been provided by the user.
                 default_api = "http://%s:%d" % (self._ip, cli.DEFAULT_PORT)
-                self.clouds[name] = \
+                self._clouds[name] = \
                     cloud_connection.get_connection( \
                         name,
                         config=config,
                         zkobj=self.zkobj.clouds().tree(name),
                         this_ip=self._ip,
-                        this_url=self._url or default_api,
-                        register_ip=self.register_ip,
-                        drop_ip=self.drop_ip)
+                        this_url=self._url or default_api)
             except Exception:
                 # This isn't expected.
                 traceback.print_exc()
                 continue
 
         # Return the set of supported clouds.
-        return self.clouds.keys()
+        return self._clouds.keys()
 
     @Atomic.sync
     def _find_cloud_connection(self, name=None):
         # Try to find a matching cloud connection, or return an unconfigured stub.
-        return self.clouds.get(name, cloud_connection.CloudConnection(name))
+        return self._clouds.get(name, cloud_connection.CloudConnection(name))
 
     @Atomic.sync
     def _register(self):
@@ -567,6 +561,7 @@ class ScaleManager(Atomic):
                 clouds = info.get("clouds", [])
                 loadbalancers = info.get("loadbalancers", [])
             except (ValueError, AttributeError):
+                # This is unexpected, old data version?
                 continue
 
             # Save the info for this manager.
@@ -619,7 +614,7 @@ class ScaleManager(Atomic):
 
             # Give notice to all loadbalancers.
             # They may use this to cleanup any stale state.
-            for lb in self.loadbalancers.values():
+            for lb in self._loadbalancers.values():
                 lb.dropped(ip)
 
             # Always remove the IP.
@@ -677,7 +672,7 @@ class ScaleManager(Atomic):
     def _collect_metrics(self):
         # Collect all metrics from loadbalancers.
         results = {}
-        for lb in self.loadbalancers.values():
+        for lb in self._loadbalancers.values():
             for (port, lb_metrics) in lb.metrics().items():
                 if not port in results:
                     results[port] = lb_metrics
@@ -689,7 +684,7 @@ class ScaleManager(Atomic):
     def _collect_pending(self):
         # Collect all pending metrics from loadbalancers.
         results = {}
-        for lb in self.loadbalancers.values():
+        for lb in self._loadbalancers.values():
             for (url, pending_count) in lb.pending().items():
                 if not url in results:
                     results[url] = pending_count
@@ -854,7 +849,7 @@ class ScaleManager(Atomic):
     def _collect_sessions(self):
         my_sessions = {}
 
-        for lb in self.loadbalancers.values():
+        for lb in self._loadbalancers.values():
             sessions = lb.sessions() or {}
 
             # For each session,

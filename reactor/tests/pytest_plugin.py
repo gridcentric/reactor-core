@@ -147,13 +147,15 @@ def endpoints(request, n=5):
         # Save all with an empty configuration.
         r.endpoints().manage(name, {})
 
+    # Create the collection of endpoints.
+    from reactor.endpoint import Endpoint
+    endpoints = map(lambda x: Endpoint(r.endpoints().get(x)), names)
+
     # Ensure all watches have fired to
     # synchronize manager's active state.
     zk_conn(request).sync()
 
-    # Return the collection of endpoints.
-    from reactor.endpoint import Endpoint
-    return map(lambda x: Endpoint(r.endpoints().get(x)), names)
+    return endpoints
 
 @fixture()
 def endpoint(request):
