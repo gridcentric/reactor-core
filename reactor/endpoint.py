@@ -76,19 +76,19 @@ class EndpointConfig(Config):
         description="Maximum error count for active instances.")
 
     unregistered_timeout = Config.integer(label="Unregistered Timeout (s)",
-        default=36, order=2,
+        default=60, order=2,
         validate=lambda self: self.unregistered_timeout > 0 or \
             Config.error("Timeout must be positive."),
         description="Timeout for unregistered instances.")
 
     decommissioned_timeout = Config.integer(label="Decommissioned Timeout (s)",
-        default=18, order=2,
+        default=60, order=2,
         validate=lambda self: self.decommissioned_timeout > 0 or \
             Config.error("Timeout must be positive."),
         description="Timeout for decomissioned instances.")
 
     unknown_timeout = Config.integer(label="Unknown Timeout (s)",
-        default=36, order=2,
+        default=60, order=2,
         validate=lambda self: self.unknown_timeout > 0 or \
             Config.error("Timeout must be positive."),
         description="Timeout for unknown instances.")
