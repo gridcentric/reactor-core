@@ -37,6 +37,7 @@ true
 
 %files
 /usr/bin/reactor-defaults
+/usr/bin/reactor-server
 /etc/init.d/reactor
 /etc/logrotate.d/reactor
 /etc/reactor/

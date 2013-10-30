@@ -165,7 +165,7 @@ if [ -f /etc/zookeeper/zoo.cfg ]; then
 fi
 
 # This will generate the default configuration.
-reactor zk_servers
+reactor-server zk_servers
 
 # If this is being run from an interactive shell, then we
 # install the reactor default endpoints. If it's not, then

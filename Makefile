@@ -51,6 +51,7 @@ ifneq ($(DESTDIR),)
 	    (cd $(DESTDIR)/usr/lib* && mv python* python$(PYTHON_VER))
 	@[ -d $(DESTDIR)/usr/lib*/python$(PYTHON_VER)/$(PACKAGES_DIR) ] || \
 	    (cd $(DESTDIR)/usr/lib*/python$(PYTHON_VER) && mv *-packages $(PACKAGES_DIR))
+	@rm -rf $(DESTDIR)/usr/bin
 endif
 
 server_install: dist_clean
@@ -68,6 +69,13 @@ endif
 	@rsync -ruav default/ $(DESTDIR)/etc/reactor/default
 	@$(INSTALL_DIR) $(DESTDIR)/usr/bin
 	@$(INSTALL_BIN) bin/reactor-defaults $(DESTDIR)/usr/bin
+	@$(INSTALL_BIN) bin/reactor-server $(DESTDIR)/usr/bin
+endif
+
+client_install: dist_clean
+ifneq ($(DESTDIR),)
+	@$(INSTALL_DIR) $(DESTDIR)/usr/bin
+	@$(INSTALL_BIN) bin/reactor $(DESTDIR)/usr/bin
 endif
 
 cache_clean:
@@ -104,7 +112,7 @@ python-reactor.deb: $(DEBBUILD)
 	@$(MAKE) dist_install \
 	    PYTHON_VER=2.7 \
 	    PACKAGES_DIR=dist-packages \
-	    DESTDIR=$(DEBBUILD)/python-reactor
+	    DESTDIR=$(CURDIR)/$(DEBBUILD)/python-reactor
 	@rsync -ruav packagers/deb/python-reactor/ $(DEBBUILD)/python-reactor
 	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/python-reactor/DEBIAN/control
 	@fakeroot dpkg -b $(DEBBUILD)/python-reactor .
@@ -114,7 +122,7 @@ reactor-server.deb: $(DEBBUILD)
 	@$(INSTALL_DIR) $(DEBBUILD)/reactor-server
 	@$(MAKE) server_install \
 	    INIT=etc/upstart \
-	    DESTDIR=$(DEBBUILD)/reactor-server
+	    DESTDIR=$(CURDIR)/$(DEBBUILD)/reactor-server
 	@rsync -ruav packagers/deb/reactor-server/ $(DEBBUILD)/reactor-server
 	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-server/DEBIAN/control
 	@fakeroot dpkg -b $(DEBBUILD)/reactor-server .
@@ -122,6 +130,8 @@ reactor-server.deb: $(DEBBUILD)
 
 reactor-client.deb: $(DEBBUILD)
 	@$(INSTALL_DIR) $(DEBBUILD)/reactor-client
+	@$(MAKE) client_install \
+	    DESTDIR=$(CURDIR)/$(DEBBUILD)/reactor-client
 	@rsync -ruav packagers/deb/reactor-client/ $(DEBBUILD)/reactor-client
 	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-client/DEBIAN/control
 	@fakeroot dpkg -b $(DEBBUILD)/reactor-client .
@@ -154,6 +164,8 @@ reactor-server.rpm: $(RPMBUILD)
 
 reactor-client.rpm: $(RPMBUILD)
 	@rm -rf $(CURDIR)/$(RPMBUILD)/BUILDROOT/*
+	@$(MAKE) client_install \
+	    DESTDIR=$(CURDIR)/$(RPMBUILD)/BUILDROOT
 	@rpmbuild --with=suggests -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
 	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \
 	    --define="%version $(PACKAGE_VERSION)" \

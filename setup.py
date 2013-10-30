@@ -73,7 +73,8 @@ setup(
     include_package_data=True,
     entry_points={
         'console_scripts': [
-            'reactor = reactor.cli:main',
+            'reactor = reactor.client:main',
+            'reactor-server = reactor.server:main',
         ]
     },
     classifiers=[

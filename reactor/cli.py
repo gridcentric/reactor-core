@@ -16,11 +16,9 @@
 import os
 import getopt
 import logging
-import signal
 import sys
 import traceback
 import json
-import gc
 import getpass
 import atexit
 import time
@@ -30,21 +28,6 @@ import time
 # http://stackoverflow.com/questions/13193278/understand-python-threading-bug
 import threading
 threading._DummyThread._Thread__stop = lambda x: 42
-
-from . import ips as ips_mod
-
-# For debugging stop race conditions.
-def find_objects(t):
-    return filter(lambda o: isinstance(o, t), gc.get_objects())
-def print_threads():
-    for i, stack in sys._current_frames().items():
-        sys.stderr.write("thread %s\n" % str(i))
-        traceback.print_stack(stack)
-
-def sig_usr2_handler(signum, frame):
-    print_threads()
-
-signal.signal(signal.SIGUSR2, sig_usr2_handler)
 
 # Our default API server.
 DEFAULT_API = "localhost"
@@ -61,108 +44,112 @@ LOG_FORMATS = {
 def log_format(severity):
     return LOG_FORMATS.get(severity, "%s %s %s")
 
-def usage():
+def usage(is_server=False):
     print "Usage: %s [options] <command>" % sys.argv[0]
     print "Options:"
     print ""
     print "   --help                  Display this help message."
     print ""
-    print "   --api=                  The API URL (default is %s)." % DEFAULT_API
-    print "                           (Alternately, this API server can be provided"
-    print "                            in the environment variable REACTOR_API)."
-    print ""
-    print "   --password=             Specify a password to connect to the API."
-    print "   --askpass               Prompt for the password."
-    print "                           (Alternately, the API password can be provided"
-    print "                            in the environment variable REACTOR_PASSWORD)."
-    print ""
-    print "   --zookeeper=            The host:port of a zookeeper instance. Use this"
-    print "                           option multiple times to specify multiple servers."
-    print "                           This is only necessary for the local commands."
-    print "                           (Alternately, this ZooKeeper servers can be provided"
-    print "                            in the environment variable REACTOR_ZK_SERVERS)."
-    print ""
+    if is_server:
+        print "   --zookeeper=            The host:port of a zookeeper instance. Use this"
+        print "                           option multiple times to specify multiple servers."
+        print "                           (Alternately, this ZooKeeper servers can be provided"
+        print "                            in the environment variable REACTOR_ZK_SERVERS)."
+        print ""
+        print "   --log=                  Log to a file instead of stdout."
+        print ""
+        print "   --pidfile=              Daemonize and write the pid to the given file."
+        print ""
+        print "   --gui                   Enable the GUI extension (for runapi)."
+        print ""
+        print "   --cluster               Enable the cluster extension (for runapi)."
+        print ""
+    else:
+        print "   --api=                  The API URL (default is %s)." % DEFAULT_API
+        print "                           (Alternately, this API server can be provided"
+        print "                            in the environment variable REACTOR_API)."
+        print ""
+        print "   --password=             Specify a password to connect to the API."
+        print "   --askpass               Prompt for the password."
+        print "                           (Alternately, the API password can be provided"
+        print "                            in the environment variable REACTOR_PASSWORD)."
+        print ""
     print "   --port=                 The port for the API server (default is %d)." % DEFAULT_PORT
-    print "                           This option is also only necessary for run commands."
     print "                           (Alternately, the API port can be provided"
     print "                            in the environment variable REACTOR_PORT)."
     print ""
     print "   --debug                 Enables verbose logging and full stack errors."
     print ""
-    print "   --log=                  Log to a file instead of stdout."
-    print ""
-    print "   --pidfile=              Daemonize and write the pid to the given file."
-    print ""
-    print "   --gui                   Enable the GUI extension (for runapi)."
-    print ""
-    print "   --cluster               Enable the cluster extension (for runapi)."
-    print ""
-    print "Local commands:"
-    print ""
-    print "    zk_servers             Print and update ZooKeeper servers."
-    print ""
-    print "    runserver [names...]   Run the scale manager server."
-    print "    runapi                 Runs the API server."
-    print ""
-    print "Global commands:"
-    print ""
-    print "    version                Get the server API version."
-    print ""
-    print "    url [<URL>]            Get or set the server API URL."
-    print ""
-    print "    passwd [password]      Set or clear the API password."
-    print ""
-    print "Manager commands:"
-    print ""
-    print "    managers               List all the configured managers."
-    print "    managers-active        List all the active managers."
-    print ""
-    print "    manager-update <ip>    Set the configuration for the given manager."
-    print "    manager-show <ip>      Show the current configuration for the manager."
-    print "    manager-forget <ip>    Remove and forget the given manager."
-    print ""
-    print "Endpoint commands:"
-    print ""
-    print "    list                   List all managed endpoints."
-    print ""
-    print "    manage [endpoint]      Create or update the given endpoint."
-    print "                           (The endpoint configuration is read from stdin.)"
-    print "    unmanage [endpoint]    Delete the endpoint with the given name."
-    print "    show [endpoint]        Show the current configuration for the endpoint."
-    print ""
-    print "    rename [endpoint] <new-name>  Rename the givern endpoint."
-    print "    alias [endpoint] <new-name>   Alias the given endpoint."
-    print "                                  The endpoints will share all state."
-    print ""
-    print "    get [endpoint] <section> <key>"
-    print "    set [endpoint] <section> <key> <value>"
-    print ""
-    print "    register [ip]          Register the given IP address."
-    print "    drop [ip]              Remove the given IP address."
-    print "    ips [endpoint]         Displays confirmed IP addresses."
-    print ""
-    print "    associate [endpoint] <instance>    Associate the given instance."
-    print "    disassociate [endpoint] <instance> Disassociate the instance."
-    print "    instances [endpoint]               Show all current instances."
-    print ""
-    print "    state [endpoint]       Get the endpoint state."
-    print ""
-    print "    start [endpoint]       "
-    print "    stop [endpoint]        Update the endpoint state."
-    print "    pause [endpoint]       "
-    print ""
-    print "    get-metrics [endpoint] Get custom endpoint metrics."
-    print "    set-metrics [endpoint] Set custom endpoint metrics."
-    print "                           (The metrics are read as JSON from stdin.)"
-    print "                               {\"name\": [weight, value], ...}"
-    print ""
-    print "    log [endpoint]         Show the endpoint log."
-    print "    watch [endpoint]       Watch the endpoint log."
-    print "    post [endpoint]        Post to the endpoint log."
-    print ""
-    print "    sessions [endpoint]        List all managed sessions."
-    print "    kill [endpoint] <session>  Kill the given session."
-    print ""
+    if is_server:
+        print "Server commands:"
+        print ""
+        print "    zk_servers             Print and update ZooKeeper servers."
+        print ""
+        print "    zk_dump                Dump all zookeeper contents."
+        print ""
+        print "    runserver [names...]   Run the scale manager server."
+        print "    runapi                 Runs the API server."
+        print ""
+    else:
+        print "Global commands:"
+        print ""
+        print "    version                Get the server API version."
+        print ""
+        print "    url [<URL>]            Get or set the server API URL."
+        print ""
+        print "    passwd [password]      Set or clear the API password."
+        print ""
+        print "Manager commands:"
+        print ""
+        print "    managers               List all the configured managers."
+        print "    managers-active        List all the active managers."
+        print ""
+        print "    manager-update <ip>    Set the configuration for the given manager."
+        print "    manager-show <ip>      Show the current configuration for the manager."
+        print "    manager-forget <ip>    Remove and forget the given manager."
+        print ""
+        print "Endpoint commands:"
+        print ""
+        print "    list                   List all managed endpoints."
+        print ""
+        print "    manage [endpoint]      Create or update the given endpoint."
+        print "                           (The endpoint configuration is read from stdin.)"
+        print "    unmanage [endpoint]    Delete the endpoint with the given name."
+        print "    show [endpoint]        Show the current configuration for the endpoint."
+        print ""
+        print "    rename [endpoint] <new-name>  Rename the givern endpoint."
+        print "    alias [endpoint] <new-name>   Alias the given endpoint."
+        print "                                  The endpoints will share all state."
+        print ""
+        print "    get [endpoint] <section> <key>"
+        print "    set [endpoint] <section> <key> <value>"
+        print ""
+        print "    register [ip]          Register the given IP address."
+        print "    drop [ip]              Remove the given IP address."
+        print "    ips [endpoint]         Displays confirmed IP addresses."
+        print ""
+        print "    associate [endpoint] <instance>    Associate the given instance."
+        print "    disassociate [endpoint] <instance> Disassociate the instance."
+        print "    instances [endpoint]               Show all current instances."
+        print ""
+        print "    state [endpoint]       Get the endpoint state."
+        print ""
+        print "    start [endpoint]       "
+        print "    stop [endpoint]        Update the endpoint state."
+        print "    pause [endpoint]       "
+        print ""
+        print "    get-metrics [endpoint] Get custom endpoint metrics."
+        print "    set-metrics [endpoint] Set custom endpoint metrics."
+        print "                           (The metrics are read as JSON from stdin.)"
+        print "                               {\"name\": [weight, value], ...}"
+        print ""
+        print "    log [endpoint]         Show the endpoint log."
+        print "    watch [endpoint]       Watch the endpoint log."
+        print "    post [endpoint]        Post to the endpoint log."
+        print ""
+        print "    sessions [endpoint]        List all managed sessions."
+        print "    kill [endpoint] <session>  Kill the given session."
+        print ""
 
 def daemonize(pidfile):
     # Perform a double fork().
@@ -212,7 +199,7 @@ def daemonize(pidfile):
     f.write("%s\n" % pid)
     f.close()
 
-def main():
+def main(is_server):
     port = os.getenv("REACTOR_PORT") or DEFAULT_PORT
     api_server = os.getenv("REACTOR_API") or DEFAULT_API
     if "REACTOR_ZK_SERVERS" in os.environ:
@@ -225,26 +212,30 @@ def main():
     pidfile = None
     gui = False
     cluster = False
+    do_help = False
 
-    opts, args = getopt.getopt(sys.argv[1:], "",
-        [
-            "help",
-            "api=",
-            "askpass",
-            "password=",
-            "zookeeper=",
-            "port=",
-            "debug",
-            "gui",
-            "pidfile=",
-            "log=",
-            "cluster",
-        ])
+    available_opts = [
+        "help",
+        "api=",
+        "askpass",
+        "password=",
+        "port=",
+        "debug",
+        # NOTE: These are server-only options.
+        # They are parsed at the same time but
+        # will not generally be shown in the help
+        # unless the --server option is passed.
+        "zookeeper=",
+        "gui",
+        "pidfile=",
+        "log=",
+        "cluster",
+    ]
 
+    opts, args = getopt.getopt(sys.argv[1:], "", available_opts)
     for o, a in opts:
         if o in ('--help',):
-            usage()
-            sys.exit(0)
+            do_help = True
         elif o in ('--api',):
             api_server = a
         elif o in ('--askpass',):
@@ -266,16 +257,46 @@ def main():
         elif o in ('--cluster',):
             cluster = True
 
-    from . zookeeper import config as zk_config
+    if do_help:
+        usage(is_server)
+        sys.exit(0)
+
+    loglevel = logging.INFO
+    if debug:
+        loglevel = logging.DEBUG
+
+    # Disable all logging for now.
+    # We want start-up errors to go to the console. The first thing the server
+    # does prior to starting up is call server_ready() below which will enable
+    # the logfile, etc.
+    from . import log
+    log.configure(loglevel, None)
+
+    def get_arg(n):
+        if len(args) < n+1:
+            usage(is_server)
+            sys.exit(1)
+        return args[n]
+
+    def get_args():
+        return args[1:]
+
+    def server_ready():
+        log.configure(loglevel, logfile)
+        if pidfile:
+            daemonize(pidfile)
+
     if len(zk_servers) == 0:
         try:
             # Try to read the saved configuration.
+            from . zookeeper import config as zk_config
             zk_servers = zk_config.read_config()
         except Exception:
             zk_servers = []
 
     if len(zk_servers) == 0:
         # Otherwise, use the default.
+        from . import ips as ips_mod
         zk_servers = [ips_mod.find_default()]
 
     # Fixup the API server.
@@ -285,27 +306,6 @@ def main():
     if len(api_server.split(":")) < 3:
         api_server = "%s:%d" % (api_server, port)
 
-    loglevel = logging.INFO
-    if debug:
-        loglevel = logging.DEBUG
-
-    from . import log
-    log.configure(loglevel, None)
-
-    def get_arg(n):
-        if len(args) < n+1:
-            usage()
-            sys.exit(1)
-        return args[n]
-    def get_args():
-        return args[1:]
-
-    def server_ready():
-        log.configure(loglevel, logfile)
-        if pidfile:
-            daemonize(pidfile)
-
-
     def get_api_client():
         # Grab the client.
         from reactor.apiclient import ReactorApiClient
@@ -314,11 +314,11 @@ def main():
     command = get_arg(0)
 
     try:
-        if command == "version":
+        if not is_server and command == "version":
             api_client = get_api_client()
             print api_client.version()
 
-        elif command == "url":
+        elif not is_server and command == "url":
             api_client = get_api_client()
             if len(args) > 1:
                 new_url = get_arg(1)
@@ -326,18 +326,18 @@ def main():
             else:
                 print api_client.url()
 
-        elif command == "list":
+        elif not is_server and command == "list":
             api_client = get_api_client()
             endpoints = api_client.endpoint_list()
             for endpoint in endpoints:
                 print endpoint
 
-        elif command == "zk_servers":
+        elif is_server and command == "zk_servers":
             zk_config.check_config(zk_servers)
             for server in zk_servers:
                 print server
 
-        elif command == "zk_dump":
+        elif is_server and command == "zk_dump":
             from . zookeeper.client import ZookeeperClient
             from . objects.root import Reactor
 
@@ -345,7 +345,7 @@ def main():
             root = Reactor(client)
             root.dump()
 
-        elif command == "manage":
+        elif not is_server and command == "manage":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -360,7 +360,7 @@ def main():
                 endpoint_name=endpoint_name,
                 config=new_conf)
 
-        elif command == "unmanage":
+        elif not is_server and command == "unmanage":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -369,7 +369,7 @@ def main():
             api_client = get_api_client()
             api_client.endpoint_unmanage(endpoint_name=endpoint_name)
 
-        elif command == "show":
+        elif not is_server and command == "show":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -379,7 +379,7 @@ def main():
             config = api_client.endpoint_config(endpoint_name=endpoint_name)
             print json.dumps(config, indent=2)
 
-        elif command == "rename":
+        elif not is_server and command == "rename":
             if len(args) > 2:
                 endpoint_name = get_arg(1)
                 new_name = get_arg(2)
@@ -393,7 +393,7 @@ def main():
                 new_name=new_name)
             api_client.endpoint_unmanage(endpoint_name=endpoint_name)
 
-        elif command == "alias":
+        elif not is_server and command == "alias":
             if len(args) > 2:
                 endpoint_name = get_arg(1)
                 new_name = get_arg(2)
@@ -406,7 +406,7 @@ def main():
                 endpoint_name=endpoint_name,
                 new_name=new_name)
 
-        elif command == "get":
+        elif not is_server and command == "get":
             if len(args) > 3:
                 endpoint_name = get_arg(1)
                 section = get_arg(2)
@@ -422,7 +422,7 @@ def main():
             if section_config.has_key(key):
                 print section_config[key]
 
-        elif command == "set":
+        elif not is_server and command == "set":
             if len(args) > 4:
                 endpoint_name = get_arg(1)
                 section = get_arg(2)
@@ -443,19 +443,19 @@ def main():
                 endpoint_name=endpoint_name,
                 config=config)
 
-        elif command == "managers":
+        elif not is_server and command == "managers":
             api_client = get_api_client()
             managers = api_client.manager_list()
             for manager in managers:
                 print manager
 
-        elif command == "managers-active":
+        elif not is_server and command == "managers-active":
             api_client = get_api_client()
             managers = api_client.manager_list(active=True)
             for (ip, key) in managers.items():
                 print ip, key
 
-        elif command == "manager-update":
+        elif not is_server and command == "manager-update":
             manager = get_arg(1)
 
             new_conf = ""
@@ -465,18 +465,18 @@ def main():
             api_client = get_api_client()
             api_client.manager_update(manager, new_conf)
 
-        elif command == "manager-show":
+        elif not is_server and command == "manager-show":
             manager = get_arg(1)
             api_client = get_api_client()
             config = api_client.manager_config(manager)
             print json.dumps(config, indent=2)
 
-        elif command == "manager-forget":
+        elif not is_server and command == "manager-forget":
             manager = get_arg(1)
             api_client = get_api_client()
             api_client.manager_forget(manager)
 
-        elif command == "ips":
+        elif not is_server and command == "ips":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -487,7 +487,7 @@ def main():
             for ip in ips:
                 print ip
 
-        elif command == "register":
+        elif not is_server and command == "register":
             if len(args) > 1:
                 ip = get_arg(1)
             else:
@@ -496,7 +496,7 @@ def main():
             api_client = get_api_client()
             api_client.register_ip(ip)
 
-        elif command == "drop":
+        elif not is_server and command == "drop":
             if len(args) > 1:
                 ip = get_arg(1)
             else:
@@ -505,7 +505,7 @@ def main():
             api_client = get_api_client()
             api_client.drop_ip(ip)
 
-        elif command == "associate":
+        elif not is_server and command == "associate":
             if len(args) > 2:
                 endpoint_name = get_arg(1)
                 instance_id = get_arg(2)
@@ -518,7 +518,7 @@ def main():
                 endpoint_name=endpoint_name,
                 instance_id=instance_id)
 
-        elif command == "disassociate":
+        elif not is_server and command == "disassociate":
             if len(args) > 2:
                 endpoint_name = get_arg(1)
                 instance_id = get_arg(2)
@@ -531,7 +531,7 @@ def main():
                 endpoint_name=endpoint_name,
                 instance_id=instance_id)
 
-        elif command == "instances":
+        elif not is_server and command == "instances":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -543,7 +543,7 @@ def main():
                 for instance_id in instance_list:
                     print instance_id, state
 
-        elif command == "state":
+        elif not is_server and command == "state":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -553,7 +553,8 @@ def main():
             state = api_client.endpoint_state(endpoint_name=endpoint_name)
             print json.dumps(state, indent=2)
 
-        elif command == "start" or command == "stop" or command == "pause":
+        elif not is_server and \
+            (command == "start" or command == "stop" or command == "pause"):
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -564,7 +565,7 @@ def main():
                 endpoint_name=endpoint_name,
                 action=command)
 
-        elif command == "get-metrics":
+        elif not is_server and command == "get-metrics":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -575,7 +576,7 @@ def main():
                 endpoint_name=endpoint_name)
             print metrics
 
-        elif command == "set-metrics":
+        elif not is_server and command == "set-metrics":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -590,7 +591,7 @@ def main():
                 endpoint_name=endpoint_name,
                 metrics=json.loads(new_metrics))
 
-        elif command == "log":
+        elif not is_server and command == "log":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -601,7 +602,7 @@ def main():
             for (ts, level, message) in entries:
                 print log_format(level) % (ts, level, message)
 
-        elif command == "watch":
+        elif not is_server and command == "watch":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -619,7 +620,7 @@ def main():
                     last_ts = ts
                 time.sleep(delay)
 
-        elif command == "post":
+        elif not is_server and command == "post":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -634,7 +635,7 @@ def main():
                 endpoint_name=endpoint_name,
                 message=message.strip())
 
-        elif command == "sessions":
+        elif not is_server and command == "sessions":
             if len(args) > 1:
                 endpoint_name = get_arg(1)
             else:
@@ -645,7 +646,7 @@ def main():
             for client, backend in sessions.items():
                 print client, backend
 
-        elif command == "kill":
+        elif not is_server and command == "kill":
             if len(args) > 2:
                 endpoint_name = get_arg(1)
                 session = get_arg(2)
@@ -658,7 +659,7 @@ def main():
                 endpoint_name=endpoint_name,
                 session=session)
 
-        elif command == "passwd":
+        elif not is_server and command == "passwd":
             if len(args) > 1:
                 new_password = get_arg(1)
             else:
@@ -667,7 +668,7 @@ def main():
             api_client = get_api_client()
             api_client.api_key_set(new_password)
 
-        elif command == "runserver":
+        elif is_server and command == "runserver":
 
             from . manager import ScaleManager
             manager = ScaleManager(zk_servers, get_args())
@@ -677,7 +678,7 @@ def main():
             finally:
                 manager.stop()
 
-        elif command == "runapi":
+        elif is_server and command == "runapi":
 
             from reactor.api import ReactorApi
             api = ReactorApi(zk_servers)
@@ -694,7 +695,7 @@ def main():
                 api.stop()
 
         else:
-            usage()
+            usage(is_server)
             sys.exit(1)
 
     except Exception, e:
@@ -702,4 +703,4 @@ def main():
             traceback.print_exc()
         else:
             sys.stderr.write("%s\n" %(e))
-            sys.exit(1)
+        sys.exit(1)

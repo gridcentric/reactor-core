@@ -11,7 +11,7 @@
 
 LOGFILE=/var/log/reactor.log
 PIDFILE=/var/run/reactor.pid
-EXEC=reactor
+EXEC=reactor-server
 
 # Source function library.
 . /etc/rc.d/init.d/functions
