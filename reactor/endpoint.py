@@ -209,51 +209,51 @@ class EndpointLog(EventLog):
 
     # Log entry types.
     ENDPOINT_STARTED = Event(
-        lambda args: "Endpoint marked as Started")
+        lambda args: "Endpoint marked as Started.")
     ENDPOINT_STOPPED = Event(
-        lambda args: "Endpoint marked as Stopped")
+        lambda args: "Endpoint marked as Stopped.")
     ENDPOINT_PAUSED = Event(
-        lambda args: "Endpoint marked as Paused")
+        lambda args: "Endpoint marked as Paused.")
     INSTANCE_UPDATE = Event(
         lambda args: "Instance states: %s" % args[0])
     SCALE_UPDATE = Event(
         lambda args: "Target number of instances has changed: %d => %d" % (args[0], args[1]))
     METRICS_CONFLICT = Event(
-        lambda args: "Scaling rules conflict detected")
+        lambda args: "Scaling rules conflict detected.")
     CONFIG_UPDATED = Event(
-        lambda args: "Configuration reloaded")
+        lambda args: "Configuration reloaded.")
     RECOMMISSION_INSTANCE = Event(
-        lambda args: "Recommissioning instance with IP %s" % _as_ip(args[0]))
+        lambda args: "Recommissioning instance with IP %s..." % _as_ip(args[0]))
     DECOMMISSION_INSTANCE = Event(
-        lambda args: "Decommissioning instance with IP %s" % _as_ip(args[0]))
+        lambda args: "Decommissioning instance with IP %s..." % _as_ip(args[0]))
     CLEAN_INSTANCE = Event(
-        lambda args: "Cleaning instance data for %s" % args[0])
+        lambda args: "Cleaning instance data for %s..." % args[0])
     LAUNCH_INSTANCE = Event(
-        lambda args: "Launching instance")
+        lambda args: "Launching instance...")
     LAUNCH_SUCCESS = Event(
-        lambda args: "Launched instance %s" % args[0])
+        lambda args: "Launched instance %s." % args[0])
     LAUNCH_FAILURE = Event(
         lambda args: "Failure launching instance: %s" % args[0])
     DELETE_INSTANCE = Event(
-        lambda args: "Deleting instance with IP %s" % _as_ip(args[0]))
+        lambda args: "Deleting instance with IP %s." % _as_ip(args[0]))
     DELETE_FAILURE = Event(
-        lambda args: "Failure deleting instance with IP %s" % _as_ip(args[0]))
+        lambda args: "Failure deleting instance with IP %s." % _as_ip(args[0]))
     CONFIRM_IP = Event(
-        lambda args: "Confirmed instance with IP %s (%s)" %
+        lambda args: "Confirmed instance with IP %s (%s)." %
             (_as_ip(args[0]), len(args) > 1 and args[1] or "unknown"))
     DROP_IP = Event(
-        lambda args: "Dropped instance with IP %s (%s)" %
+        lambda args: "Dropped instance with IP %s (%s)." %
             (_as_ip(args[0]), len(args) > 1 and args[1] or "unknown"))
     ERROR_IP = Event(
-        lambda args: "Errors on instance with IP %s" % _as_ip(args[0]))
+        lambda args: "Errors on instance with IP %s." % _as_ip(args[0]))
     ERROR_INSTANCE = Event(
-        lambda args: "Errors on instance %s" % args[0])
+        lambda args: "Errors on instance %s." % args[0])
     DROP_SESSION_ERROR = Event(
-        lambda args: "Unable to drop session %s" % args[0])
+        lambda args: "Unable to drop session %s." % args[0])
     UPDATE_ERROR = Event(
         lambda args: "Error updating endpoint: %s" % args[0])
     RELOADED = Event(
-        lambda args: "Loadbalancer updated")
+        lambda args: "Loadbalancer updated.")
 
     def __init__(self, *args):
         super(EndpointLog, self).__init__(*args, size=EndpointLog.LOG_SIZE)

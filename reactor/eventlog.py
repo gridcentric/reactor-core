@@ -14,6 +14,7 @@
 #    under the License.
 
 import time
+import logging
 
 class Event(object):
 
@@ -67,12 +68,15 @@ class EventLog(object):
         self.zkobj.add((time.time(), sev, code, args), limit=self.size)
 
     def info(self, event, *args):
+        logging.info(event.formatfn(args))
         self._log(self.INFO, event, *args)
 
     def warn(self, event, *args):
+        logging.warning(event.formatfn(args))
         self._log(self.WARN, event, *args)
 
     def error(self, event, *args):
+        logging.error(event.formatfn(args))
         self._log(self.ERROR, event, *args)
 
     def post(self, message, level=None):

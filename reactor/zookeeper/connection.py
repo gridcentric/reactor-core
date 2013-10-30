@@ -18,6 +18,8 @@ import threading
 import traceback
 import zookeeper
 
+from reactor.log import log
+
 ZOO_OPEN_ACL_UNSAFE = {"perms":0x1f, "scheme":"world", "id":"anyone"}
 ZOO_CONNECT_WAIT_TIME = 60.0
 
@@ -35,12 +37,13 @@ def wrap_exceptions(fn):
             return fn(*args, **kwargs)
         except ZookeeperException:
             raise
-        except:
+        except Exception:
             raise ZookeeperException("Unknown error: %s" % str(traceback.format_exc()))
     wrapped_fn.__name__ = fn.__name__
     wrapped_fn.__doc__ = fn.__doc__
     return wrapped_fn
 
+@log
 @wrap_exceptions
 def connect(servers, timeout=ZOO_CONNECT_WAIT_TIME):
     cond = threading.Condition()
@@ -111,6 +114,7 @@ class ZookeeperConnection(object):
     def __del__(self):
         self.close()
 
+    @log
     def close(self):
         self.cond.acquire()
         # Forget current watches, otherwise it's easy for
@@ -126,6 +130,7 @@ class ZookeeperConnection(object):
         finally:
             self.cond.release()
 
+    @log
     @wrap_exceptions
     def silence(self):
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_ERROR)
@@ -180,6 +185,7 @@ class ZookeeperConnection(object):
             # NOTE: We return the final path created.
             return zookeeper.create(self.handle, path, contents, [self.acl], flags)
 
+    @log
     @wrap_exceptions
     def write(
         self,
@@ -216,6 +222,7 @@ class ZookeeperConnection(object):
                 if exclusive:
                     return False
 
+    @log
     @wrap_exceptions
     def exists(self, path):
         """
@@ -223,6 +230,7 @@ class ZookeeperConnection(object):
         """
         return zookeeper.exists(self.handle, path)
 
+    @log
     @wrap_exceptions
     def read(self, path, default=None):
         """
@@ -240,6 +248,7 @@ class ZookeeperConnection(object):
 
         return value
 
+    @log
     @wrap_exceptions
     def list_children(self, path):
         """
@@ -257,6 +266,7 @@ class ZookeeperConnection(object):
                 pass
         return []
 
+    @log
     @wrap_exceptions
     def delete(self, path):
         """
@@ -276,6 +286,7 @@ class ZookeeperConnection(object):
         except zookeeper.NoNodeException:
             pass
 
+    @log
     @wrap_exceptions
     def watch_contents(self, path, fn, default_value="", clean=False):
         if not (path and fn):
@@ -295,6 +306,7 @@ class ZookeeperConnection(object):
             self.cond.release()
         return value
 
+    @log
     @wrap_exceptions
     def watch_children(self, path, fn, clean=False):
         if not (path and fn):
@@ -348,6 +360,7 @@ class ZookeeperConnection(object):
         finally:
             self.cond.release()
 
+    @log
     @wrap_exceptions
     def clear_watch_path(self, path):
         if not path:
@@ -362,6 +375,7 @@ class ZookeeperConnection(object):
         finally:
             self.cond.release()
 
+    @log
     @wrap_exceptions
     def clear_watch_fn(self, fn):
         if not fn:

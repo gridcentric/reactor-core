@@ -91,17 +91,25 @@ class ZkNode(object):
         self._seqid = 0
         self.reset(data=data)
 
+    @log
     def _fire_data_callbacks(self):
         value = self._data
+        fired = 0
         for handle, callback in self._data_callbacks:
             _task_run(callback, handle, CHANGED_EVENT, CONNECTED_STATE, self._abspath())
+            fired += 1
         self._data_callbacks = []
+        return fired
 
+    @log
     def _fire_child_callbacks(self):
         value = self._children.keys()
+        fired = 0
         for handle, callback in self._child_callbacks:
             _task_run(callback, handle, CHILD_EVENT, CONNECTED_STATE, self._abspath())
+            fired += 1
         self._child_callbacks = []
+        return fired
 
     def find_parent(self, path):
         comps = path.rsplit("/", 1)

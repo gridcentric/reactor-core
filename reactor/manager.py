@@ -91,11 +91,13 @@ class ManagerLog(EventLog):
     NO_MANAGER_AVAILABLE = Event(
         lambda args: "No manager avilable for endpoint %s!" % args[0])
     ENDPOINT_MANAGED = Event(
-        lambda args: "Endpoint %s is managed (owned? %s)" % (args[0], args[1]))
+        lambda args: "Endpoint %s is managed (owned: %s)." % (args[0], args[1]))
     ENDPOINTS_CHANGED = Event(
         lambda args: "Endpoints have changed: %s" % args[0])
+    MANAGERS_CHANGED = Event(
+        lambda args: "Managers have changed: %s" % args[0])
     REGISTERED = Event(
-        lambda args: "Manager registered")
+        lambda args: "Manager registered.")
     MALFORMED_METRICS = Event(
         lambda args: "Found malformed metrics: %s" % args[0])
     LOCAL_METRICS = Event(
@@ -113,9 +115,9 @@ class ManagerLog(EventLog):
     ENDPOINT_ERROR = Event(
         lambda args: "Error updating endpoint %s: %s" % (args[0], args[1]))
     ENDPOINT_SKIPPED = Event(
-        lambda args: "Skipped endpoint %s" % args[0])
+        lambda args: "Skipped endpoint %s." % args[0])
     ENDPOINT_UPDATED = Event(
-        lambda args: "Updated endpoint %s" % args[0])
+        lambda args: "Updated endpoint %s." % args[0])
 
     def __init__(self, *args):
         super(ManagerLog, self).__init__(*args, size=ManagerLog.LOG_SIZE)
