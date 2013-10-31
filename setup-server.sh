@@ -149,6 +149,14 @@ if [ -f /etc/haproxy/haproxy.cfg ]; then
     cp -a /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.$BACKUP_DATE
 fi
 
+# Check that haproxy is enabled.
+if [ -f /etc/default/haproxy ]; then
+    if grep ENABLED /etc/default/haproxy >/dev/null; then
+        # Ensure that the haproxy init script is enabled.
+        sed -e 's/ENABLED=.*/ENABLED=1/' -i /etc/default/haproxy
+    fi
+fi
+
 # Save the dnsmasq config, if it's installed.
 if [ -f /etc/dnsmasq.conf ]; then
     cp -a /etc/dnsmasq.conf /etc/dnsmasq.conf.$BACKUP_DATE
