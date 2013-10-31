@@ -1,7 +1,8 @@
-<h2>Reactor</h2>
+Reactor
+=======
 
-<p>Reactor is a management platform for cloud-based application delivery.</p>
+<p>Reactor is a management tool for cloud-based application delivery.</p>
 
-<p>It aims to be the glue that connects cloud APIs and load balancers. Reactor can
-be clustered for horizontal scalability or to achieve high availability and
-fault tolerance.</p>
+<p>Documentation is maintained in a separate
+[repository](https://github.com/gridcentric/reactor-docs), and should be
+available [here](http://gridcentric.github.io/reactor-docs/).</p>

@@ -64,10 +64,6 @@ setup(
             "admin/assets/*.sh",
             "admin/assets/lib/*.js",
             "admin/assets/lib/bootstrap/*/*",
-            "admin/docs/*.md",
-            "admin/docs/*.html",
-            "admin/docs/clouds/*.md",
-            "admin/docs/loadbalancers/*.md",
         ]
     },
     include_package_data=True,

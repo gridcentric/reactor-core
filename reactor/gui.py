@@ -101,13 +101,11 @@ class GuiMixin(ReactorApiMixin):
         # so that they can be fetched even in unathenticated contexts).
         api.config.add_route('admin-passwd', '/passwd')
         api.config.add_route('admin-asset', '/assets/{page_name:.*}')
-        api.config.add_route('admin-doc', '/docs/{page_name:.*}', accept="text/html")
         api.config.add_route('admin-page', '/{page_name}', accept="text/html")
         api.config.add_route('admin-object', '/{page_name}/{object_name:.*}', accept="text/html")
 
         api.config.add_view(self.admin_passwd, route_name='admin-passwd')
         api.config.add_view(self.admin_asset, route_name='admin-asset')
-        api.config.add_view(self.admin_doc, route_name='admin-doc')
         api.config.add_view(self.admin, route_name='admin-page')
         api.config.add_view(self.admin, route_name='admin-object')
 
@@ -131,8 +129,6 @@ class GuiMixin(ReactorApiMixin):
             include_dirs=None,
             page_name=None,
             object_name=None,
-            header=None,
-            footer=None,
             render_template=False,
             methods=None,
             **kwargs):
@@ -162,24 +158,10 @@ class GuiMixin(ReactorApiMixin):
             try:
                 raw_page_data = open(filename, 'r').read()
 
-                # Add prefix and postfix.
-                if header is not None:
-                    raw_page_data = "<%%include file=\"/%s\"/>\n%s" % \
-                        (header, raw_page_data)
-                if footer is not None:
-                    raw_page_data = "%s\n<%%include file=\"/%s\"/>\n" % \
-                        (raw_page_data, footer)
-
-                # Convert markdown if necessary.
-                if page_name.endswith(".md"):
-                    raw_template_data = markdown.markdown(raw_page_data, extensions=['toc'])
-                else:
-                    raw_template_data = raw_page_data
-
                 # Render if necessary.
                 if render_template:
                     lookup = TemplateLookup(directories=include_dirs)
-                    template = Template(raw_template_data, lookup=lookup)
+                    template = Template(raw_page_data, lookup=lookup)
                     loggedin = authenticated_userid(request) is not None
                     template_args = {
                         "object": object_name,
@@ -188,7 +170,7 @@ class GuiMixin(ReactorApiMixin):
                     template_args.update(kwargs)
                     page_data = template.render(**template_args)
                 else:
-                    page_data = raw_template_data
+                    page_data = raw_page_data
 
                 # Check for supported types.
                 ext = page_name.split('.')[-1]
@@ -224,31 +206,6 @@ class GuiMixin(ReactorApiMixin):
                     'admin',
                     'include'),
             ],
-            render_template=True)
-
-    def admin_doc(self, context, request):
-        """
-        Render a documentation page.
-        """
-        return self._serve(
-            context,
-            request,
-            base_dir=os.path.join(
-                os.path.dirname(__file__),
-                'admin',
-                'docs'),
-            include_dirs=[
-                os.path.join(
-                    os.path.dirname(__file__),
-                    'admin',
-                    'docs'),
-                os.path.join(
-                    os.path.dirname(__file__),
-                    'admin',
-                    'include'),
-            ],
-            header="docheader.html",
-            footer="docfooter.html",
             render_template=True)
 
     def admin_asset(self, context, request):
