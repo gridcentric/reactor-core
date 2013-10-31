@@ -716,7 +716,7 @@ class ScaleManager(AtomicRunnable):
                 if not port in results:
                     results[port] = lb_metrics
                 else:
-                    results[port].append(lb_metrics)
+                    results[port].extend(lb_metrics)
         return results
 
     @Atomic.sync
