@@ -192,17 +192,29 @@ class Connection(LoadBalancerConnection):
 
         # Restart gently.
         pid = read_pid(config.pid_file)
-        if pid:
-            subprocess.call([
-                "haproxy",
-                "-f", str(config.config_file),
-                "-p", str(config.pid_file),
-                "-sf", str(pid)],
-                close_fds=True)
+        if len(self.frontends) > 0:
+            if pid:
+                subprocess.call([
+                    "haproxy",
+                    "-f", str(config.config_file),
+                    "-p", str(config.pid_file),
+                    "-sf", str(pid)],
+                    close_fds=True)
+            else:
+                subprocess.call(
+                    ["service", "haproxy", "start"],
+                    close_fds=True)
         else:
-            subprocess.call(
-                ["service", "haproxy", "start"],
-                close_fds=True)
+            # NOTE: If haproxy doesn't have any frontends,
+            # then it considers the configuration to be invalid.
+            # It will continue serving traffic to the old IPs,
+            # which *we* consider to be invalid. Thus, we have
+            # no choice here and have to stop haproxy when we
+            # have no frontend listening ports.
+            if pid:
+                subprocess.call(
+                    ["service", "haproxy", "stop"],
+                    close_fds=True)
 
     def _sock_command(self, command):
         if not os.path.exists(self._manager_config().stats_path):
