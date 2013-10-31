@@ -237,6 +237,9 @@ class Connection(LoadBalancerConnection):
         if not output:
             return {}
 
+        # Reset counters for next time.
+        self._sock_command("clear counters all")
+
         # Header is prefixed with '# '.
         header = output[0].strip()[2:]
         keys = header.split(",")
@@ -271,8 +274,6 @@ class Connection(LoadBalancerConnection):
             if all_data.get('status') == 'DOWN':
                 self.error_notify(port)
 
-        # Reset counters for next time.
-        self._sock_command("clear counters")
         return results
 
     def drop_session(self, client, backend):
