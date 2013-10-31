@@ -6,6 +6,7 @@ Group: System
 License: Copyright 2012 GridCentric Inc.
 URL: http://www.gridcentric.com
 Packager: GridCentric Inc. <support@gridcentric.com>
+Requires: reactor-client
 Requires: python-reactor, python-paste
 Requires: python-mako, python-pyramid,
 Requires: python-netifaces, python-ldap
