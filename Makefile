@@ -114,7 +114,7 @@ python-reactor.deb: $(DEBBUILD)
 	    PACKAGES_DIR=dist-packages \
 	    DESTDIR=$(CURDIR)/$(DEBBUILD)/python-reactor
 	@rsync -ruav packagers/deb/python-reactor/ $(DEBBUILD)/python-reactor
-	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/python-reactor/DEBIAN/control
+	@sed -i "s/@(VERSION)/$(PACKAGE_VERSION)/" $(DEBBUILD)/python-reactor/DEBIAN/control
 	@fakeroot dpkg -b $(DEBBUILD)/python-reactor .
 .PHONY: python-reactor.deb
 
@@ -124,7 +124,7 @@ reactor-server.deb: $(DEBBUILD)
 	    INIT=etc/upstart \
 	    DESTDIR=$(CURDIR)/$(DEBBUILD)/reactor-server
 	@rsync -ruav packagers/deb/reactor-server/ $(DEBBUILD)/reactor-server
-	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-server/DEBIAN/control
+	@sed -i "s/@(VERSION)/$(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-server/DEBIAN/control
 	@fakeroot dpkg -b $(DEBBUILD)/reactor-server .
 .PHONY: reactor-server.deb
 
@@ -133,7 +133,7 @@ reactor-client.deb: $(DEBBUILD)
 	@$(MAKE) client_install \
 	    DESTDIR=$(CURDIR)/$(DEBBUILD)/reactor-client
 	@rsync -ruav packagers/deb/reactor-client/ $(DEBBUILD)/reactor-client
-	@sed -i "s/\(^Version:\).*/\1 $(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-client/DEBIAN/control
+	@sed -i "s/@(VERSION)/$(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-client/DEBIAN/control
 	@fakeroot dpkg -b $(DEBBUILD)/reactor-client .
 .PHONY: reactor-client.deb
 

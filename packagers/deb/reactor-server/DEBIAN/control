@@ -1,9 +1,9 @@
 Package: reactor-server
 Section: extra
-Version: VERSION
+Version: @(VERSION)
 Architecture: all
 Depends: reactor-client,
-    python-reactor, python-paste,
+    python-reactor (= @(VERSION)), python-paste,
     python-pyramid, python-mako,
     python-netifaces, python-ldap,
     python-netaddr, python-markdown,
