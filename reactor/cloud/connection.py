@@ -69,7 +69,7 @@ class CloudConnection(Connection):
         """
         raise NotImplementedError()
 
-    def reset_caches(self):
+    def reset_caches(self, config):
         """
         Reset any caching, we want to see fresh instances.
         """
