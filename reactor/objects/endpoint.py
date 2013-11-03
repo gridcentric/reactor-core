@@ -23,6 +23,7 @@ from reactor.zookeeper.objects import attr
 
 from . ip_address import IPAddresses
 from . instance import Instances
+from . metadata import Metadata
 from . session import Sessions
 from . config import ConfigObject
 from . ring import Ring
@@ -59,6 +60,9 @@ CONFIRMED_IPS = "confirmed_ips"
 
 # The associated instances.
 INSTANCES = "instances"
+
+# User-metadata for the endpoint.
+METADATA = "metadata"
 
 # The marked instances.
 MARKED_INSTANCES = "marked_ip"
@@ -244,6 +248,9 @@ class Endpoint(ConfigObject):
 
     def instances(self):
         return self._get_child(INSTANCES, clazz=Instances)
+
+    def metadata(self):
+        return self._get_child(METADATA, clazz=Metadata)
 
     def decommissioned_instances(self):
         return self._get_child(DECOMMISSIONED_INSTANCES, clazz=Instances)

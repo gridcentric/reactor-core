@@ -228,6 +228,16 @@ class ReactorApi(AtomicRunnable):
         self._add('instance-action-implicit', ['1.1'],
                   'endpoint/instances/{instance_id}', self.handle_instance_action)
 
+        self._add('metadata-list', ['1.1'],
+                  'endpoints/{endpoint_name}/metadata', self.list_metadata)
+        self._add('metadata-list-implicit', ['1.1'],
+                  'endpoint/metadata', self.list_metadata)
+
+        self._add('metadata-action', ['1.1'],
+                  'endpoints/{endpoint_name}/metadata/{key_name}', self.handle_metadata_action)
+        self._add('metadata-action-implicit', ['1.1'],
+                  'endpoint/metadata/{key_name}', self.handle_metadata_action)
+
     def _add(self, name, versions, path, fn):
         for version in versions:
             route_name = "%s:%s" % (version, name)
@@ -871,6 +881,48 @@ class ReactorApi(AtomicRunnable):
         elif request.method == "DELETE":
             endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
             endpoint.disassociate(instance_id)
+            return Response()
+        else:
+            return Response(status=403)
+
+    @log
+    @connected
+    @authorized(allow_endpoint=True)
+    def list_metadata(self, context, request):
+        """
+        Return a list of all metadata.
+        """
+        endpoint_name = request.matchdict['endpoint_name']
+
+        if request.method == "GET":
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
+            return Response(body=json.dumps(endpoint.metadata().list()))
+        else:
+            return Response(status=403)
+
+    @log
+    @connected
+    @authorized(allow_endpoint=True)
+    def handle_metadata_action(self, context, request):
+        """
+        Get, set or delete endpoint metadata.
+        """
+        endpoint_name = request.matchdict['endpoint_name']
+        key_name = request.matchdict['key_name']
+
+        if request.method == "GET":
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
+            data = endpoint.metadata().get(key_name)
+            return Response(body=json.dumps(data))
+
+        elif request.method == "POST" or request.method == "PUT":
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
+            endpoint.metadata().add(key_name, json.loads(request.body))
+            return Response()
+
+        elif request.method == "DELETE":
+            endpoint, _ = self.zkobj.endpoints().get(endpoint_name)
+            endpoint.metadata().remove(key_name)
             return Response()
         else:
             return Response(status=403)

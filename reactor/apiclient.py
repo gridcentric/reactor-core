@@ -236,6 +236,49 @@ class ReactorApiClient(httplib2.Http):
             self.request('/v1.1/endpoints/%s/sessions/%s' %
                 (endpoint_name, session), 'DELETE')
 
+    def metadata_list(self, endpoint_name=None):
+        """
+        List all available metadata.
+        """
+        if endpoint_name is None:
+            _, body = self.request('/v1.1/endpoint/metadata', 'GET')
+        else:
+            _, body = self.request('/v1.1/endpoints/%s/metadata' % endpoint_name, 'GET')
+        return body
+
+    def metadata_get(self, endpoint_name=None, key=None):
+        """
+        Get the given metadata key.
+        """
+        if endpoint_name is None:
+            _, body = self.request('/v1.1/endpoint/metadata/%s' % key, 'GET')
+        else:
+            _, body = self.request('/v1.1/endpoints/%s/metadata/%s' % (endpoint_name, key), 'GET')
+        return body
+
+    def metadata_set(self, endpoint_name=None, key=None, value=None):
+        """
+        Get the given metadata key.
+        """
+        if key is None:
+            raise Exception("Key required!")
+        if endpoint_name is None:
+            self.request('/v1.1/endpoint/metadata/%s' % key, 'POST', body=value)
+        else:
+            self.request('/v1.1/endpoints/%s/metadata/%s' %
+                (endpoint_name, key), 'POST', body=value)
+
+    def metadata_delete(self, endpoint_name=None, key=None):
+        """
+        Get the given metadata key.
+        """
+        if key is None:
+            raise Exception("Key required!")
+        if endpoint_name is None:
+            self.request('/v1.1/endpoint/metadata/%s' % key, 'DELETE')
+        else:
+            self.request('/v1.1/endpoints/%s/metadata/%s' % (endpoint_name, key), 'DELETE')
+
     def register_ip(self, ip=None):
         """
         Register the given IP.

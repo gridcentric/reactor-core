@@ -124,6 +124,11 @@ def usage(is_server=False):
         print "    get [endpoint] <section> <key>"
         print "    set [endpoint] <section> <key> <value>"
         print ""
+        print "    metadata-list [endpoint]               List all endpoint metadata."
+        print "    metadata-get [endpoint] <key>          Get the given key."
+        print "    metadata-set [endpoint] <key> <value>  Set the given key."
+        print "    metadata-delete [endpoint] <key>       Remove the given key."
+        print ""
         print "    register [ip]          Register the given IP address."
         print "    drop [ip]              Remove the given IP address."
         print "    ips [endpoint]         Displays confirmed IP addresses."
@@ -443,6 +448,64 @@ def main(is_server):
             api_client.endpoint_manage(
                 endpoint_name=endpoint_name,
                 config=config)
+
+        elif not is_server and command == "metadata-list":
+            if len(args) > 1:
+                endpoint_name = get_arg(1)
+            else:
+                endpoint_name = None
+
+            api_client = get_api_client()
+            for key in api_client.metadata_list(endpoint_name=endpoint_name):
+                print key
+
+        elif not is_server and command == "metadata-get":
+            if len(args) > 2:
+                endpoint_name = get_arg(1)
+                key = get_arg(2)
+            else:
+                endpoint_name = None
+                key = get_arg(1)
+
+            api_client = get_api_client()
+            value = api_client.metadata_get(
+                endpoint_name=endpoint_name,
+                key=key)
+
+            # NOTE: Don't dump the result as json,
+            # because we don't want it to be decorated.
+            # We just want strings as raw strings so
+            # as to be most useful to the user.
+            print value
+
+        elif not is_server and command == "metadata-set":
+            if len(args) > 3:
+                endpoint_name = get_arg(1)
+                key = get_arg(2)
+                value = get_arg(3)
+            else:
+                endpoint_name = None
+                key = get_arg(1)
+                value = get_arg(2)
+
+            api_client = get_api_client()
+            api_client.metadata_set(
+                endpoint_name=endpoint_name,
+                key=key,
+                value=value)
+
+        elif not is_server and command == "metadata-delete":
+            if len(args) > 2:
+                endpoint_name = get_arg(1)
+                key = get_arg(2)
+            else:
+                endpoint_name = None
+                key = get_arg(1)
+
+            api_client = get_api_client()
+            api_client.metadata_delete(
+                endpoint_name=endpoint_name,
+                key=key)
 
         elif not is_server and command == "managers":
             api_client = get_api_client()
