@@ -113,6 +113,8 @@ elif rpm -ql coreutils >/dev/null 2>&1; then
     # This is really annoying. We have to ensure that the current
     # version is up-to-date and then allow easy_install to install
     # an upgraded version.
+    yum -y install python-webob1.2
+    easy_install webob
     yum -y install python-zope-interface
     easy_install --upgrade zope.interface
 
