@@ -136,7 +136,11 @@ class Connection(CloudConnection):
         """
         (instance_id, instance_ip) = self._docker.start(
             self._endpoint_config(config), params=params)
-        return Instance(instance_id, instance_id, [instance_ip]), [instance_ip]
+        if instance_ip is not None:
+            instance_ips = [instance_ip]
+        else:
+            instance_ips = []
+        return Instance(instance_id, instance_id, instance_ips), instance_ips
 
     def delete_instance(self, config, instance_id):
         """

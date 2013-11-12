@@ -82,11 +82,21 @@ class DockerManager(object):
             # Extract the private port.
             instance_info = self.config.client().inspect_container(instance_id)
             network_info = instance_info["NetworkSettings"]
-            if network_info != None and network_info.get("PortMapping"):
+
+            if network_info != None and network_info.get("Ports"):
+                # This handles the case for Docker >= 0.6.5.
+                tcp_ports = network_info.get("Ports").items()
+                if tcp_ports and len(tcp_ports) > 0:
+                    private_port = tcp_ports[0][1][0].get("HostPort")
+                    return '%s:%s' % (self.this_ip, private_port)
+
+            elif network_info != None and network_info.get("PortMapping"):
+                # This handles the case for Docker < 0.6.5.
                 tcp_ports = network_info["PortMapping"].get("Tcp")
                 if tcp_ports and len(tcp_ports) > 0:
                     private_port = tcp_ports.items()[0][1]
                     return '%s:%s' % (self.this_ip, private_port)
+
         except Exception:
             traceback.print_exc()
 
@@ -228,10 +238,14 @@ class DockerManager(object):
         # Figure out the right port.
         # NOTE: This is derived from the endpoint.
         if config.port():
-            # This is weird, but they require a str.
-            ports = [str(config.port())]
+            port_key = "%s/tcp" % (config.port(),)
+            ports = {}
+            ports[port_key] = {}
+            port_bindings = {}
+            port_bindings[port_key] = [{'HostIp': '', 'HostPort': ''}]
         else:
             ports = None
+            port_bindings = None
 
         # Add the slots to the environment.
         env = config.get_environment()
@@ -256,7 +270,12 @@ class DockerManager(object):
         instance_id = instance_info['Id'][:12]
 
         # Start the container.
-        self.config.client().start(instance_id)
+        try:
+           # This will work well for Docker >= 0.6.5.
+           self.config.client().start(instance_id, port_bindings=port_bindings)
+        except TypeError:
+           # If port_bindings is not a known key, then assume Docker < 0.6.5.
+           self.config.client().start(instance_id)
 
         # Grab the local IP for mapping.
         ip_address = self._extract_ip(instance_id)
