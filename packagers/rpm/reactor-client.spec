@@ -6,7 +6,7 @@ Group: System
 License: Copyright 2012 GridCentric Inc.
 URL: http://www.gridcentric.com
 Packager: GridCentric Inc. <support@gridcentric.com>
-Requires: python-reactor
+Requires: python-reactor = %{version}
 BuildRoot: %{_tmppath}/%{name}.%{version}-buildroot
 AutoReq: no
 AutoProv: no

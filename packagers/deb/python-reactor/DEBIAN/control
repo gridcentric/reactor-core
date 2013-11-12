@@ -1,6 +1,6 @@
 Package: python-reactor
 Section: extra
-Version: VERSION
+Version: @(VERSION)
 Architecture: all
 Maintainer: Gridcentric Inc. <support@gridcentric.com>
 Description: Reactor python bindings
