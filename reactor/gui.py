@@ -15,7 +15,6 @@
 
 import os
 import json
-import markdown
 import traceback
 
 from pyramid.httpexceptions import HTTPFound
