@@ -67,13 +67,30 @@ def calculate_num_servers_uniform(total, bound, bump_up=False, bump_down=False):
         # Return the maximum value possible.
         return sys.maxint
 
-    if total % bound == 0:
+    if total == 0 and bound != 0:
+        # Don't confuse this as an exact match.
+        extra = 0
+    elif total % bound == 0:
+        # Adjust the number of instances to account
+        # for open interval rules (i.e. active < 1).
         if bump_up:
-            total += 1
-        if bump_down:
-            total -= 1
+            extra = 1
+        elif bump_down:
+            extra = -1
+        else:
+            extra = 0
+    else:
+        extra = 0
 
-    return int(math.ceil(total / bound))
+    value = int(math.ceil(total / bound))
+    if value > 0 or extra >= 0:
+       return value + extra
+    else:
+       # This is if value == 0 *and* extra < 0.
+       # We don't bump this number below zero,
+       # it doesn't make any sense to reason about
+       # negative numbers of instances.
+       return value
 
 def calculate_server_range(total, lower, upper, lower_exact=True, upper_exact=True):
     r = []
