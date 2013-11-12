@@ -109,6 +109,13 @@ elif rpm -ql coreutils >/dev/null 2>&1; then
     rpm -qa | grep -q epel-release || rpm -Uvh \
             http://dl.fedoraproject.org/pub/epel/6/`uname -m`/epel-release-6-8.noarch.rpm
 
+    # Ugh. The packages on centos are broken for pyramid and zope.
+    # This is really annoying. We have to ensure that the current
+    # version is up-to-date and then allow easy_install to install
+    # an upgraded version.
+    yum -y install python-zope-interface
+    easy_install --upgrade zope.interface
+
     # Loadbalancer soft dependencies.
     yum -y install nginx haproxy dnsmasq zookeeper socat
     # Cloud connection soft dependencies.

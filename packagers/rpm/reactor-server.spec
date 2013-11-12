@@ -10,7 +10,7 @@ Requires: reactor-client
 Requires: python-reactor = %{version}, python-paste
 Requires: python-mako, python-pyramid,
 Requires: python-netifaces, python-ldap
-Requires: python-netaddr, python-webob
+Requires: python-netaddr, python-webob1.0
 Requires: python-zookeeper, python-markdown
 Requires: python-httplib2
 Requires: iptables, curl, openssh-clients
