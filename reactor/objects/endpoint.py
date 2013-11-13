@@ -122,6 +122,10 @@ class Endpoints(DatalessObject):
         if not self._names._get_child(name)._set_data(uuid, exclusive=True):
             raise EndpointExists(name)
 
+        # Save the new configuration.
+        endpoint = self._data._get_child(uuid)
+        endpoint.set_config(config)
+
     def update(self, name, config):
         # Update the configuration for this endpoint.
         # NOTE: This will throw an error per get() above.

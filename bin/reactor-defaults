@@ -9,5 +9,5 @@ echo "started."
 
 # Load the example endpoints.
 for endpoint in /etc/reactor/default/*.conf; do
-    reactor manage $(basename $endpoint .conf) < $endpoint
+    reactor create $(basename $endpoint .conf) < $endpoint
 done
