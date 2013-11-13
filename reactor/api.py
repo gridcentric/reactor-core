@@ -168,14 +168,20 @@ class ReactorApi(Atomic):
         self._add('unregister',  ['1.0', '1.1'],
                   'unregister/{endpoint_ip}', self.unregister_ip_address)
 
-        self._add('manager-action',  ['1.0', '1.1'],
-                  'managers/{manager}', self.handle_manager_action)
+        self._add('manager-config-action',  ['1.0', '1.1'],
+                  'managers/configs/{manager}', self.handle_manager_config_action)
 
-        self._add('manager-list',  ['1.0', '1.1'],
-                  'managers', self.list_managers)
+        self._add('manager-config-list',  ['1.0', '1.1'],
+                  'managers/configs', self.list_manager_configs)
 
-        self._add('manager-log', ['1.1'],
-                  'managers/{manager}/log', self.handle_manager_log)
+        self._add('manager-active-action',  ['1.0', '1.1'],
+                  'managers/active/{manager}', self.handle_manager_active_action)
+
+        self._add('manager-active-list',  ['1.0', '1.1'],
+                  'managers/active', self.list_managers_active)
+
+        self._add('manager-active-log', ['1.1'],
+                  'managers/log/{manager}', self.handle_manager_log)
 
         self._add('endpoint-action',  ['1.0', '1.1'],
                   'endpoints/{endpoint_name}', self.handle_endpoint_action)
@@ -360,7 +366,7 @@ class ReactorApi(Atomic):
         # that this header has been placed by a trusted middleman.
         if forwarded_for and \
             (ips_mod.is_local(ip_address) or \
-            ip_address in self.zkobj.managers().list()):
+            ip_address in self.zkobj.managers().list_configs()):
             ip_address = forwarded_for
 
         return ip_address
@@ -494,7 +500,7 @@ class ReactorApi(Atomic):
             active = self.zkobj.managers().active_count()
             endpoint_states = self.zkobj.endpoints().state_counts()
             instances = len(self.zkobj.endpoint_ips().list())
-            managers = len(self.zkobj.managers().key_map())
+            managers = len(self.zkobj.managers().list_active())
             return Response(body=json.dumps({
                 'active': active,
                 'instances': instances,
@@ -507,9 +513,9 @@ class ReactorApi(Atomic):
     @log
     @connected
     @authorized()
-    def handle_manager_action(self, context, request):
+    def handle_manager_config_action(self, context, request):
         """
-        This Handles a general manager action:
+        This handles an action on a manager configuration:
         GET - Returns the manager config in the Response body.
         POST/PUT - Updates the manager with a new config in the request body.
         DELETE - Removes the management config.
@@ -519,26 +525,8 @@ class ReactorApi(Atomic):
         if request.method == "GET":
             # Read the config if available.
             config = self.zkobj.managers().get_config(manager)
-            if config is not None:
-                real_config = True
-            else:
-                real_config = False
-                config = {}
-
-            # Check if this is a running manager.
-            uuid = self.zkobj.managers().key(manager)
-
-            # No real config *or* running manager?
-            if uuid is None and not real_config:
+            if config is None:
                 return Response(status=404, body=manager)
-
-            if uuid is not None:
-                config['uuid'] = uuid
-                config['info'] = self.zkobj.managers().info(config['uuid'])
-            else:
-                config['uuid'] = None
-                config['info'] = None
-
             return Response(body=json.dumps(config))
 
         elif request.method == "POST" or request.method == "PUT":
@@ -564,15 +552,43 @@ class ReactorApi(Atomic):
     @log
     @connected
     @authorized()
-    def list_managers(self, context, request):
+    def list_manager_configs(self, context, request):
         """
-        Returns a list of managers currently running.
+        Returns a list of managers configurations.
         """
         if request.method == 'GET':
-            configured = self.zkobj.managers().list()
-            active = self.zkobj.managers().key_map()
-            return Response(body=json.dumps(\
-                {'configured': configured, 'active': active}))
+            configured = self.zkobj.managers().list_configs()
+            return Response(body=json.dumps(configured))
+        else:
+            return Response(status=403)
+
+    @log
+    @connected
+    @authorized()
+    def handle_manager_active_action(self, context, request):
+        """
+        This handles an active manager action:
+        GET - Returns the manager info in the Response body.
+        """
+        manager = request.matchdict['manager']
+
+        if request.method == "GET":
+            # Read the config if available.
+            info = self.zkobj.managers().info(manager)
+            return Response(body=json.dumps(info))
+        else:
+            return Response(status=403)
+
+    @log
+    @connected
+    @authorized()
+    def list_managers_active(self, context, request):
+        """
+        Returns a list of managers active.
+        """
+        if request.method == 'GET':
+            active = self.zkobj.managers().list_active()
+            return Response(body=json.dumps(active))
         else:
             return Response(status=403)
 

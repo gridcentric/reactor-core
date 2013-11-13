@@ -14,27 +14,6 @@
 <div class="tab-pane active" id="config">
 <form class="form-horizontal">
 
-<div class="control-group">
-    <label class="control-label" for="uuid">Uuid</label>
-    <div class="controls" class="span4">
-    <input class="input-xlarge" id="uuid" type="text" placeholder="" disabled>
-    </div>
-</div>
-
-<div class="control-group">
-    <label class="control-label" for="uuid">Loadbalancers</label>
-    <div class="controls" class="span4">
-    <input class="input-xlarge" id="loadbalancers" type="text" placeholder="" disabled>
-    </div>
-</div>
-
-<div class="control-group">
-    <label class="control-label" for="uuid">Clouds</label>
-    <div class="controls" class="span4">
-    <input class="input-xlarge" id="clouds" type="text" placeholder="" disabled>
-    </div>
-</div>
-
 <!-- Slot for dynamically generated configuration. -->
 <div class="control-group">
   <label class="control-label" for="dynamic-conf">Configuration</label>
@@ -55,9 +34,8 @@
     <h3 id="deleteModalLabel">Are you sure?</h3>
   </div>
   <div class="modal-body">
-      <p>Are you sure you want to delete this manager? All the configuration
-      data will be destroyed, and the manager will no longer be able to participate
-      in the cluster.</p>
+      <p>Are you sure you want to delete this manager config?
+      All configuration data will be destroyed.</p>
   </div>
   <div class="modal-footer">
     <button class="btn" data-dismiss="modal" aria-hidden="true">Cancel</button>
@@ -90,40 +68,7 @@
     var context = beginMakeConfig("manager-conf-container",
                                   {"loadbalancer": "Load Balancer"},
                                   "/manager",
-                                  "/v1.1/managers/${object}");
-
-    function loadUuid() {
-        $.ajax({
-            url: "/v1.1/managers/${object}",
-            type: 'GET',
-            dataType: 'json',
-            success: function(result) {
-                $("#uuid").val(result['uuid']);
-                if (result['info']) {
-                    // NOTE: Provided the manager is online,
-                    // we pull the log as the first persistent
-                    // name used by the manager. This might not
-                    // be accurate for offline managers, but you
-                    // will be able to click until you find the
-                    // primary log used (handled below).
-                    conf_name = result['info']['names'][0];
-                    if (result['info']['loadbalancers']) {
-                        loadbalancers = result['info']['loadbalancers'].map(
-                            function (item) { return item || "none"; });
-                        $("#loadbalancers").val(loadbalancers.join(","));
-                    }
-                    if (result['info']['clouds']) {
-                        clouds = result['info']['clouds'].map(
-                            function (item) { return item || "none"; });
-                        $("#clouds").val(clouds.join(","));
-                    }
-                } else {
-                    conf_name = "${object}";
-                }
-                loadLog('/v1.1/managers/' + conf_name + '/log', 'log', 'manager-log');
-            },
-        });
-    }
+                                  "/v1.1/managers/configs/${object}");
 
     function loadDelete() {
         $('#deleteModal').modal('show');
@@ -131,7 +76,7 @@
         $("#deleteConfirm").click(function (e) {
             e.preventDefault();
             $.ajax({
-                url: "/v1.1/managers/${object}",
+                url: "/v1.1/managers/configs/${object}",
                 type: 'DELETE',
                 processData: false,
                 success: function() {
@@ -146,8 +91,8 @@
     }
 
     // Set everything up.
-    loadUuid();
     loadDelete();
+    loadLog('/v1.1/managers/log/${object}', 'log', 'manager-log');
     $('#tabs a:first').tab('show');
 </script>
 

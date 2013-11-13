@@ -112,34 +112,55 @@ class ReactorApiClient(httplib2.Http):
             _, body = self.request('/v1.1/endpoints/%s' % endpoint_name, 'GET')
         return body
 
-    def manager_list(self, active=False):
+    def manager_configs_list(self):
         """
-        Returns a list of all managers.
+        Returns a list of all configured managers.
         """
-        _, body = self.request('/v1.1/managers', 'GET')
-        if active:
-            return body.get('active', [])
-        else:
-            return body.get('configured', [])
+        _, body = self.request('/v1.1/managers/configs', 'GET')
+        return body
+
+    def manager_active_list(self):
+        """
+        Returns a list of all running managers.
+        """
+        _, body = self.request('/v1.1/managers/active', 'GET')
+        return body
 
     def manager_update(self, manager, config):
         """
         Update the manager with the given configuration.
         """
-        self.request('/v1.1/managers/%s' % manager, 'POST', body=config)
+        self.request('/v1.1/managers/configs/%s' % manager, 'POST', body=config)
 
     def manager_config(self, manager):
         """
         Return the manager's configuration.
         """
-        _, body = self.request('/v1.1/managers/%s' % manager, 'GET')
+        _, body = self.request('/v1.1/managers/configs/%s' % manager, 'GET')
+        return body
+
+    def manager_info(self, manager):
+        """
+        Return the active manager info.
+        """
+        _, body = self.request('/v1.1/managers/active/%s' % manager, 'GET')
+        return body
+
+    def manager_log(self, manager, since=None):
+        """
+        Return the manager log.
+        """
+        url = '/v1.1/managers/log/%s' % manager
+        if since is not None:
+            url += '?since=%f' % float(since)
+        _, body = self.request(url, 'GET')
         return body
 
     def manager_remove(self, manager):
         """
         Remove the given manager's configuration.
         """
-        self.request('/v1.1/managers/%s' % manager, 'DELETE')
+        self.request('/v1.1/managers/configs/%s' % manager, 'DELETE')
 
     def endpoint_ips(self, endpoint_name=None):
         """

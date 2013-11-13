@@ -1,0 +1,70 @@
+<%include file="/navbar.html" args="manager_name=object"/>
+
+<div class="span9">
+
+<h3>${object}</h3>
+
+<form class="form-horizontal">
+
+<div class="control-group">
+    <label class="control-label" for="name">Name</label>
+    <div class="controls" class="span4">
+    <h4 id="name"></h4>
+    </div>
+</div>
+
+<div class="control-group">
+    <label class="control-label" for="keys">Keys</label>
+    <div class="controls" class="span4">
+    <input class="input-xlarge" id="keys" type="text" placeholder="" disabled>
+    </div>
+</div>
+
+<div class="control-group">
+    <label class="control-label" for="loadbalancers">Loadbalancers</label>
+    <div class="controls" class="span4">
+    <input class="input-xlarge" id="loadbalancers" type="text" placeholder="" disabled>
+    </div>
+</div>
+
+<div class="control-group">
+    <label class="control-label" for="clouds">Clouds</label>
+    <div class="controls" class="span4">
+    <input class="input-xlarge" id="clouds" type="text" placeholder="" disabled>
+    </div>
+</div>
+
+</div>
+
+</div> <!-- span9 -->
+
+<script type="text/javascript">
+
+    function loadInfo() {
+        $.ajax({
+            url: "/v1.1/managers/active/${object}",
+            type: 'GET',
+            dataType: 'json',
+            success: function(result) {
+                $("#name").html(
+                    '<a href="/manager-config/' + result['name'] + '">'
+                    + result['name']
+                    + '</a>');
+                $("#keys").val(result['keys'].length);
+                loadbalancers = result['loadbalancers'].map(
+                    function (item) { return item || "none"; }
+                );
+                $("#loadbalancers").val(loadbalancers.join(","));
+                clouds = result['clouds'].map(
+                    function (item) { return item || "none"; }
+                );
+                $("#clouds").val(clouds.join(","));
+            }
+        });
+    }
+
+    // Set everything up.
+    loadInfo();
+</script>
+
+<%include file="/footer.html"/>

@@ -35,12 +35,16 @@ Global commands:
 
 Manager commands:
 
-    manager-list           List all the configured managers.
+    manager-configs        List all the configured managers.
     manager-active         List all the active managers.
 
-    manager-update <ip>    Set the configuration for the given manager.
-    manager-show <ip>      Show the given manager configuration.
-    manager-remove <ip>    Remove the manager configuration.
+    manager-log <name>     Show the given manager log.
+    manager-watch <name>   Watch the given manager log.
+
+    manager-update <name>  Set the configuration for the given manager.
+    manager-info <uuid>    Show the running manager info.
+    manager-show <name>    Show the given manager configuration.
+    manager-remove <name>  Remove the manager configuration.
 
 Endpoint commands:
 
@@ -117,6 +121,13 @@ ASKPASS = cli.OptionSpec(
     None
 )
 
+WATCH_DELAY = cli.OptionSpec(
+    "watch_delay",
+    "The delay for the watch commands.",
+    float,
+    defaults.DEFAULT_WATCH_DELAY
+)
+
 # Log message formats.
 LOG_FORMATS = {
     "ERROR": "%s \033[91m%s\033[0m %s",
@@ -130,6 +141,7 @@ def client_main(options, args):
     # Pull out our options.
     api_server = options.get("api")
     password = options.get("password")
+    watch_delay = options.get("watch_delay")
 
     # Prompt if needed.
     if options.get("askpass"):
@@ -302,14 +314,30 @@ def client_main(options, args):
             key=key)
 
     elif command == "manager-list":
-        managers = api_client.manager_list()
+        managers = api_client.manager_configs_list()
         for manager in managers:
             print manager
 
     elif command == "manager-active":
-        managers = api_client.manager_list(active=True)
-        for (ip, key) in managers.items():
-            print ip, key
+        managers = api_client.manager_active_list()
+        for uuid in managers:
+            print uuid
+
+    elif command == "manager-log":
+        manager = get_arg(1)
+        entries = api_client.manager_log(manager)
+        for (ts, level, message) in entries:
+            print log_format(level) % (ts, level, message)
+
+    elif command == "manager-watch":
+        manager = get_arg(1)
+        last_ts = 0.0
+        while True:
+            entries = api_client.manager_log(manager, since=last_ts)
+            for (ts, level, message) in entries:
+                print log_format(level) % (ts, level, message)
+                last_ts = ts
+            time.sleep(watch_delay)
 
     elif command == "manager-update":
         manager = get_arg(1)
@@ -317,6 +345,11 @@ def client_main(options, args):
         for line in sys.stdin.readlines():
             new_conf += line
         api_client.manager_update(manager, new_conf)
+
+    elif command == "manager-info":
+        manager = get_arg(1)
+        info = api_client.manager_info(manager)
+        print json.dumps(info, indent=2)
 
     elif command == "manager-show":
         manager = get_arg(1)
@@ -434,7 +467,6 @@ def client_main(options, args):
             endpoint_name = get_arg(1)
         else:
             endpoint_name = None
-        delay = 2.0
         last_ts = 0.0
         while True:
             entries = api_client.endpoint_log(
@@ -443,7 +475,7 @@ def client_main(options, args):
             for (ts, level, message) in entries:
                 print log_format(level) % (ts, level, message)
                 last_ts = ts
-            time.sleep(delay)
+            time.sleep(watch_delay)
 
     elif command == "post":
         if len(args) > 1:
@@ -488,7 +520,7 @@ def client_main(options, args):
         raise cli.InvalidArguments()
 
 def main():
-    cli.main(client_main, [API, PASSWORD, ASKPASS], HELP)
+    cli.main(client_main, [API, PASSWORD, ASKPASS, WATCH_DELAY], HELP)
 
 if __name__ == "__main__":
     main()

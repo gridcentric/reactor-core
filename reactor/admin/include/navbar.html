@@ -15,15 +15,15 @@
   </div>
 
 <%include file="/list.html" args="id='#endpointList',name=endpoint_name,path='/v1.1/endpoints',link='/endpoints/'"/>
-<%include file="/list.html" args="id='#managersActiveList',name=manager_name,path='/v1.1/managers',field='active',key=True,link='/managers/'"/>
-<%include file="/list.html" args="id='#managersConfiguredList',name=manager_name,path='/v1.1/managers',field='configured',link='/managers/'"/>
+<%include file="/list.html" args="id='#managersActiveList',name=manager_name,path='/v1.1/managers/active',link='/manager-active/'"/>
+<%include file="/list.html" args="id='#managersConfiguredList',name=manager_name,path='/v1.1/managers/configs',link='/manager-config/'"/>
 
 <!-- New endpoint form -->
 <div class="row-fluid">
-<div class="span10 centered">
+<div class="span12">
 <form class="form-inline">
 <div class="input-append">
-<input id="endpointname" class="input-small" placeholder="New endpoint" type="text">
+<input id="endpointname" class="input-medium" placeholder="New endpoint" type="text">
   <div class="btn-group">
     <button id="endpoint-create-name" class="btn dropdown-toggle" data-toggle="dropdown">
         Create<span class="caret"></span></button>
@@ -39,10 +39,10 @@
 
 <!-- New manager form -->
 <div class="row-fluid">
-<div class="span10 centered">
+<div class="span12">
 <form class="form-inline">
 <div class="input-append">
-<input id="managername" class="input-small" placeholder="New manager" type="text">
+<input id="managername" class="input-medium" placeholder="New manager" type="text">
   <div class="btn-group">
       <button id="managercreate" class="btn">Create</button>
   </div>
@@ -97,7 +97,7 @@
         } else {
             $.ajax({
                 url: "/v1.1/endpoints/" + name,
-                type: 'POST',
+                type: 'PUT',
                 dataType: 'json',
                 data: JSON.stringify({}),
                 processData: false,
@@ -116,14 +116,14 @@
             $("#manager-prompt-modal").modal("show");
         } else {
             $.ajax({
-                url: "/v1.1/managers/" + name,
-                type: 'POST',
+                url: "/v1.1/managers/configs/" + name,
+                type: 'PUT',
                 dataType: 'json',
                 data: JSON.stringify({}),
                 processData: false,
                 contentType: 'application/json',
                 complete: function() {
-                    window.location = "/managers/" + name;
+                    window.location = "/manager-config/" + name;
                 },
             });
         }

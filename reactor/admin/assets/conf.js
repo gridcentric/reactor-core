@@ -83,7 +83,7 @@ function fetchValues(context, spec, template_info) {
         error: function(req, error, htmlError) {
         },
         success: function(result) {
-            reloadConfig(context, spec, result, template_info);
+            reloadConfig(context, spec, result || {}, template_info);
         }
     });
 }

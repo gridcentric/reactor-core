@@ -15,14 +15,10 @@
 
 from reactor.atomic import Atomic
 from reactor.zookeeper.objects import DatalessObject
-from reactor.zookeeper.objects import RawObject
 from reactor.zookeeper.objects import JSONObject
 
 from . config import ConfigObject
 from . ring import Ring
-
-# Mapping of manager IP => uuid.
-IPS = "ips"
 
 # Manager configuration (by IP).
 CONFIGS = "configs"
@@ -46,33 +42,32 @@ class Managers(DatalessObject, Atomic):
 
     def __init__(self, *args, **kwargs):
         super(Managers, self).__init__(*args, **kwargs)
-        self._ips = self._get_child(IPS, clazz=RawObject)
         self._info = self._get_child(KEYS, clazz=JSONObject)
         self._configured = self._get_child(CONFIGS, clazz=JSONObject)
-        self._configs = {}
 
-    def list(self, **kwargs):
+    def list_configs(self, **kwargs):
         # List available configured managers.
-        return self._configured._list_children()
+        return self._configured._list_children(**kwargs)
 
-    @Atomic.sync
-    def get_config(self, name, watch=None):
+    def list_active(self, **kwargs):
+        # List running managers.
+        return self._info._list_children(**kwargs)
+
+    def get_config(self, name, **kwargs):
         # Return configuration data.
-        if not name in self._configs:
-            self._configs[name] = self._configured._get_child(name, clazz=ConfigObject)
-        return self._configs[name]._get_data(watch=watch)
+        return self._configured._get_child(name)._get_data(**kwargs)
 
     def set_config(self, name, config):
         # Set configuration data.
         self._configured._get_child(name, clazz=ConfigObject)._set_data(config)
 
-    def log(self, name):
-        # Get the associated log object.
-        return self._get_child(LOGS)._get_child(name, clazz=Ring)
-
     def remove_config(self, name):
         # Clear configuration data.
         self._configured._get_child(name)._delete()
+
+    def log(self, name):
+        # Get the associated log object.
+        return self._get_child(LOGS)._get_child(name, clazz=Ring)
 
     def set_metrics(self, uuid, value):
         return self._get_child(METRICS)._get_child(
@@ -86,46 +81,22 @@ class Managers(DatalessObject, Atomic):
         return self._get_child(ACTIVE)._get_child(
                 uuid, clazz=JSONObject)._set_data(value, ephemeral=True)
 
-    def register(self, uuid, ips, info):
+    def register(self, uuid, info):
         """
         This method is called by the manager internally.
-        It will register the collection of IPS under the uuid,
-        and ensure that the given data is associated with the uuid.
+        It is used to register the given UUID as an active manager.
         """
-        for ip in ips:
-            self._ips._get_child(ip)._set_data(uuid, ephemeral=True)
         self._info._get_child(uuid)._set_data(info, ephemeral=True)
 
         return self._info._get_child(uuid)._get_data()
 
-    def unregister(self, uuid, ips):
+    def unregister(self, uuid):
         """
         Remove the given uuid from the list of keys.
         This will be called when the manager is not longer serving
         in a capacity as a scale manager (i.e. is shutting down).
         """
-        for ip in ips:
-            ip_obj = self._ips._get_child(ip)
-            if ip_obj._get_data() == uuid:
-                ip_obj._delete()
         self._info._get_child(uuid)._delete()
-
-    def key(self, name):
-        return self._ips._get_child(name)._get_data()
-
-    def key_map(self, **kwargs):
-        # This is a function used by the API to provide a quick and easy
-        # mapping from active IPs to uuids. Note that it's generally not
-        # necessary, as internally the managers only care about IPs.
-        return dict(map(
-            lambda x: (x, self.key(x)),
-            self._ips._list_children()))
-
-    def running(self, **kwargs):
-        """
-        Return the set of UUIDs for running managers.
-        """
-        return self._info._list_children(**kwargs)
 
     def info(self, uuid):
         return self._info._get_child(uuid)._get_data()
@@ -140,7 +111,7 @@ class Managers(DatalessObject, Atomic):
         # need to reload and recompute the ring.
         return dict(map(
             lambda x: (x, self.info(x)),
-            self.running()))
+            self.list_active()))
 
     def metrics_map(self):
         # This function will be called more frequently than info_map() above,

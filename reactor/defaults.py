@@ -24,3 +24,6 @@ DEFAULT_PORT = 8080
 
 # Our default bind port.
 DEFAULT_BIND = ""
+
+# The delay for watching.
+DEFAULT_WATCH_DELAY = 2.0

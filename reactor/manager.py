@@ -21,6 +21,7 @@ import logging
 import uuid
 import weakref
 
+from . import cli
 from . import utils
 from . import defaults
 from . import server
@@ -133,7 +134,7 @@ class ManagerLog(EventLog):
 
 class ScaleManager(AtomicRunnable):
 
-    def __init__(self, zk_servers, names=None):
+    def __init__(self, zk_servers, name=None):
         super(ScaleManager, self).__init__()
 
         # Our thread pool.
@@ -152,22 +153,20 @@ class ScaleManager(AtomicRunnable):
         # We save a collection of keys, loadbalancers, clouds, etc.
         self._uuid = str(uuid.uuid4())
 
-        # Manager names.
-        # Each manager has a collection of readable names.
-        # Basically, this can be used to provide some kind
-        # of sensible scheme for configuration, etc.
-        # By default, these names are the available non-local
-        # IP addresses found on the machine. The name used for
-        # registration is the default() IP and should be at
-        # least routeable.
-        if names is None:
-            self._names = ips_mod.find_global()
-            self._ip = ips_mod.find_default()
+        # Manager IP.
+        self._ip = ips_mod.find_default()
+
+        # Manager name.
+        # Each manager has a readable name that it uses
+        # to load a configuration. Previously, this was a
+        # set of all IPs on the host, however this proved to
+        # be needlessly complicated (even *I* didn't use it).
+        # Instead, we allow one name to be specified, or we
+        # will use the discovered global IP as the name.
+        if name is None:
+            self._name = self._ip
         else:
-            self._names = names
-            self._ip = len(names) > 0 and names[0]
-        if not self._names:
-            raise Exception("Manager has no persistent names!")
+            self._name = name
 
         # Zookeeper objects.
         self.client = ZookeeperClient(zk_servers)
@@ -180,7 +179,7 @@ class ScaleManager(AtomicRunnable):
         # under the first name, and ensure that we expose our names
         # via the manager info block (see _register() below). This way,
         # clients can look up the right place for each manager.
-        self.logging = ManagerLog(self.zkobj.managers().log(self._ip))
+        self.logging = ManagerLog(self.zkobj.managers().log(self._name))
 
         # Ppersistent objects.
         self._url_zkobj = self.zkobj.url()
@@ -240,7 +239,7 @@ class ScaleManager(AtomicRunnable):
         self._register()
 
         # Watch all managers and endpoints.
-        self.manager_change(self._managers_zkobj.running(watch=self.manager_change))
+        self.manager_change(self._managers_zkobj.list_active(watch=self.manager_change))
         self.endpoint_change(self._endpoints_zkobj.list(watch=self.endpoint_change))
 
     def _watch_ips(self):
@@ -252,7 +251,7 @@ class ScaleManager(AtomicRunnable):
         self.drop_ip(self._drop_ips_zkobj.list(watch=self.drop_ip))
 
     def unserve(self):
-        self._managers_zkobj.unregister(self._uuid, self._names)
+        self._managers_zkobj.unregister(self._uuid)
         self._setup_cloud_connections()
         self._setup_loadbalancer_connections()
         self._threadpool.clear()
@@ -440,9 +439,10 @@ class ScaleManager(AtomicRunnable):
         # This instantiates the manager class and builds the config
         # object. We will augment this configuration once we load the
         # loadbalancers and cloud connections.
-        for name in self._names:
-            config.update(
-                self._managers_zkobj.get_config(name, watch=self.update_config))
+        config.update(
+            self._managers_zkobj.get_config(
+                self._name,
+                watch=self.update_config))
 
         # Load the loadbalancer and cloud connections.
         # NOTE: We do this at this point because these connections
@@ -562,15 +562,13 @@ class ScaleManager(AtomicRunnable):
         keys = self._determine_keys(self.config.keys)
 
         # Write out our information blob.
-        self._managers_zkobj.register(
-            self._uuid,
-            self._names,
-            info={
-                "names" : self._names,
-                "keys": keys,
-                "loadbalancers": loadbalancers,
-                "clouds": clouds,
-            })
+        info = {
+            "name" : self._name,
+            "keys": keys,
+            "loadbalancers": loadbalancers,
+            "clouds": clouds,
+        }
+        self._managers_zkobj.register(self._uuid, info)
         self.logging.info(self.logging.REGISTERED)
 
     @Atomic.sync
@@ -1096,8 +1094,16 @@ Usage: reactor-manager [options]
 
 """,)
 
+NAME = cli.OptionSpec(
+    "name",
+    "The manager name (for configuration).",
+    str,
+    None
+)
+
 def manager_main(zk_servers, options):
-    manager = ScaleManager(zk_servers)
+    name = options.get("name")
+    manager = ScaleManager(zk_servers, name=name)
     utils.start_heartbeat()
     try:
         manager.run()
@@ -1111,7 +1117,7 @@ def manager_main(zk_servers, options):
     sys.exc_clear()
 
 def main():
-    server.main(manager_main, [], HELP)
+    server.main(manager_main, [NAME], HELP)
 
 if __name__ == "__main__":
     main()

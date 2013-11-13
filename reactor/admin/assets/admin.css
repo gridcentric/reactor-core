@@ -21,3 +21,9 @@ div.accordion-body.in {
     float: none !important;
     margin: auto !important;
 }
+ul.nav-list li a {
+    white-space: nowrap;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

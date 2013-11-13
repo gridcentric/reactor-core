@@ -117,7 +117,7 @@ def managers(request, n=5):
     """ A collection of scale managers (default 5). """
     # Create N managers.
     from reactor.manager import ScaleManager
-    ms = map(lambda x: ScaleManager(["mock"], names=["manager-%d" % x]), range(n))
+    ms = map(lambda x: ScaleManager(["mock"], name="manager-%d" % x), range(n))
     for m in ms:
         m.serve()
 
