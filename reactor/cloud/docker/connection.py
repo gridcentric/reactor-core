@@ -110,6 +110,7 @@ class Connection(CloudConnection):
             self._docker = DockerManager(
                 zkobj=kwargs.get('zkobj'),
                 this_ip=kwargs.get('this_ip'),
+                this_url=kwargs.get('this_url'),
                 config=self._manager_config())
 
     def list_instances(self, config, instance_id=None):

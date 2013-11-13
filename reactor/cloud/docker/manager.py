@@ -56,12 +56,18 @@ class Docker(DatalessObject):
 # based on their configured "slots" on a restart.
 SLOTS_ENVIRONMENT_KEY = '_REACTOR_SCHEDULER_SLOTS'
 
+# Similarly, this key represents the reactor URL.
+# This will be automatically picked up by the reactor
+# client tool, so there's no need to do any tricks.
+REACTOR_ENVIRONMENT_KEY = 'REACTOR_API'
+
 class DockerManager(object):
 
-    def __init__(self, zkobj, this_ip, config):
+    def __init__(self, zkobj, this_ip, this_url, config):
         super(DockerManager, self).__init__()
-        self.this_ip = this_ip
         self.zkobj = zkobj and zkobj._cast_as(Docker)
+        self.this_ip = this_ip
+        self.this_url = this_url
         self.config = config
         self.uuid = str(uuid.uuid4())
         self.used_slots = 0
@@ -249,7 +255,10 @@ class DockerManager(object):
 
         # Add the slots to the environment.
         env = config.get_environment()
-        env[SLOTS_ENVIRONMENT_KEY] = config.slots
+        env[SLOTS_ENVIRONMENT_KEY] = str(config.slots)
+
+        # Add the reactor URL to the environment.
+        env[REACTOR_ENVIRONMENT_KEY] = str(self.this_url)
 
         # Create the container.
         instance_info = self.config.client().create_container(
