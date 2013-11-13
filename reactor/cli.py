@@ -333,6 +333,7 @@ def main(is_server):
                 print endpoint
 
         elif is_server and command == "zk_servers":
+            from . zookeeper import config as zk_config
             zk_config.check_config(zk_servers)
             for server in zk_servers:
                 print server
