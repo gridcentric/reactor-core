@@ -21,14 +21,17 @@ from pyramid.httpexceptions import HTTPFound
 from pyramid.response import Response
 from pyramid.security import authenticated_userid
 from pyramid.url import route_url as _route_url
+from paste import httpserver
 
 from mako.template import Template
 from mako.lookup import TemplateLookup
 from mako import exceptions
 
+from . import server
 from . api import connected
 from . api import authorized
-from . api import ReactorApiMixin
+from . api import ReactorApi
+from . api import HOST, PORT
 from . endpoint import EndpointConfig
 from . manager import ManagerConfig
 
@@ -58,57 +61,53 @@ MIMEMAP = {
     "sh": "text/plain",
 }
 
-class GuiMixin(ReactorApiMixin):
+class ReactorGui(ReactorApi):
 
-    def __init__(self, api):
-        super(GuiMixin, self).__init__(api)
+    def __init__(self, *args, **kwargs):
+        super(ReactorGui, self).__init__(*args, **kwargs)
 
-        # Set the index.
-        api.index = self.admin
+        # NOTE: We bind a collection of new endpoints onto the basic API
+        # configuration. For some of these endpoints, we filter by accept type.
+        # So if the user goes to the reactor URL in their web browser, they
+        # will see the admin interface. If they use javascript embedded in a
+        # page, they will get useable JSON.
 
-        # NOTE: We bind a collection of new endpoints onto
-        # the basic API configuration. For some of these endpoints,
-        # we filter by accept type. So if the user goes to the
-        # reactor URL in their web browser, they will see the admin
-        # interface. If they use javascript embedded in a page, they
-        # will get useable JSON.
-
-        api.config.add_route(
+        self.config.add_route(
             'admin-login', '/login', accept="text/html")
-        api.config.add_route(
+        self.config.add_route(
             'admin-login-form', '/login', accept="application/x-www-form-urlencoded")
-        api.config.add_view(self.admin_login, route_name='admin-login')
-        api.config.add_view(self.admin_login, route_name='admin-login-form')
+        self.config.add_view(self.admin_login, route_name='admin-login')
+        self.config.add_view(self.admin_login, route_name='admin-login-form')
 
-        api.config.add_route(
+        self.config.add_route(
             'admin-logout', '/logout', accept="text/html")
-        api.config.add_route(
+        self.config.add_route(
             'admin-logout-form', '/logout', accept="application/x-www-form-urlencoded")
-        api.config.add_view(self.admin_logout, route_name='admin-logout')
-        api.config.add_view(self.admin_logout, route_name='admin-logout-form')
+        self.config.add_view(self.admin_logout, route_name='admin-logout')
+        self.config.add_view(self.admin_logout, route_name='admin-logout-form')
 
-        api.config.add_route('endpoint-info', '/endpoint')
-        api.config.add_view(self.endpoint_info, route_name='endpoint-info')
+        self.config.add_route('endpoint-info', '/endpoint')
+        self.config.add_view(self.endpoint_info, route_name='endpoint-info')
 
-        api.config.add_route('manager-info', '/manager')
-        api.config.add_view(self.manager_info, route_name='manager-info')
+        self.config.add_route('manager-info', '/manager')
+        self.config.add_view(self.manager_info, route_name='manager-info')
 
         # Note: views are routed on a first-matched basis, so the ordering
         # of the following add_route calls are important since fetches to
         # /admin/assets could be matched by either the admin-asset or
         # admin-object routes (and we want them to go to admin-asset,
         # so that they can be fetched even in unathenticated contexts).
-        api.config.add_route('admin-passwd', '/passwd')
-        api.config.add_route('admin-asset', '/assets/{page_name:.*}')
-        api.config.add_route('admin-page', '/{page_name}', accept="text/html")
-        api.config.add_route('admin-object', '/{page_name}/{object_name:.*}', accept="text/html")
+        self.config.add_route('admin-passwd', '/passwd')
+        self.config.add_route('admin-asset', '/assets/{page_name:.*}')
+        self.config.add_route('admin-page', '/{page_name}', accept="text/html")
+        self.config.add_route('admin-object', '/{page_name}/{object_name:.*}', accept="text/html")
 
-        api.config.add_view(self.admin_passwd, route_name='admin-passwd')
-        api.config.add_view(self.admin_asset, route_name='admin-asset')
-        api.config.add_view(self.admin, route_name='admin-page')
-        api.config.add_view(self.admin, route_name='admin-object')
+        self.config.add_view(self.admin_passwd, route_name='admin-passwd')
+        self.config.add_view(self.admin_asset, route_name='admin-asset')
+        self.config.add_view(self.index, route_name='admin-page')
+        self.config.add_view(self.index, route_name='admin-object')
 
-        api.config.add_view(context='pyramid.exceptions.NotFound',
+        self.config.add_view(context='pyramid.exceptions.NotFound',
             view='pyramid.view.append_slash_notfound_view')
 
     @connected
@@ -189,7 +188,7 @@ class GuiMixin(ReactorApiMixin):
 
     @connected
     @authorized(forbidden_view='self.admin_login')
-    def admin(self, context, request):
+    def index(self, context, request):
         """
         Render main admin page.
         """
@@ -298,3 +297,20 @@ class GuiMixin(ReactorApiMixin):
                 ],
                 render_template=True,
                 page_name='passwd')
+
+HELP = ("""Usage: reactor-gui [options]
+
+    Run the API server (with GUI extension).
+
+""",)
+
+def gui_main(zk_servers, options):
+    api = ReactorGui(zk_servers)
+    app = api.get_wsgi_app()
+    httpserver.serve(app, host=options.get("host"), port=options.get("port"))
+
+def main():
+    server.main(gui_main, [HOST, PORT], HELP)
+
+if __name__ == "__main__":
+    main()

@@ -60,9 +60,20 @@ class ReactorApiClient(httplib2.Http):
         _, body = self.request('/v1.1/endpoints', 'GET')
         return body
 
-    def endpoint_manage(self, endpoint_name=None, config=None):
+    def endpoint_create(self, endpoint_name=None, config=None):
         """
-        Manage the endpoint using the given configuration.
+        Create the endpoint using the given configuration.
+        """
+        if config is None:
+            raise Exception("Config required!")
+        if endpoint_name is None:
+            self.request('/v1.1/endpoint', 'PUT', body=config)
+        else:
+            self.request('/v1.1/endpoints/%s' % endpoint_name, 'PUT', body=config)
+
+    def endpoint_update(self, endpoint_name=None, config=None):
+        """
+        Update the endpoint using the given configuration.
         """
         if config is None:
             raise Exception("Config required!")
@@ -71,9 +82,9 @@ class ReactorApiClient(httplib2.Http):
         else:
             self.request('/v1.1/endpoints/%s' % endpoint_name, 'POST', body=config)
 
-    def endpoint_unmanage(self, endpoint_name=None):
+    def endpoint_remove(self, endpoint_name=None):
         """
-        Unmanage the endpoint.
+        Remove the endpoint.
         """
         if endpoint_name is None:
             self.request('/v1.1/endpoint', 'DELETE')
@@ -124,7 +135,7 @@ class ReactorApiClient(httplib2.Http):
         _, body = self.request('/v1.1/managers/%s' % manager, 'GET')
         return body
 
-    def manager_forget(self, manager):
+    def manager_remove(self, manager):
         """
         Remove the given manager's configuration.
         """
@@ -279,7 +290,7 @@ class ReactorApiClient(httplib2.Http):
         else:
             self.request('/v1.1/endpoints/%s/metadata/%s' % (endpoint_name, key), 'DELETE')
 
-    def register_ip(self, ip=None):
+    def ip_register(self, ip=None):
         """
         Register the given IP.
         """
@@ -288,7 +299,7 @@ class ReactorApiClient(httplib2.Http):
         else:
             self.request('/v1.1/register/%s' % ip, 'POST')
 
-    def drop_ip(self, ip=None):
+    def ip_drop(self, ip=None):
         """
         Unregister the given IP.
         """

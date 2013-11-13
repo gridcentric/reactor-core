@@ -1,0 +1,5 @@
+#!/bin/bash
+
+set -e
+
+invoke-rc.d reactor-manager stop || exit $?

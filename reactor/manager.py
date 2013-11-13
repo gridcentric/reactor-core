@@ -19,8 +19,9 @@ import traceback
 import logging
 import uuid
 
-from . import cli
 from . import utils
+from . import defaults
+from . import server
 from . import ips as ips_mod
 from . import submodules
 from . atomic import Atomic
@@ -520,7 +521,10 @@ class ScaleManager(AtomicRunnable):
                 # configurations. This is passed in as the this_url parameter,
                 # and is constructed from the current IP and the default port,
                 # or (ideally) a URL that has been provided by the user.
-                default_api = "http://%s:%d" % (self._ip, cli.DEFAULT_PORT)
+                default_api = "%s://%s:%d" % (
+                    defaults.DEFAULT_PROTO,
+                    self._ip,
+                    defaults.DEFAULT_PORT)
                 self._clouds[name] = \
                     cloud_connection.get_connection( \
                         name,
@@ -1082,3 +1086,23 @@ class ScaleManager(AtomicRunnable):
         # Since we've passed our methods to those objects on creation,
         # there is currently a reference cycle there.
         self.unserve()
+
+HELP = ("""
+Usage: reactor-manager [options]
+
+    Run the manager process.
+
+""",)
+
+def manager_main(zk_servers, options):
+    manager = ScaleManager(zk_servers)
+    try:
+        manager.run()
+    finally:
+        manager.stop()
+
+def main():
+    server.main(manager_main, [], HELP)
+
+if __name__ == "__main__":
+    main()

@@ -79,6 +79,9 @@ SESSIONS = "sessions"
 class EndpointNotFound(Exception):
     pass
 
+class EndpointExists(Exception):
+    pass
+
 class Endpoints(DatalessObject):
 
     def __init__(self, *args, **kwargs):
@@ -113,16 +116,19 @@ class Endpoints(DatalessObject):
         # List the endpoints as names.
         return self._names._list_children(**kwargs)
 
-    def manage(self, name, config):
+    def create(self, name, config):
         # Generate a UUID if one doesn't exist.
         uuid = str(uuid4())
-        self._names._get_child(name)._set_data(uuid, exclusive=True)
+        if not self._names._get_child(name)._set_data(uuid, exclusive=True):
+            raise EndpointExists(name)
 
-        # Set the configuration for this endpoint.
+    def update(self, name, config):
+        # Update the configuration for this endpoint.
+        # NOTE: This will throw an error per get() above.
         endpoint, _ = self.get(name)
         endpoint.set_config(config)
 
-    def unmanage(self, name):
+    def remove(self, name):
         # Delete the given endpoint.
         self._names._get_child(name)._delete()
 

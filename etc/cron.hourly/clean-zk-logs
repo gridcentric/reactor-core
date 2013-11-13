@@ -1,0 +1,10 @@
+#!/bin/bash
+
+ZK_DATA_DIR=/var/lib/zookeeper/version-2
+ZK_LOG_DIR=/var/lib/zookeeper/version-2
+ZK_BACKUP_COUNT=3
+ZK_JAR_FILE=/usr/share/java/zookeeper.jar
+
+if [ -r $ZK_JAR_FILE ]; then
+    java -cp $ZK_JAR_FILE org.apache.zookeeper.server.PurgeTxnLog $ZK_DATA_DIR $ZK_LOG_DIR -n 3
+fi

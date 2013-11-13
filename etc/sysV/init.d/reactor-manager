@@ -6,24 +6,27 @@
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: Reactor
-# Description:       Reactor auto-scaling daemon
+# Description:       Reactor manager
 ### END INIT INFO
 
-LOGFILE=/var/log/reactor.log
-PIDFILE=/var/run/reactor.pid
-EXEC=reactor-server
+LOGFILE=/var/log/reactor-manager.log
+PIDFILE=/var/run/reactor-manager.pid
+EXEC=reactor-manager
 
 # Source function library.
 . /etc/rc.d/init.d/functions
 
+# Source configuration file.
+. /etc/reactor-manager
+
 case "$1" in
 start)
-    daemon --pidfile $PIDFILE $EXEC --gui --cluster --log $LOGFILE --pidfile $PIDFILE runapi
-    echo "reactor"
+    daemon --pidfile $PIDFILE $EXEC --log $LOGFILE --pidfile $PIDFILE --safe
+    echo "reactor-manager"
 ;;
 stop)
     killproc -p $PIDFILE $EXEC
-    echo "reactor"
+    echo "reactor-manager"
 ;;
 status)
     status -p $PIDFILE $EXEC

@@ -56,20 +56,48 @@ endif
 
 server_install: dist_clean
 ifneq ($(DESTDIR),)
-ifneq ($(INIT),)
-	@$(INSTALL_DIR) $(DESTDIR)/etc
-	@rsync -ruav $(INIT)/ $(DESTDIR)/etc
+	@$(INSTALL_DIR) $(DESTDIR)/etc/reactor
+	@$(INSTALL_DATA) etc/reactor/server.conf $(DESTDIR)/etc/reactor/server.conf
+ifeq ($(UPSTART),y)
+	@$(INSTALL_DIR) $(DESTDIR)/etc/init
+	@$(INSTALL_DIR) $(DESTDIR)/etc/init.d
+	@$(INSTALL_BIN) etc/upstart/init/reactor-server.conf $(DESTDIR)/etc/init
+	@$(INSTALL_BIN) etc/upstart/init.d/reactor-server $(DESTDIR)/etc/init.d
+else
+	@$(INSTALL_DIR) $(DESTDIR)/etc/init.d
+	@$(INSTALL_BIN) etc/sysV/init.d/reactor-server $(DESTDIR)/etc/init.d
 endif
 	@$(INSTALL_DIR) $(DESTDIR)/etc/logrotate.d
-	@$(INSTALL_DATA) etc/logrotate.d/reactor $(DESTDIR)/etc/logrotate.d
-	@$(INSTALL_DIR) $(DESTDIR)/etc/reactor
+	@$(INSTALL_DATA) etc/logrotate.d/reactor-server $(DESTDIR)/etc/logrotate.d
+	@$(INSTALL_DIR) $(DESTDIR)/etc/cron.hourly
+	@$(INSTALL_DATA) etc/cron.hourly/clean-zk-logs $(DESTDIR)/etc/cron.hourly
 	@$(INSTALL_DIR) $(DESTDIR)/etc/reactor/example
 	@$(INSTALL_DIR) $(DESTDIR)/etc/reactor/default
 	@rsync -ruav example/ $(DESTDIR)/etc/reactor/example
 	@rsync -ruav default/ $(DESTDIR)/etc/reactor/default
 	@$(INSTALL_DIR) $(DESTDIR)/usr/bin
-	@$(INSTALL_BIN) bin/reactor-defaults $(DESTDIR)/usr/bin
 	@$(INSTALL_BIN) bin/reactor-server $(DESTDIR)/usr/bin
+	@$(INSTALL_BIN) bin/reactor-defaults $(DESTDIR)/usr/bin
+	@$(INSTALL_BIN) bin/reactor-dump $(DESTDIR)/usr/bin
+endif
+
+manager_install: dist_clean
+ifneq ($(DESTDIR),)
+	@$(INSTALL_DIR) $(DESTDIR)/etc/reactor
+	@$(INSTALL_DATA) etc/reactor/manager.conf $(DESTDIR)/etc/reactor/manager.conf
+ifeq ($(UPSTART),y)
+	@$(INSTALL_DIR) $(DESTDIR)/etc/init
+	@$(INSTALL_DIR) $(DESTDIR)/etc/init.d
+	@$(INSTALL_BIN) etc/upstart/init/reactor-manager.conf $(DESTDIR)/etc/init
+	@$(INSTALL_BIN) etc/upstart/init.d/reactor-manager $(DESTDIR)/etc/init.d
+else
+	@$(INSTALL_DIR) $(DESTDIR)/etc/init.d
+	@$(INSTALL_BIN) etc/sysV/init.d/reactor-manager $(DESTDIR)/etc/init.d
+endif
+	@$(INSTALL_DIR) $(DESTDIR)/etc/logrotate.d
+	@$(INSTALL_DATA) etc/logrotate.d/reactor-manager $(DESTDIR)/etc/logrotate.d
+	@$(INSTALL_DIR) $(DESTDIR)/usr/bin
+	@$(INSTALL_BIN) bin/reactor-manager $(DESTDIR)/usr/bin
 endif
 
 client_install: dist_clean
@@ -121,12 +149,22 @@ python-reactor.deb: $(DEBBUILD)
 reactor-server.deb: $(DEBBUILD)
 	@$(INSTALL_DIR) $(DEBBUILD)/reactor-server
 	@$(MAKE) server_install \
-	    INIT=etc/upstart \
+	    UPSTART=y \
 	    DESTDIR=$(CURDIR)/$(DEBBUILD)/reactor-server
 	@rsync -ruav packagers/deb/reactor-server/ $(DEBBUILD)/reactor-server
 	@sed -i "s/@(VERSION)/$(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-server/DEBIAN/control
 	@fakeroot dpkg -b $(DEBBUILD)/reactor-server .
 .PHONY: reactor-server.deb
+
+reactor-manager.deb: $(DEBBUILD)
+	@$(INSTALL_DIR) $(DEBBUILD)/reactor-manager
+	@$(MAKE) manager_install \
+	    UPSTART=y \
+	    DESTDIR=$(CURDIR)/$(DEBBUILD)/reactor-manager
+	@rsync -ruav packagers/deb/reactor-manager/ $(DEBBUILD)/reactor-manager
+	@sed -i "s/@(VERSION)/$(PACKAGE_VERSION)/" $(DEBBUILD)/reactor-manager/DEBIAN/control
+	@fakeroot dpkg -b $(DEBBUILD)/reactor-manager .
+.PHONY: reactor-manager.deb
 
 reactor-client.deb: $(DEBBUILD)
 	@$(INSTALL_DIR) $(DEBBUILD)/reactor-client
@@ -153,7 +191,7 @@ python-reactor.rpm: $(RPMBUILD)
 reactor-server.rpm: $(RPMBUILD)
 	@rm -rf $(CURDIR)/$(RPMBUILD)/BUILDROOT/*
 	@$(MAKE) server_install \
-	    INIT=etc/sysV \
+	    UPSTART=n \
 	    DESTDIR=$(CURDIR)/$(RPMBUILD)/BUILDROOT
 	@rpmbuild --with=suggests -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
 	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \
@@ -161,6 +199,18 @@ reactor-server.rpm: $(RPMBUILD)
 	    packagers/rpm/reactor-server.spec
 	@find $(RPMBUILD) -name \*.rpm -exec mv {} . \;
 .PHONY: reactor-server.rpm
+
+reactor-manager.rpm: $(RPMBUILD)
+	@rm -rf $(CURDIR)/$(RPMBUILD)/BUILDROOT/*
+	@$(MAKE) manager_install \
+	    UPSTART=n \
+	    DESTDIR=$(CURDIR)/$(RPMBUILD)/BUILDROOT
+	@rpmbuild --with=suggests -bb --buildroot $(CURDIR)/$(RPMBUILD)/BUILDROOT \
+	    --define="%_topdir $(CURDIR)/$(RPMBUILD)" \
+	    --define="%version $(PACKAGE_VERSION)" \
+	    packagers/rpm/reactor-manager.spec
+	@find $(RPMBUILD) -name \*.rpm -exec mv {} . \;
+.PHONY: reactor-manager.rpm
 
 reactor-client.rpm: $(RPMBUILD)
 	@rm -rf $(CURDIR)/$(RPMBUILD)/BUILDROOT/*
@@ -176,8 +226,8 @@ reactor-client.rpm: $(RPMBUILD)
 packages: deb-packages rpm-packages
 .PHONY: packages
 
-deb-packages: python-reactor.deb reactor-server.deb reactor-client.deb
+deb-packages: python-reactor.deb reactor-server.deb reactor-manager.deb reactor-client.deb
 .PHONY: deb-packages
 
-rpm-packages: python-reactor.rpm reactor-server.rpm reactor-client.rpm
+rpm-packages: python-reactor.rpm reactor-server.rpm reactor-manager.rpm reactor-client.rpm
 .PHONY: rpm-packages

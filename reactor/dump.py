@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright 2013 GridCentric Inc.
 # All Rights Reserved.
 #
@@ -14,5 +13,25 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import reactor.gui
-reactor.gui.main()
+from . import cli
+from . import server
+from . objects.root import Reactor
+from . zookeeper.client import ZookeeperClient
+
+HELP = ("""Usage: reactor-dump [options]
+
+    Dump the current Zookeeper tree (for debugging).
+
+""",)
+
+def dump_main(options, args):
+    zk_servers = options.get("zk_servers")
+    client = ZookeeperClient(zk_servers)
+    root = Reactor(client)
+    root.dump()
+
+def main():
+    cli.main(dump_main, [server.ZK_SERVERS], HELP)
+
+if __name__ == "__main__":
+    main()

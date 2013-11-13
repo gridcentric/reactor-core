@@ -271,11 +271,11 @@ class DockerManager(object):
 
         # Start the container.
         try:
-           # This will work well for Docker >= 0.6.5.
-           self.config.client().start(instance_id, port_bindings=port_bindings)
+            # This will work well for Docker >= 0.6.5.
+            self.config.client().start(instance_id, port_bindings=port_bindings)
         except TypeError:
-           # If port_bindings is not a known key, then assume Docker < 0.6.5.
-           self.config.client().start(instance_id)
+            # If port_bindings is not a known key, then assume Docker < 0.6.5.
+            self.config.client().start(instance_id)
 
         # Grab the local IP for mapping.
         ip_address = self._extract_ip(instance_id)

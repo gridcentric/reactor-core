@@ -3,7 +3,7 @@
 set -e
 
 function service_start() {
-    invoke-rc.d reactor-server start || exit $?
+    invoke-rc.d reactor-manager start || exit $?
 }
 
 case $1 in

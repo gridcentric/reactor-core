@@ -14,13 +14,26 @@
 #    under the License.
 
 import uuid
+import time
 import hashlib
 import traceback
 import sys
 import types
 import weakref
+import gc
 
 from . log import log
+
+def find_objects(t):
+    return filter(lambda o: isinstance(o, t), gc.get_objects())
+
+def dump_threads(output):
+    output.write("--- %d ---\n" % time.time())
+    for i, stack in sys._current_frames().items():
+        stack_format = "thread%s\n%s\n" % (
+            str(i), "".join(traceback.format_stack(stack)))
+        output.write(stack_format)
+    output.flush()
 
 def import_class(import_str):
     module_str, _, class_str = import_str.rpartition('.')

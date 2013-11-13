@@ -3,13 +3,9 @@ Section: extra
 Version: @(VERSION)
 Architecture: all
 Depends: reactor-client,
-    python-reactor (= @(VERSION)), python-paste,
-    python-pyramid, python-mako,
-    python-netifaces, python-ldap,
-    python-netaddr, python-markdown,
-    python-webob, python-zookeeper,
-    iptables, curl, openssh-client
-Recommends: python-novaclient, cobalt-novaclient,
-    socat, zookeeperd, nginx, haproxy, dnsmasq
+    python-reactor (= @(VERSION)),
+    python-paste, python-pyramid,
+    python-mako, python-webob,
+    python-zookeeper
 Maintainer: Gridcentric Inc. <support@gridcentric.com>
 Description: Reactor server

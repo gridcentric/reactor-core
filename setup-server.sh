@@ -48,10 +48,14 @@ if dpkg -l coreutils >/dev/null 2>&1; then
 	deb http://downloads.gridcentric.com/packages/cobaltclient/grizzly/precise gridcentric multiverse
 	EOF
 
+    # Install zookeeper here.
+    apt-get -y install zookeeperd
+
     # Install all packages.
     # (Deb packages come with soft dependencies).
     apt-get update
     apt-get -y -o APT::Install-Recommends=1 install reactor-server
+    apt-get -y -o APT::Install-Recommends=1 install reactor-manager
 
 elif rpm -ql coreutils >/dev/null 2>&1; then
 
@@ -118,12 +122,17 @@ elif rpm -ql coreutils >/dev/null 2>&1; then
     yum -y install python-zope-interface
     easy_install --upgrade zope.interface
 
+    # Install zookeeper here.
+    yum -y install zookeeper
+
     # Loadbalancer soft dependencies.
-    yum -y install nginx haproxy dnsmasq zookeeper socat
+    yum -y install nginx haproxy dnsmasq socat
     # Cloud connection soft dependencies.
     yum -y install python-novaclient cobalt-novaclient
+
     # Reactor core (previous packages should be done).
     yum -y install reactor-server
+    yum -y install reactor-manager
 
 else
     # Unknown system!
@@ -170,19 +179,6 @@ fi
 if [ -f /etc/dnsmasq.conf ]; then
     cp -a /etc/dnsmasq.conf /etc/dnsmasq.conf.$BACKUP_DATE
 fi
-
-# Regenerate the zookeeper config.
-if [ -f /etc/zookeeper/conf/zoo.cfg ]; then
-    cp -a /etc/zookeeper/conf/zoo.cfg /etc/zookeeper/conf/zoo.cfg.$BACKUP_DATE
-    rm -f /etc/zookeeper/conf/zoo.cfg
-fi
-if [ -f /etc/zookeeper/zoo.cfg ]; then
-    cp -a /etc/zookeeper/zoo.cfg /etc/zookeeper/zoo.cfg.$BACKUP_DATE
-    rm -f /etc/zookeeper/zoo.cfg
-fi
-
-# This will generate the default configuration.
-reactor-server zk_servers
 
 # Important: defaults should only be run for one reactor in a clustered setup.
 reactor-defaults

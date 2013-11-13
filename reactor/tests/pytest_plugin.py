@@ -145,7 +145,7 @@ def endpoints(request, n=5):
     r = reactor(request)
     for name in names:
         # Save all with an empty configuration.
-        r.endpoints().manage(name, {})
+        r.endpoints().create(name, {})
 
     # Create the collection of endpoints.
     from reactor.endpoint import Endpoint

@@ -69,7 +69,9 @@ setup(
     entry_points={
         'console_scripts': [
             'reactor = reactor.client:main',
-            'reactor-server = reactor.server:main',
+            'reactor-dump = reactor.dump:main',
+            'reactor-server = reactor.gui:main',
+            'reactor-manager = reactor.manager:main',
         ]
     },
     classifiers=[

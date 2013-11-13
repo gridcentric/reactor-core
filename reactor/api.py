@@ -24,17 +24,22 @@ from pyramid.response import Response
 from pyramid.security import remember, forget, authenticated_userid
 from pyramid.authentication import AuthTktAuthenticationPolicy
 from pyramid.authorization import ACLAuthorizationPolicy
+from paste import httpserver
 
+from . import cli
 from . import utils
+from . import server
+from . import defaults
 from . import ips as ips_mod
 from . log import log
-from . atomic import AtomicRunnable
+from . atomic import Atomic
 from . config import fromstr
 from . manager import ManagerConfig
 from . manager import ManagerLog
 from . endpoint import EndpointConfig
 from . endpoint import EndpointLog
 from . objects.root import Reactor
+from . objects.endpoint import EndpointExists
 from . objects.endpoint import EndpointNotFound
 from . zookeeper.connection import ZookeeperException
 from . zookeeper.client import ZookeeperClient
@@ -90,6 +95,9 @@ def connected(fn):
         try:
             self.connect()
             return fn(self, *args, **kwargs)
+        except EndpointExists, e:
+            # Already exists.
+            return Response(status=409, body=str(e))
         except EndpointNotFound, e:
             # Couldn't find object.
             return Response(status=404, body=str(e))
@@ -110,7 +118,7 @@ def connected(fn):
     wrapper_fn.__doc__ = fn.__doc__
     return wrapper_fn
 
-class ReactorApi(AtomicRunnable):
+class ReactorApi(Atomic):
 
     AUTH_SALT = 'gridcentricreactor'
 
@@ -119,7 +127,6 @@ class ReactorApi(AtomicRunnable):
         self.client = ZookeeperClient(zk_servers)
         self.zkobj = Reactor(self.client)
         self.config = Configurator()
-        self._extensions = []
         self._lookup_cache = None
         self._endpoints_zkobj = self.zkobj.endpoints()
 
@@ -246,15 +253,9 @@ class ReactorApi(AtomicRunnable):
             self.config.add_view(fn,
                 route_name=route_name, accept="application/json")
 
-    def extend(self, extension_class):
-        self._extensions.append(extension_class(self))
-
     def disconnect(self):
         self._lookup_cache = None
         self.client.disconnect()
-
-    def reconnect(self, zk_servers):
-        self.client.reconnect(zk_servers)
 
     def connect(self):
         self.client.connect()
@@ -282,24 +283,6 @@ class ReactorApi(AtomicRunnable):
 
     def get_wsgi_app(self):
         return self.config.make_wsgi_app()
-
-    def run(self, **kwargs):
-        for ext in self._extensions:
-            ext.start()
-
-        # NOTE: For whatever annoying reason,
-        # serve() will catch keyboard interrupts
-        # and not raise them further. So, we have
-        # to take the end of the function as the
-        # sign that we should stop running.
-        app = self.get_wsgi_app()
-        from paste.httpserver import serve
-        serve(app, **kwargs)
-
-    def stop(self):
-        for ext in self._extensions:
-            ext.stop()
-        super(ReactorApi, self).stop()
 
     @connected
     def authorize_admin_access(self, context, request):
@@ -469,7 +452,7 @@ class ReactorApi(AtomicRunnable):
         """
         Updates the auth key in the system.
         """
-        if request.method == "POST" or request.method == "PUT":
+        if request.method == "POST":
             auth_key = json.loads(request.body)['auth_key']
             logging.info("Updating API Key.")
             self.zkobj.auth_hash = self._create_admin_auth_token(auth_key)
@@ -642,11 +625,16 @@ class ReactorApi(AtomicRunnable):
             if errors:
                 return Response(status=400, body=json.dumps(errors))
             else:
-                self.zkobj.endpoints().manage(endpoint_name, endpoint_config)
+                if request.method == "PUT":
+                    # Throw an exception if it exists already.
+                    self.zkobj.endpoints().create(endpoint_name, endpoint_config)
+                elif request.method == "POST":
+                    # Throw an exception if it does not exist.
+                    self.zkobj.endpoints().update(endpoint_name, endpoint_config)
                 return Response()
 
         elif request.method == "DELETE":
-            self.zkobj.endpoints().unmanage(endpoint_name)
+            self.zkobj.endpoints().remove(endpoint_name)
             return Response()
 
         else:
@@ -963,44 +951,33 @@ class ReactorApi(AtomicRunnable):
         else:
             return Response(status=403)
 
-class ReactorApiMixin(object):
-    """
-    This class can be used to extend a API instance in order to
-    provide additional functionality. It works as follows:
+HELP = ("""Usage: reactor-api [options]
 
-    * A class inherits from ReactorApiMixin.
-    * You call extend() on the API object above.
+    Run the API server.
 
-    This was done because we wanted to be able to provide arbitrary
-    API extensions (API interface, clustering, etc.) without having
-    to specify a strict ordering as they are independent features.
+""",)
 
-    Sort of like Mixins, but without having to create a new class
-    definition to support the combination. Could have gone with more
-    explicit Mixins or metaclasses or other craziness, but I prefer
-    the manual approach with a little bit more explicitness. There
-    are certainly some ugly bits, but at least it all makes sense.
-    """
+HOST = cli.OptionSpec(
+    "host",
+    "The host to bind to.",
+    str,
+    defaults.DEFAULT_BIND
+)
 
-    def __init__(self, api):
-        super(ReactorApiMixin, self).__init__()
+PORT = cli.OptionSpec(
+    "port",
+    "The port to bind to.",
+    int,
+    defaults.DEFAULT_PORT
+)
 
-        # Bind all base attributes from the API class.
-        # After this point, you can freely add new stuff.
-        # This allows us to treat this class as the API
-        # object. NOTE: all of the original API views have
-        # been bound to the original API methods, so you
-        # *cannot* just change the methods. This is very
-        # much intentional. If you want to override some
-        # built-in behavior, then the API should have some
-        # internal function that it calls which can be
-        # overriden by the extension functionality.
-        for attr in dir(api):
-            if not attr.startswith('__') and not hasattr(self, attr):
-                setattr(self, attr, getattr(api, attr))
+def api_main(zk_servers, options):
+    api = ReactorApi(zk_servers)
+    app = api.get_wsgi_app()
+    httpserver.serve(app, host=options.get("host"), port=options.get("port"))
 
-    def start(self):
-        pass
+def main():
+    server.main(api_main, [HOST, PORT], HELP)
 
-    def stop(self):
-        pass
+if __name__ == "__main__":
+    main()

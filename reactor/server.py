@@ -27,33 +27,78 @@ connections, etc.
 """
 
 import os
-import gc
 import sys
 import time
+import atexit
 import signal
-import traceback
 import ctypes
 import tempfile
 import threading
+import logging
 
 from . import cli
+from . import log
+from . import utils
 
-def find_objects(t):
-    return filter(lambda o: isinstance(o, t), gc.get_objects())
-def dump_threads(output):
-    output.write("--- %d ---\n" % time.time())
-    for i, stack in sys._current_frames().items():
-        stack_format = "thread%s\n%s\n" % (
-            str(i), "".join(traceback.format_stack(stack)))
-        output.write(stack_format)
-    output.flush()
+def daemonize(pidfile):
+    # Perform a double fork().
+    # This will allow us to integrate cleanly
+    # with startup workflows (i.e. the daemon
+    # function on RedHat / CentOS).
+    pid = os.fork()
+    if pid > 0:
+        sys.exit(0)
+
+    # Move to the root.
+    os.chdir("/")
+    os.setsid()
+    os.umask(0)
+
+    pid = os.fork()
+    if pid > 0:
+        sys.exit(0)
+
+    # Close standard file descriptors.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    null = "/dev/null"
+    si = file(null, 'r')
+    so = file(null, 'a+')
+    se = file(null, 'a+', 0)
+    os.dup2(si.fileno(), sys.stdin.fileno())
+    os.dup2(so.fileno(), sys.stdout.fileno())
+    os.dup2(se.fileno(), sys.stderr.fileno())
+
+    try:
+        maxfd = os.sysconf("SC_OPEN_MAX")
+    except (AttributeError, ValueError):
+        maxfd = 1024
+    for fd in range(3, maxfd):
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+    # Register our cleanup function.
+    def rm_pidfile():
+        os.remove(pidfile)
+    atexit.register(rm_pidfile)
+
+    # Write out the pidfile.
+    pid = str(os.getpid())
+    f = open(pidfile,'w+')
+    f.write("%s\n" % pid)
+    f.close()
 
 def commit_suicide():
-    debug_filename = os.path.join(
-        tempfile.gettempdir(),
-        "reactor.%d.out" % os.getpid())
-    debug_output = open(debug_filename, 'w')
-    os.unlink(debug_filename)
+    # We open up a file and unlink immediately.
+    # The file data will continue to get dumped
+    # to disk, but will be cleaned up automatically
+    # when the process disappears. This is simply
+    # to enable easier debugging if we end up with
+    # reactor processes that do not die as expected.
+    debug_output = tempfile.NamedTemporaryFile()
+    os.unlink(debug_output.name)
 
     while True:
         # NOTE: We use SIGINT as the mechanism to raise
@@ -61,7 +106,7 @@ def commit_suicide():
         # be more effective than thread.interrupt_main().
         os.kill(os.getpid(), signal.SIGINT)
         time.sleep(1.0)
-        dump_threads(debug_output)
+        utils.dump_threads(debug_output)
 
 SUICIDE_THREAD = threading.Thread(target=commit_suicide)
 SUICIDE_THREAD.daemon = True
@@ -78,11 +123,43 @@ def start_suicide(signo=None, frame=None):
         # Let's get more serious about this.
         os._exit(1)
 
-def main():
-    # Create a child process.
-    parent_pid = os.getpid()
-    child_pid = os.fork()
-    if child_pid == 0:
+ZK_SERVERS = cli.OptionSpec(
+    "zk_servers",
+    "A list of Zookeeper server addresses.",
+    lambda x: x.split(","),
+    ["localhost"]
+)
+
+PIDFILE = cli.OptionSpec(
+    "pidfile",
+    "Daemonize and write the pid the given file.",
+    str,
+    None
+)
+
+LOG = cli.OptionSpec(
+    "log",
+    "Log to a file (as opposed to stdout).",
+    str,
+    None
+)
+
+VERBOSE = cli.OptionSpec(
+    "verbose",
+    "Enable verbose logging.",
+    None,
+    None
+)
+
+SAFE_STOP = cli.OptionSpec(
+    "safe",
+    "Enable safe stop (useful for some loadbalancers).",
+    None,
+    None
+)
+
+def main(real_main_fn, option_specs, help_msg):
+    try:
         # We setup a safe procedure here to ensure that the
         # child will receive a SIGTERM when the parent exits.
         # This is because we can't reliably ensure that when
@@ -90,28 +167,71 @@ def main():
         # the appropriate signal to the child (perhaps upstart
         # is being nasty, or the user).
         libc = ctypes.CDLL("libc.so.6")
+    except OSError:
+        # We must be an operating system where we don't
+        # have this capability. Unfortunately, we can't
+        # really use our fork(), waitpid() trick.
+        libc = None
 
-        # Set P_SETSIGDEATH to SIGTERM.
-        libc.prctl(1, signal.SIGTERM)
+    # Insert our specs.
+    option_specs = option_specs[:]
+    option_specs.append(ZK_SERVERS)
+    option_specs.append(PIDFILE)
+    option_specs.append(LOG)
+    option_specs.append(VERBOSE)
+    option_specs.append(SAFE_STOP)
 
-        # Ensure that our parent is still who we think it is.
-        # This is because we have a race above, where we could
-        # have already missed the parent death.
-        if os.getppid() != parent_pid:
-            sys.exit(1)
+    def server_main(options, args):
+        # We don't expect arguments.
+        if args:
+            raise cli.InvalidArguments()
 
-        # Install a handler for SIGTERM that raises an
-        # exception in the main thread. This will allow
-        # us to wait for our non-daemon threads to end.
-        signal.signal(signal.SIGTERM, start_suicide)
+        # Pull out our zk_servers.
+        zk_servers = options.get("zk_servers")
 
-        # Run our server command.
-        cli.main(is_server=True)
-        sys.exit(0)
+        # Enable logging.
+        loglevel = logging.INFO
+        if options.get("verbose"):
+            loglevel = logging.DEBUG
+        logfile = options.get("log")
+        log.configure(loglevel, logfile)
 
-    # Wait for the child to die.
-    (_, status) = os.waitpid(child_pid, 0)
-    sys.exit(os.WEXITSTATUS(status))
+        # Daemonize if necessary.
+        pidfile = options.get("pidfile")
+        if pidfile:
+            daemonize(pidfile)
 
-if __name__ == "__main__":
-    main()
+        # Check if we are safe stopping.
+        safe_stop = options.get("safe")
+
+        if safe_stop and libc is not None:
+            # Create a child process.
+            parent_pid = os.getpid()
+            child_pid = os.fork()
+            if child_pid == 0:
+                # Set P_SETSIGDEATH to SIGTERM.
+                libc.prctl(1, signal.SIGTERM)
+
+                # Ensure that our parent is still who we think it is.
+                # This is because we have a race above, where we could
+                # have already missed the parent death.
+                if os.getppid() != parent_pid:
+                    sys.exit(1)
+
+                # Install a handler for SIGTERM that raises an
+                # exception in the main thread. This will allow
+                # us to wait for our non-daemon threads to end.
+                signal.signal(signal.SIGTERM, start_suicide)
+
+                # Run our server command.
+                real_main_fn(zk_servers, options)
+
+            # Wait for the child to die.
+            (_, status) = os.waitpid(child_pid, 0)
+            sys.exit(os.WEXITSTATUS(status))
+        else:
+            # Run the server directly.
+            real_main_fn(zk_servers, options)
+
+    # Run the cli.
+    cli.main(server_main, option_specs, help_msg)

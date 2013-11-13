@@ -21,16 +21,17 @@ from collections import namedtuple
 
 from . atomic import Atomic
 
-ConfigSpec = namedtuple("ConfigSpec", \
-    ["data_type",
-     "label",
-     "default",
-     "options",
-     "normalize",
-     "validate",
-     "order",
-     "description",
-     "alternates"])
+ConfigSpec = namedtuple("ConfigSpec", [
+    "data_type",
+    "label",
+    "default",
+    "options",
+    "normalize",
+    "validate",
+    "order",
+    "description",
+    "alternates"
+])
 
 class Config(object):
 

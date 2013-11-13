@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright 2013 GridCentric Inc.
 # All Rights Reserved.
 #
@@ -14,5 +13,14 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import reactor.gui
-reactor.gui.main()
+# Our default protocol.
+DEFAULT_PROTO = "http"
+
+# Our default API server.
+DEFAULT_HOST = "localhost"
+
+# Our default port.
+DEFAULT_PORT = 8080
+
+# Our default bind port.
+DEFAULT_BIND = ""

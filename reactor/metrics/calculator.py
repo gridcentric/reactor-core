@@ -84,13 +84,13 @@ def calculate_num_servers_uniform(total, bound, bump_up=False, bump_down=False):
 
     value = int(math.ceil(total / bound))
     if value > 0 or extra >= 0:
-       return value + extra
+        return value + extra
     else:
-       # This is if value == 0 *and* extra < 0.
-       # We don't bump this number below zero,
-       # it doesn't make any sense to reason about
-       # negative numbers of instances.
-       return value
+        # This is if value == 0 *and* extra < 0.
+        # We don't bump this number below zero,
+        # it doesn't make any sense to reason about
+        # negative numbers of instances.
+        return value
 
 def calculate_server_range(total, lower, upper, lower_exact=True, upper_exact=True):
     r = []

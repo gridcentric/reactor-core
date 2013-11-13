@@ -1,0 +1,11 @@
+Package: reactor-manager
+Section: extra
+Version: @(VERSION)
+Architecture: all
+Depends: python-reactor (= @(VERSION)),
+    python-netifaces, python-ldap,
+    python-netaddr, python-zookeeper
+Recommends: python-novaclient, cobalt-novaclient,
+    socat, nginx, haproxy, dnsmasq
+Maintainer: Gridcentric Inc. <support@gridcentric.com>
+Description: Reactor manager
