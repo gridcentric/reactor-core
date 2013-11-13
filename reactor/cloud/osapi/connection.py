@@ -36,11 +36,18 @@ STATUS_MAP = {
     "ERROR": STATUS_ERROR,
 }
 
-REACTOR_SCRIPT = """#!/bin/sh
+REACTOR_PRE_SCRIPT = """#!/bin/sh
+mkdir -p /etc/reactor
+echo "REACTOR_API=%(url)s" > /etc/reactor/client.conf
+"""
+REACTOR_POST_SCRIPT = """#!/bin/sh
 if which curl; then
     CMD="curl -X POST %(url)s"
 elif which wget; then
     CMD="wget --post-data='' %(url)s"
+else
+    # No wget or curl?
+    exit 1
 fi
 ATTEMPTS=0
 while ! $CMD && [ "$ATTEMPTS" -lt %(timeout)s ]; do
@@ -250,19 +257,25 @@ class BaseOsConnection(CloudConnection):
         return map(_sanitize, instances)
 
     def _user_data(self, user_data=None):
-        reactor_script = REACTOR_SCRIPT % {
+        pre_script = REACTOR_PRE_SCRIPT % {
+            "url": self._this_url,
+        }
+        post_script = REACTOR_POST_SCRIPT % {
             "url": self._this_url,
             "timeout": 300,
         }
 
+        # We need to provide a multi-part encoding in case
+        # the user provides data as well. The reactor scripts
+        # are always given as the first and last piece in order
+        # to ensure that they've gone through the necessary
+        # setup prior to having the instance registered.
+        msg = MIMEMultipart()
+
+        # Attach the reactor script (first step).
+        msg.attach(MIMEText(pre_script, mime_type(pre_script)))
+
         if user_data:
-            # If the user has provided user-data,
-            # then we need to do a multi-part encoding
-            # of the data. We provide the reactor script
-            # as the second piece, to ensure they've gone
-            # through the necessary setup prior to having
-            # the instance registered.
-            msg = MIMEMultipart()
             orig_msg = email.message_from_file(StringIO(user_data))
 
             for part in orig_msg.walk():
@@ -279,16 +292,10 @@ class BaseOsConnection(CloudConnection):
                 else:
                     msg.attach(part)
 
-            # Attach the reactor script (final step).
-            msg.attach(MIMEText(reactor_script, mime_type(reactor_script)))
+        # Attach the reactor script (final step).
+        msg.attach(MIMEText(post_script, mime_type(post_script)))
 
-            return msg.as_string()
-
-        else:
-            # Without a user script, we can just run
-            # the reactor script directly. We don't need
-            # to provide the multi-part encoding here.
-            return reactor_script
+        return msg.as_string()
 
     def _start_instance(self, config, params):
         """

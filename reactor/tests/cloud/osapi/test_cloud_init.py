@@ -18,7 +18,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from reactor.cloud.osapi.connection import BaseOsConnection
-from reactor.cloud.osapi.connection import REACTOR_SCRIPT
+from reactor.cloud.osapi.connection import REACTOR_PRE_SCRIPT
+from reactor.cloud.osapi.connection import REACTOR_POST_SCRIPT
 
 def walk_userdata(input):
     """This mocks the code that runs on the cloud-init guest service when
@@ -45,27 +46,39 @@ fake_name = 'test-cloud-init'
 fake_url = 'http://test.gc.ca'
 
 def test_basic_cloud_init():
-    conn = BaseOsConnection(fake_name, this_url = fake_url)
-    # Basic text match
-    assert REACTOR_SCRIPT % { 'url' : fake_url,
-                              'timeout' : 300 } == conn._user_data()
+    conn = BaseOsConnection(fake_name, this_url=fake_url)
 
     # What will cloud-init see. Note: single script results in "not multipart"
-    expect = [ ('text/x-not-multipart', 'part-000',
-                REACTOR_SCRIPT % { 'url' : fake_url,
-                                   'timeout' : 300 }) ]
+    expect = [
+        ('text/x-shellscript', 'part-000',
+            REACTOR_PRE_SCRIPT % {
+                'url': fake_url,
+            }),
+        ('text/x-shellscript', 'part-001',
+            REACTOR_POST_SCRIPT % {
+                'url': fake_url,
+                'timeout': 300
+            }),
+    ]
 
     assert walk_userdata(conn._user_data()) == expect
 
 def test_cloud_init_user_script():
     script = "#/bin/sh\ntouch /tmp/foo"
+    conn = BaseOsConnection(fake_name, this_url=fake_url)
 
-    conn = BaseOsConnection(fake_name, this_url = fake_url)
-
-    expect = [ ('text/plain', 'part-000', script),
-               ('text/x-shellscript', 'part-001',
-                REACTOR_SCRIPT % { 'url' : fake_url,
-                                   'timeout' : 300 }) ]
+    expect = [
+        ('text/x-shellscript', 'part-000',
+            REACTOR_PRE_SCRIPT % {
+                'url': fake_url,
+            }),
+        ('text/plain', 'part-001', script),
+        ('text/x-shellscript', 'part-002',
+            REACTOR_POST_SCRIPT % {
+                'url': fake_url,
+                'timeout': 300
+            }),
+    ]
 
     assert walk_userdata(conn._user_data(script)) == expect
 
@@ -105,10 +118,18 @@ echo "This will run as soon as possible in the boot sequence"
     msg.attach(MIMEText(cc, _subtype = "cloud-config"))
     msg.attach(MIMEText(bh, _subtype = "cloud-boothook"))
 
-    expect = [ ('text/cloud-config', 'part-000', cc),
-               ('text/cloud-boothook', 'part-001', bh),
-               ('text/x-shellscript', 'part-002',
-                REACTOR_SCRIPT % { 'url' : fake_url,
-                                   'timeout' : 300 }) ]
+    expect = [
+        ('text/x-shellscript', 'part-000',
+            REACTOR_PRE_SCRIPT % {
+                'url': fake_url,
+            }),
+        ('text/cloud-config', 'part-001', cc),
+        ('text/cloud-boothook', 'part-002', bh),
+        ('text/x-shellscript', 'part-003',
+            REACTOR_POST_SCRIPT % {
+                'url': fake_url,
+                'timeout': 300
+            }),
+    ]
 
     assert walk_userdata(conn._user_data(msg.as_string())) == expect
