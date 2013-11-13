@@ -18,11 +18,10 @@ setup(
         "zope.interface>=3.6",
         "Mako>=0.4.2",
         "PasteDeploy>=1.5",
-        "zookeeper",
+        "zkpython",
         "netifaces",
         "netaddr",
         "python-ldap",
-        "markdown",
     ],
     test_requires=[
         "mock",
