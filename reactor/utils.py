@@ -17,9 +17,13 @@ import uuid
 import time
 import hashlib
 import traceback
+import threading
+import tempfile
+import signal
 import sys
 import types
 import weakref
+import os
 import gc
 
 from . log import log
@@ -34,6 +38,33 @@ def dump_threads(output):
             str(i), "".join(traceback.format_stack(stack)))
         output.write(stack_format)
     output.flush()
+
+def run_heartbeat(debug_output):
+    while True:
+        debug_output.seek(0, 0)
+        debug_output.truncate()
+        dump_threads(debug_output)
+        time.sleep(1.0)
+
+def start_heartbeat():
+    # We open up a file and unlink immediately.
+    # The file data will continue to get dumped
+    # to disk, but will be cleaned up automatically
+    # when the process disappears. This is simply
+    # to enable easier debugging if we end up with
+    # reactor processes that do not die as expected.
+    debug_output = tempfile.NamedTemporaryFile()
+    os.unlink(debug_output.name)
+
+    # Start a heartbeat thread.
+    t = threading.Thread(target=lambda: run_heartbeat(debug_output))
+    t.daemon = True
+    t.start()
+
+def fixup_thread_error():
+    # Silence annoying error output.
+    # See: http://stackoverflow.com/questions/13193278/understand-python-threading-bug
+    threading._DummyThread._Thread__stop = lambda x: 42
 
 def import_class(import_str):
     module_str, _, class_str = import_str.rpartition('.')

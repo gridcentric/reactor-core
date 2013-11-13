@@ -28,7 +28,7 @@ class Worker(threading.Thread):
     def run(self):
         while True:
             job = self._queue.pop()
-            if not job:
+            if job is None:
                 break
             job.run()
             del job

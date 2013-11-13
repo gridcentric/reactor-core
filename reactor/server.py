@@ -32,7 +32,6 @@ import time
 import atexit
 import signal
 import ctypes
-import tempfile
 import threading
 import logging
 
@@ -91,22 +90,12 @@ def daemonize(pidfile):
     f.close()
 
 def commit_suicide():
-    # We open up a file and unlink immediately.
-    # The file data will continue to get dumped
-    # to disk, but will be cleaned up automatically
-    # when the process disappears. This is simply
-    # to enable easier debugging if we end up with
-    # reactor processes that do not die as expected.
-    debug_output = tempfile.NamedTemporaryFile()
-    os.unlink(debug_output.name)
-
     while True:
         # NOTE: We use SIGINT as the mechanism to raise
         # an exception in the main thread. This seems to
         # be more effective than thread.interrupt_main().
         os.kill(os.getpid(), signal.SIGINT)
         time.sleep(1.0)
-        utils.dump_threads(debug_output)
 
 SUICIDE_THREAD = threading.Thread(target=commit_suicide)
 SUICIDE_THREAD.daemon = True

@@ -21,6 +21,8 @@ import traceback
 
 from collections import namedtuple
 
+from . import utils
+
 OptionSpec = namedtuple("OptionSpec", [
     "name",
     "description",
@@ -132,6 +134,9 @@ def main(real_main_fn, option_specs, help_msg):
     assert isinstance(help_msg, tuple)
     assert len(help_msg) in (1, 2)
 
+    # Do common stuff.
+    utils.fixup_thread_error()
+
     # Insert our specs.
     option_specs = option_specs[:]
     option_specs.insert(0, HELP)
@@ -153,4 +158,10 @@ def main(real_main_fn, option_specs, help_msg):
             traceback.print_exc()
         else:
             sys.stderr.write("%s\n" %(e))
-        sys.exit(1)
+
+    # Failed.
+    # Make sure we drop all references before
+    # exiting so that the traceback isn't holding
+    # on to any objects that should be cleaned up.
+    sys.exc_clear()
+    sys.exit(1)

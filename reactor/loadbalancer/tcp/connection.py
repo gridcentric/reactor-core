@@ -494,7 +494,8 @@ class ConnectionProducer(AtomicRunnable):
 
     @Atomic.sync
     def unsubscribe(self, cb):
-        self.notifiers.remove(cb)
+        if cb in self.notifiers:
+            self.notifiers.remove(cb)
 
     @Atomic.sync
     def notify(self):

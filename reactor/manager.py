@@ -13,11 +13,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import sys
 import time
 import bisect
 import traceback
 import logging
 import uuid
+import weakref
 
 from . import utils
 from . import defaults
@@ -1096,10 +1098,17 @@ Usage: reactor-manager [options]
 
 def manager_main(zk_servers, options):
     manager = ScaleManager(zk_servers)
+    utils.start_heartbeat()
     try:
         manager.run()
+    except KeyboardInterrupt:
+        # We don't reraise INT exceptions.
+        # This is our normal exit path.
+        pass
     finally:
         manager.stop()
+
+    sys.exc_clear()
 
 def main():
     server.main(manager_main, [], HELP)
