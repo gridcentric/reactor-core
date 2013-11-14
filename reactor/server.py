@@ -37,7 +37,6 @@ import logging
 
 from . import cli
 from . import log
-from . import utils
 
 def daemonize(pidfile):
     # Perform a double fork().
