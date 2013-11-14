@@ -13,7 +13,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import re
 import socket
+import platform
 import subprocess
 
 def list_local_ips():
@@ -43,7 +45,39 @@ def any_local(hosts):
 def find_global():
     return [x for x in list_local_ips() if is_public(x)]
 
-def find_default():
+def find_default_darwin():
+    from netaddr import IPAddress, IPNetwork
+    from netifaces import interfaces, ifaddresses, AF_INET
+
+    # Get the default gateway.
+    route = subprocess.Popen(
+        ["route", "get", "default"],
+        stdout=subprocess.PIPE,
+        close_fds=True)
+    (stdout, _) = route.communicate()
+    if route.returncode != 0:
+        return find_global()[0]
+
+    gateway = None
+    for line in stdout.split("\n"):
+        m = re.match("(\s+\S+): (\S+)", line)
+        if m and m.group(1) == "gateway":
+            gateway = m.group(2)
+            break
+    if gateway is None:
+        return find_global()[0]
+
+    # Find an address in the subnet.
+    for interface in interfaces():
+        addresses = ifaddresses(interface)
+        if AF_INET in addresses:
+            for link in addresses[AF_INET]:
+                if IPAddress(gateway) in IPNetwork(link['addr'], link['mask']):
+                    return link['addr']
+
+    return find_global()[0]
+
+def find_default_linux():
     # Query all routes.
     ip_route = subprocess.Popen(
         ["ip", "route"],
@@ -75,3 +109,12 @@ def find_default():
                     return fields[6]
 
     return find_global()[0]
+
+def find_default():
+    if platform.system() == 'Darwin':
+        return find_default_darwin()
+    else:
+        return find_default_linux()
+
+if __name__ == "__main__":
+    print find_default()
