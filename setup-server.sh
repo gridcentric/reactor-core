@@ -46,14 +46,21 @@ if dpkg -l coreutils >/dev/null 2>&1; then
     cat >/etc/apt/sources.list.d/reactor.list <<-EOF
 	deb http://downloads.gridcentric.com/packages/reactor/reactor-core/precise gridcentric multiverse
 	deb http://downloads.gridcentric.com/packages/cobaltclient/grizzly/precise gridcentric multiverse
+        deb http://ubuntu-cloud.archive.canonical.com/ubuntu precise-updates/havana main
 	EOF
+
+    # Update all repos.
+    apt-get update
+
+    # Install novaclient here.
+    apt-get -y install ubuntu-cloud-keyring
+    apt-get -y install python-novaclient
 
     # Install zookeeper here.
     apt-get -y install zookeeperd
 
     # Install all packages.
     # (Deb packages come with soft dependencies).
-    apt-get update
     apt-get -y -o APT::Install-Recommends=1 install reactor-server
     apt-get -y -o APT::Install-Recommends=1 install reactor-manager
 
