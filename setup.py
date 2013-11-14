@@ -37,6 +37,7 @@ setup(
         "webob>=1.1",
         "zope.interface>=3.6",
         "Mako>=0.4.2",
+        "paste",
         "PasteDeploy>=1.5",
         "zkpython",
         "netifaces",
