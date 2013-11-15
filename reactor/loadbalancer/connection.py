@@ -127,3 +127,6 @@ class LoadBalancerConnection(Connection):
         Cleanup the given instance.
         """
         pass
+
+    def is_available(self):
+        return True

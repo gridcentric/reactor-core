@@ -29,9 +29,10 @@ from reactor.atomic import Atomic
 from reactor.atomic import AtomicRunnable
 from reactor.config import Config
 from reactor.utils import sha_hash
-from reactor.loadbalancer.utils import read_pid
 from reactor.loadbalancer.connection import LoadBalancerConnection
 from reactor.loadbalancer.netstat import connection_count
+from reactor.loadbalancer.utils import read_pid
+from reactor.loadbalancer.utils import binary_exists
 
 class NginxLogReader(object):
 
@@ -392,3 +393,6 @@ class Connection(LoadBalancerConnection):
 
     def drop_session(self, client, backend):
         raise NotImplementedError()
+
+    def is_available(self):
+        return binary_exists("nginx")

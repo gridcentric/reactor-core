@@ -74,3 +74,6 @@ class CloudConnection(Connection):
         Reset any caching, we want to see fresh instances.
         """
         pass
+
+    def is_available(self):
+        return True

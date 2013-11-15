@@ -17,8 +17,6 @@ from reactor.config import Config
 from reactor.cloud.connection import CloudConnection
 from reactor.cloud.instance import Instance
 
-import docker
-
 class DockerManagerConfig(Config):
 
     # Cached client.
@@ -32,6 +30,7 @@ class DockerManagerConfig(Config):
 
     def client(self):
         if self._client == None:
+            import docker
             self._client = docker.client.Client()
         return self._client
 
@@ -148,3 +147,12 @@ class Connection(CloudConnection):
         Remove the instance from the cloud.
         """
         self._docker.delete(instance_id)
+
+    def is_available(self):
+        try:
+            # Ensure we can connect.
+            import docker
+            docker.client.Client()
+            return True
+        except (ImportError, Exception):
+            return False

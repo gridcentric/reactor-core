@@ -13,8 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import novaclient.exceptions
-
 from reactor.config import Config
 from reactor.cloud.osapi.connection import BaseOsEndpointConfig
 from reactor.cloud.osapi.connection import BaseOsConnection
@@ -36,6 +34,7 @@ class Connection(BaseOsConnection):
         """
         Returns a list of instances from the endpoint.
         """
+        import novaclient.exceptions
         config = self._endpoint_config(config)
         if instance_id is None:
             if config.filter_instances:
@@ -64,3 +63,23 @@ class Connection(BaseOsConnection):
                               guest_params=params,
                               user_data=self._user_data(config.user_data))
         return instance[0]
+
+    def is_available(self):
+        try:
+            from novaclient import shell
+
+            # Fetch a list of extension names.
+            extension_names = [
+                extension.name
+                for extension
+                in shell.OpenStackComputeShell()._discover_extensions("1.1")
+            ]
+
+            # Check that the cobalt extension is installed.
+            return (
+                "cobalt" in extension_names or
+                "cobalt_python_novaclient_ext" in extension_names
+            )
+
+        except ImportError:
+            return False

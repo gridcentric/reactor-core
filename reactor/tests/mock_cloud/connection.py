@@ -74,3 +74,6 @@ class Connection(CloudConnection):
     def delete_instance(self, config, instance_id):
         # Tests should never delete instances that have not been created.
         del self.instances[instance_id]
+
+    def is_available(self):
+        return True

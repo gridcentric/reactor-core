@@ -14,6 +14,7 @@
 #    under the License.
 
 import os
+import subprocess
 
 def read_pid(pid_file):
     if os.path.exists(pid_file):
@@ -23,3 +24,17 @@ def read_pid(pid_file):
         return int(pid)
     else:
         return None
+
+def binary_exists(binary):
+    # Raise an exception if the binary is not installed.
+    # This is used at the top level of modules to ensure
+    # that they are not-importable if it's not enabled.
+    which = subprocess.Popen(
+        ["which", binary],
+        close_fds=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE)
+    which.communicate()
+
+    # Return true if successful.
+    return which.returncode == 0

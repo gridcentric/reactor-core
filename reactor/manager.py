@@ -47,12 +47,12 @@ class ManagerConfig(Config):
 
     loadbalancers = Config.multiselect(label="Enabled Loadbalancer Drivers", order=1,
         options=submodules.loadbalancer_options(),
-        default=submodules.loadbalancer_submodules(include_all=True),
+        default=submodules.loadbalancer_submodules(),
         description="List of supported loadbalancers (e.g. nginx).")
 
     clouds = Config.multiselect(label="Enabled Cloud Drivers", order=1,
         options=submodules.cloud_options(),
-        default=submodules.cloud_submodules(include_all=True),
+        default=submodules.cloud_submodules(),
         description="List of supported clouds (e.g. osapi).")
 
     interval = Config.integer(label="Health Check Interval (seconds)",
@@ -77,11 +77,13 @@ class ManagerConfig(Config):
     def validate(self):
         errors = super(ManagerConfig, self).validate()
         for name in submodules.loadbalancer_submodules():
-            errors.update(lb_connection.get_connection(
-                name, config=self)._manager_config().validate())
+            conn = lb_connection.get_connection(name, config=self)
+            if conn.is_available():
+                errors.update(conn._manager_config().validate())
         for name in submodules.cloud_submodules():
-            errors.update(cloud_connection.get_connection(
-                name, config=self)._manager_config().validate())
+            conn = cloud_connection.get_connection(name, config=self)
+            if conn.is_available():
+                errors.update(conn._manager_config().validate())
         return errors
 
 class ManagerLog(EventLog):
@@ -482,6 +484,12 @@ class ScaleManager(AtomicRunnable):
             if not name in submodules.loadbalancer_submodules():
                 continue
 
+            # Grab a simple test connection.
+            # Skip loadbalancers that are not available here.
+            test_conn = lb_connection.get_connection(name)
+            if not test_conn.is_available():
+                continue
+
             try:
                 # Create the loadbalancer connection.
                 self._loadbalancers[name] = \
@@ -515,6 +523,12 @@ class ScaleManager(AtomicRunnable):
 
             # Skip unavailable clouds.
             if not name in submodules.cloud_submodules():
+                continue
+
+            # Grab a simple test connection.
+            # Skip clouds that are not available here.
+            test_conn = cloud_connection.get_connection(name)
+            if not test_conn.is_available():
                 continue
 
             try:

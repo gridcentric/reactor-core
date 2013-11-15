@@ -479,3 +479,7 @@ class Connection(Atomic):
             self._endpoint_cache[config] = \
                 self._ENDPOINT_CONFIG_CLASS(obj=config, section=self._section)
         return self._endpoint_cache[config]
+
+    def is_available(self):
+        """ Return whether this connection is available. """
+        raise NotImplementedError()

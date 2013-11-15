@@ -23,6 +23,7 @@ from reactor import utils
 from reactor.config import Config
 from reactor.loadbalancer.connection import LoadBalancerConnection
 from reactor.loadbalancer.utils import read_pid
+from reactor.loadbalancer.utils import binary_exists
 
 class HaproxyManagerConfig(Config):
 
@@ -278,3 +279,6 @@ class Connection(LoadBalancerConnection):
 
     def drop_session(self, client, backend):
         raise NotImplementedError()
+
+    def is_available(self):
+        return binary_exists("haproxy")

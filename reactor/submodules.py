@@ -33,9 +33,10 @@ def _discover_submodules(mod, connection_fn, include_all=False):
                     connection_fn(name)
                 discovered.append(name)
         except Exception:
-            logging.debug("Unable to load module %s: %s",
-                          name, traceback.format_exc())
+            logging.error("Unable to load module %s: %s",
+                name, traceback.format_exc())
             continue
+
     return discovered
 
 def _build_options(mods, connection_fn):
@@ -49,31 +50,31 @@ def _build_options(mods, connection_fn):
             desc = connection_fn(mod).__doc__.split("\n")[0]
             options.append((desc, mod))
         except Exception:
-            logging.error("Module %s is missing docstring!", mod)
+            logging.error("Module %s missing docstring?: %s",
+                mod, traceback.format_exc())
             options.append((mod, mod))
+
     return options
 
 # We should really be querying the scale manager for the list
 # of enabled cloud and loadbalancer submodules, but the current
 # architecture does not easily allow for that.
-def cloud_submodules(include_all=False):
+def cloud_submodules():
     return _discover_submodules(
         cloud,
-        cloud.get_connection,
-        include_all=include_all)
+        cloud.get_connection)
 
-def loadbalancer_submodules(include_all=False):
+def loadbalancer_submodules():
     return _discover_submodules(
         loadbalancer,
-        loadbalancer.get_connection,
-        include_all=include_all)
+        loadbalancer.get_connection)
 
 def cloud_options():
     return _build_options(
-        cloud_submodules(include_all=True),
+        cloud_submodules(),
         cloud.get_connection)
 
 def loadbalancer_options():
     return _build_options(
-        loadbalancer_submodules(include_all=True),
+        loadbalancer_submodules(),
         loadbalancer.get_connection)

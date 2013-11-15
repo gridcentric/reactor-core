@@ -25,12 +25,13 @@ import logging
 import netaddr
 
 from reactor import utils
+from reactor.ips import is_local
 from reactor.atomic import Atomic
 from reactor.atomic import AtomicRunnable
 from reactor.config import Config
-from reactor.loadbalancer.connection import LoadBalancerConnection
-from reactor.ips import is_local
 from reactor.objects.ip_address import IPAddresses
+from reactor.loadbalancer.connection import LoadBalancerConnection
+from reactor.loadbalancer.utils import binary_exists
 
 def close_fds(except_fds=None):
     if except_fds is None:
@@ -686,3 +687,6 @@ class Connection(LoadBalancerConnection):
 
     def pending(self):
         return self.consumer.pending()
+
+    def is_available(self):
+        return binary_exists("socat")

@@ -150,22 +150,27 @@ class EndpointConfig(Config):
             if not self.loadbalancer in loadbalancer_submodules():
                 self._add_error('loadbalancer', 'Unknown loadbalancer.')
             else:
+                conn = lb_connection.get_connection(self.loadbalancer)
                 try:
                     # Validate our URL with the loadbalancer.
-                    lb_connection.get_connection(
-                        self.loadbalancer).url_info(self.url)
+                    conn.url_info(self.url)
                 except Exception, e:
                     self._add_error('url', str(e))
-                # Validate any loadbalancer configuration.
-                errors.update(lb_connection.get_connection(
-                    self.loadbalancer)._endpoint_config(self).validate())
+
+                if conn.is_available():
+                    # Validate any loadbalancer configuration.
+                    errors.update(conn._endpoint_config(self).validate())
+
         if self.cloud:
             if not self.cloud in cloud_submodules():
                 self._add_error('cloud', 'Unknown cloud.')
             else:
-                # Validate any cloud configuration.
-                errors.update(cloud_connection.get_connection(
-                    self.cloud)._endpoint_config(self).validate())
+                conn = cloud_connection.get_connection(self.cloud)
+
+                if conn.is_available():
+                    # Validate any cloud configuration.
+                    errors.update(conn._endpoint_config(self).validate())
+
         errors.update(self._get_errors())
         return errors
 

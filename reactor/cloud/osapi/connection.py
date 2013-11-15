@@ -21,10 +21,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from StringIO import StringIO
 
-from novaclient import shell
-from novaclient.v1_1.client import Client as NovaClient
-import novaclient.exceptions
-
 from reactor.config import Config
 from reactor.cloud.connection import CloudConnection
 from reactor.cloud.instance import Instance
@@ -143,6 +139,8 @@ class BaseOsEndpointConfig(Config):
         description="Floating IPs to distribute.")
 
     def novaclient(self):
+        from novaclient import shell
+        from novaclient.v1_1.client import Client as NovaClient
         if self._client is None:
             extensions = shell.OpenStackComputeShell()._discover_extensions("1.1")
             self._client = NovaClient(self.username,
@@ -155,6 +153,7 @@ class BaseOsEndpointConfig(Config):
         return self._client
 
     def validate_connection_params(self, throwerror=True):
+        import novaclient.exceptions
         try:
             self.novaclient().authenticate()
         except Exception, e:
@@ -333,6 +332,7 @@ class BaseOsConnection(CloudConnection):
         return (self._start_instance(config, params=params), None)
 
     def _delete_instance(self, config, instance_id):
+        import novaclient.exceptions
         try:
             config = self._endpoint_config(config)
             config.novaclient().servers._delete("/servers/%s" % (instance_id))
@@ -367,6 +367,7 @@ class BaseOsConnection(CloudConnection):
         config._last_refresh = None
 
     def rebalance(self, config, instance_ids):
+        import novaclient.exceptions
         if len(instance_ids) == 0:
             return
 
@@ -443,14 +444,11 @@ class OsApiEndpointConfig(BaseOsEndpointConfig):
         validate=lambda self: self.validate_keyname(),
         description="The key_name (for injection).")
 
-    # Enable specification of networks if the novaclient supports it.
-    if "tenant_networks" in [ extension.name for extension in \
-        shell.OpenStackComputeShell()._discover_extensions("1.1") ]:
-        network_conf = Config.list(label="Network Configuration", default=[],
-            order=2, validate=lambda self: self.validate_network_conf(),
-            description="Network configuration for scaled instances. " +
-            "This is identical to the --nic parameter in novaclient. " +
-            "One network configuration per line.")
+    network_conf = Config.list(label="Network Configuration", default=[],
+        order=2, validate=lambda self: self.validate_network_conf(),
+        description="Network configuration for scaled instances. " +
+        "This is identical to the --nic parameter in novaclient. " +
+        "One network configuration per line.")
 
     def validate_flavor(self):
         if self.validate_connection_params(False):
@@ -534,6 +532,7 @@ class Connection(BaseOsConnection):
         """
         Returns a  list of instances from the endpoint.
         """
+        import novaclient.exceptions
         config = self._endpoint_config(config)
         if instance_id is None:
             if config.filter_instances:
@@ -559,7 +558,13 @@ class Connection(BaseOsConnection):
             "availability_zone": config.availability_zone,
             "userdata": self._user_data(config.user_data)
         }
-        if hasattr(config, "network_conf"):
+        if config.network_conf:
+            # We only specify a network configuration if a network_conf
+            # has been given by the user. This is because some older versions
+            # of novaclient don't support this keyword argument. We leave
+            # it up to the user to ensure that if they specify a network
+            # configuration and their novaclient doesn't support it, then
+            # they will pick up the errors and fix the underlying issue.
             instance_params["nics"] = \
                 OsApiEndpointConfig.parse_netspecs(config.network_conf) or None
 
@@ -568,3 +573,12 @@ class Connection(BaseOsConnection):
             config.image_id,
             config.flavor_id,
             **instance_params)
+
+    def is_available(self):
+        try:
+            # Just see that we can import.
+            from novaclient import shell
+            shell.OpenStackComputeShell()._discover_extensions("1.1")
+            return True
+        except ImportError:
+            return False
