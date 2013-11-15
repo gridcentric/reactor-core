@@ -352,7 +352,7 @@ class RdpEndpointConfig(TcpEndpointConfig):
     username = Config.string(label="Active Directory Username", order=1,
         description="An Administrator within the domain.")
 
-    password = Config.string(label="Active Directory Password", order=2,
+    password = Config.password(label="Active Directory Password", order=2,
         description="The Administrator password.")
 
     orgunit = Config.string(label="Active Directory Orginational Unit", order=3,

@@ -742,8 +742,9 @@ function generateSingleConfig(root, config_name, config)
         break;
     case "string":
         input_elt = $("#conf-input-string").clone().appendTo(slot);
-        if (contains(config_name.toLowerCase(), "password"))
-            input_elt.attr("data_type", "password");
+        break;
+    case "password":
+        input_elt = $("#conf-input-password").clone().appendTo(slot);
         break;
     case "text":
         input_elt = $("#conf-input-text").clone().appendTo(slot);

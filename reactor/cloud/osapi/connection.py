@@ -102,7 +102,7 @@ class BaseOsEndpointConfig(Config):
         alternates=["user"],
         description="The user for authentication (OS_USERNAME).")
 
-    password = Config.string(label="OpenStack Password",
+    password = Config.password(label="OpenStack Password",
         default="admin", order=2,
         alternates=["apikey"],
         description="The api key or password (OS_PASSWORD).")
