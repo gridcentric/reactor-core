@@ -1,13 +1,33 @@
 #!/usr/bin/env python
 
 import os
+import re
+import subprocess
 
 from setuptools import setup
+
+VERSION = os.getenv("VERSION")
+
+if VERSION is None:
+    # Extract the git tag as the version.
+    git_describe = subprocess.Popen(
+        ["git", "describe", "--tags"],
+        stdout=subprocess.PIPE,
+        close_fds=True)
+    stdout, _ = git_describe.communicate()
+    if git_describe.returncode == 0:
+        m = re.match(".*-(\d+\.\d+\.\d+)-.*", stdout)
+        if m:
+            VERSION = m.group(1)
+
+if VERSION is None:
+    # Use 0.1, as the version is unknown.
+    VERSION = "0.1"
 
 setup(
     name="reactor",
     description="Load balancer and scale manager.",
-    version=os.getenv("VERSION") or "0.1",
+    version=VERSION,
     author="Gridcentric Inc.",
     author_email="support@gridcentric.com",
     url="http://www.gridcentric.com",
