@@ -179,7 +179,7 @@ class LdapConnection:
                 if cookie:
                     lc.controlValue = (page_size, cookie)
                     msgid = conn.search_ext(
-                        desc, ldap.SCOPE_SUBTREE, filter, attrs, serverctrls=[lc])
+                        desc, ldap.SCOPE_SUBTREE, oc_filter, attrs, serverctrls=[lc])
                 else:
                     break
 
