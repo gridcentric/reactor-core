@@ -19,7 +19,6 @@ import bisect
 import traceback
 import logging
 import uuid
-import weakref
 
 from . import cli
 from . import utils

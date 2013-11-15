@@ -19,7 +19,6 @@ import hashlib
 import traceback
 import threading
 import tempfile
-import signal
 import sys
 import types
 import weakref
