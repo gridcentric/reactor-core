@@ -36,6 +36,8 @@ STATUS_MAP = {
     "ERROR": STATUS_ERROR,
 }
 
+REACTOR_WIN_BLOB = """%(url)s
+"""
 REACTOR_PRE_SCRIPT = """#!/bin/sh
 mkdir -p /etc/reactor
 echo "REACTOR_API=%(url)s" > /etc/reactor/client.conf
@@ -257,6 +259,9 @@ class BaseOsConnection(CloudConnection):
         return map(_sanitize, instances)
 
     def _user_data(self, user_data=None):
+        win_blob = REACTOR_WIN_BLOB % {
+            "url": self._this_url,
+        }
         pre_script = REACTOR_PRE_SCRIPT % {
             "url": self._this_url,
         }
@@ -292,8 +297,10 @@ class BaseOsConnection(CloudConnection):
                 else:
                     msg.attach(part)
 
-        # Attach the reactor script (final step).
+        # Attach the reactor script.
         msg.attach(MIMEText(post_script, mime_type(post_script)))
+        # Attach blob for Windows's benefit (Linux will ignore -- final step).
+        msg.attach(MIMEText(win_blob, "x-windows-reactor"))
 
         return msg.as_string()
 

@@ -18,6 +18,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from reactor.cloud.osapi.connection import BaseOsConnection
+from reactor.cloud.osapi.connection import REACTOR_WIN_BLOB
 from reactor.cloud.osapi.connection import REACTOR_PRE_SCRIPT
 from reactor.cloud.osapi.connection import REACTOR_POST_SCRIPT
 
@@ -59,6 +60,10 @@ def test_basic_cloud_init():
                 'url': fake_url,
                 'timeout': 300
             }),
+        ('text/x-windows-reactor', 'part-002',
+            REACTOR_WIN_BLOB % {
+                'url': fake_url,
+            }),
     ]
 
     assert walk_userdata(conn._user_data()) == expect
@@ -77,6 +82,10 @@ def test_cloud_init_user_script():
             REACTOR_POST_SCRIPT % {
                 'url': fake_url,
                 'timeout': 300
+            }),
+        ('text/x-windows-reactor', 'part-003',
+            REACTOR_WIN_BLOB % {
+                'url': fake_url,
             }),
     ]
 
@@ -129,6 +138,10 @@ echo "This will run as soon as possible in the boot sequence"
             REACTOR_POST_SCRIPT % {
                 'url': fake_url,
                 'timeout': 300
+            }),
+        ('text/x-windows-reactor', 'part-004',
+            REACTOR_WIN_BLOB % {
+                'url': fake_url,
             }),
     ]
 
