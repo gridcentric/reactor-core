@@ -50,7 +50,8 @@ class LoadBalancerConnection(Connection):
         config=None,
         zkobj=None,
         this_ip=None,
-        error_notify=None):
+        error_notify=None,
+        discard_notify=None):
 
         super(LoadBalancerConnection, self).__init__(
             object_class="loadbalancer", name=name, config=config)

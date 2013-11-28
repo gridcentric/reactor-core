@@ -111,11 +111,12 @@ class Accept(object):
 
 class ConnectionConsumer(AtomicRunnable):
 
-    def __init__(self, locks, error_notify, producer):
+    def __init__(self, locks, error_notify, discard_notify, producer):
         super(ConnectionConsumer, self).__init__()
 
         self.locks = locks
         self.error_notify = utils.callback(error_notify)
+        self.discard_notify = utils.callback(discard_notify)
         self.producer = producer
 
         self.portmap = {}
@@ -166,7 +167,7 @@ class ConnectionConsumer(AtomicRunnable):
             return True
 
         # Grab the information for this port.
-        (_, exclusive, reconnect, backends, client_subnets) = self.portmap[port]
+        (_, exclusive, disposable, reconnect, backends, client_subnets) = self.portmap[port]
 
         # Check the subnet.
         if client_subnets:
@@ -252,7 +253,13 @@ class ConnectionConsumer(AtomicRunnable):
                     child, error_fn, utils.callback(self.notify)))
                 t.start()
 
-                self.children[child] = (ip, port, connection, standby_time)
+                self.children[child] = (
+                    ip,
+                    port,
+                    connection,
+                    standby_time,
+                    disposable)
+
                 return True
 
         return False
@@ -261,10 +268,14 @@ class ConnectionConsumer(AtomicRunnable):
     def clear_standby(self, force=False):
         removed = []
         now = time.time()
-        for ((ip, port), timeout) in self.standby.items():
+        for ((ip, port), timeout, disposable) in self.standby.items():
             if force or timeout < now:
-                # Remove the named lock (w/ port).
-                self.locks.remove("%s:%d" % (ip, port))
+                # If backends are disposable, discard this backend.
+                if disposable:
+                    self.discard_notify(ip)
+                else:
+                    # Remove the named lock (w/ port).
+                    self.locks.remove("%s:%d" % (ip, port))
                 removed.append((ip, port))
         for (ip, port) in removed:
             del self.standby[(ip, port)]
@@ -321,7 +332,7 @@ class ConnectionConsumer(AtomicRunnable):
                 os.kill(child, 0)
             except OSError:
                 # Not alive - remove from children list.
-                (ip, port, _, standby_time) = self.children[child]
+                (ip, port, _, standby_time, disposable) = self.children[child]
                 del self.children[child]
                 reaped += 1
 
@@ -333,9 +344,13 @@ class ConnectionConsumer(AtomicRunnable):
                 # and the only necessary means of removing the IP
                 # is through the clear_standby() hook.
                 if standby_time:
-                    self.standby[(ip, port)] = time.time() + standby_time
+                    self.standby[(ip, port)] = \
+                        (time.time() + standby_time, disposable)
                 else:
-                    self.locks.remove("%s:%d" % (ip, port))
+                    if disposable:
+                        self.discard_notify(ip)
+                    else:
+                        self.locks.remove("%s:%d" % (ip, port))
 
         # Return the number of children reaped.
         # This means that callers can do if self.reap_children().
@@ -544,6 +559,12 @@ class TcpEndpointConfig(Config):
     exclusive = Config.boolean(label="One VM per connection", default=True,
         description="Each Instance is used exclusively to serve a single connection.")
 
+    disposable = Config.boolean(label="Kill on Disconnect", default=False,
+        validate=lambda self: self.exclusive or not(self.disposable) or \
+            Config.error("Kill on Disconnect requires One VM per connection."),
+        description="Discard backend instances on disconnect. Requires" \
+                    + " 'One VM per connection'.")
+
     reconnect = Config.integer(label="Reconnect Timeout", default=60,
         validate=lambda self: self.reconnect >= 0 or \
             Config.error("The reconnect must be non-negative."),
@@ -565,7 +586,8 @@ class Connection(LoadBalancerConnection):
     producer = None
     consumer = None
 
-    def __init__(self, zkobj=None, error_notify=None, **kwargs):
+    def __init__(self, zkobj=None, error_notify=None,
+                 discard_notify=None, **kwargs):
         super(Connection, self).__init__(**kwargs)
 
         self.portmap = {}
@@ -573,7 +595,8 @@ class Connection(LoadBalancerConnection):
         self.locks = zkobj and zkobj._cast_as(IPAddresses)
 
         self.producer = ConnectionProducer()
-        self.consumer = ConnectionConsumer(self.locks, error_notify, self.producer)
+        self.consumer = ConnectionConsumer(self.locks, error_notify,
+                                           discard_notify, self.producer)
 
     def __del__(self):
         if self.producer:
@@ -622,6 +645,7 @@ class Connection(LoadBalancerConnection):
         self.portmap[listen] = (
             url,
             config.exclusive,
+            config.disposable,
             config.reconnect,
             portmap_backends,
             config.client_subnets)

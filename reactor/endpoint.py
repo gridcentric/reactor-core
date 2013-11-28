@@ -310,6 +310,12 @@ class Endpoint(Atomic):
         # recommissioned (because they were removed from the pool due to errors).
         self.errored = Cache(self.zkobj.errored_instances())
 
+        # Discarded instances map to the instance name (as instances above).
+        # This has the same semantics as decommissioned, except they may not be
+        # recommissioned (because they were marked for deletion by the laod
+        # balancer).
+        self.discarded = Cache(self.zkobj.discarded_instances())
+
         # Start watching the configuration.
         self.update_config(self.zkobj.get_config(watch=self.update_config))
 
@@ -682,7 +688,7 @@ class Endpoint(Atomic):
 
         return recommissioned
 
-    def _decommission_instances(self, instance_ids, errored=False):
+    def _decommission_instances(self, instance_ids, errored=False, discarded=False):
         """
         Drop the instances from the system.
         """
@@ -711,6 +717,8 @@ class Endpoint(Atomic):
             self.instances.remove(instance_id)
             if errored:
                 self.errored.add(instance_id, name)
+            elif discarded:
+                self.discarded.add(instance_id, name)
             else:
                 self.decommissioned.add(instance_id, name)
 
@@ -756,12 +764,14 @@ class Endpoint(Atomic):
         # Cleanup the leftover state from the instance.
         self._clean_instance(instance_id, errored=errored, decommissioned=decommissioned)
 
-    def _clean_instance(self, instance_id, errored=False, decommissioned=False):
+    def _clean_instance(self, instance_id, errored=False, decommissioned=False, discarded=False):
         self.logging.info(self.logging.CLEAN_INSTANCE, instance_id)
         if errored:
             name = self.errored.get(instance_id)
         elif decommissioned:
             name = self.decommissioned.get(instance_id)
+        elif discarded:
+            name = self.discarded.get(instance_id)
         else:
             name = self.instances.get(instance_id)
 
@@ -787,6 +797,8 @@ class Endpoint(Atomic):
             self.errored.remove(instance_id)
         elif decommissioned:
             self.decommissioned.remove(instance_id)
+        elif discarded:
+            self.discarded.remove(instance_id)
         else:
             self.instances.remove(instance_id)
 
@@ -829,14 +841,16 @@ class Endpoint(Atomic):
         self.instances.add(instance.id, instance.name)
         self.logging.info(self.logging.LAUNCH_SUCCESS, instance.id)
 
-    def _filter_instances(self, instances, regular=True, decommissioned=True, errored=True):
+    def _filter_instances(self, instances, regular=True, decommissioned=True, errored=True, discarded=True):
         known_instances = self.instances.list()
         decommissioned_instances = self.decommissioned.list()
         errored_instances = self.errored.list()
+        discarded_instances = self.discarded.list()
         return [x.id for x in instances if
              (x.id in known_instances or
              (decommissioned and x.id in decommissioned_instances) or
-             (errored and x.id in errored_instances))]
+             (errored and x.id in errored_instances) or
+             (discarded and x.id in discarded_instances))]
 
     def _health_check(self, instances, active_ports, update_interval=None):
         """
@@ -846,6 +860,7 @@ class Endpoint(Atomic):
         instance_ids = self._filter_instances(instances)
         decommissioned_instances = self.decommissioned.list()
         errored_instances = self.errored.list()
+        discarded_instances = self.discarded.list()
         confirmed_ips = set(self.confirmed_ips.list())
         active_ports = set(active_ports)
 
@@ -864,6 +879,7 @@ class Endpoint(Atomic):
             "active": len(confirmed_ips),
             "decommissioned": len(decommissioned_instances),
             "errored": len(errored_instances),
+            "discarded": len(discarded_instances),
         }
         self.logging.info(self.logging.INSTANCE_UPDATE, instance_states)
 
@@ -882,6 +898,9 @@ class Endpoint(Atomic):
             if not(instance_id in instance_ids) and \
                self._mark_instance(instance_id, 'unknown', marks=update_interval):
                 self._clean_instance(instance_id, errored=True)
+        for instance_id in self.discarded.list():
+            if not(instance_id in instance_ids):
+                self._clean_instance(instance_id, discarded=True)
         for instance_id in self.zkobj.marked_instances().list():
             if not(instance_id in instance_ids) and \
                self._mark_instance(instance_id, 'unknown', marks=update_interval):
@@ -902,7 +921,8 @@ class Endpoint(Atomic):
             instance_confirmed_ips = confirmed_ips.intersection(expected_ips)
             if len(instance_confirmed_ips) == 0 and \
                not instance_id in decommissioned_instances and \
-               not instance_id in errored_instances:
+               not instance_id in errored_instances and \
+               not instance_id in discarded_instances:
 
                 # The expected ips do no intersect with the confirmed ips.
                 # This instance should be marked.
@@ -962,6 +982,8 @@ class Endpoint(Atomic):
                     'decommissioned',
                     marks=update_interval):
                     self._delete_instance(inactive_instance_id, errored=True)
+            if inactive_instance_id in discarded_instances:
+                self._delete_instance(inactive_instance_id, discarded=True)
 
         # Return the active instance ids for update().
         return (active_instance_ids, inactive_instance_ids)
@@ -999,6 +1021,15 @@ class Endpoint(Atomic):
                 return True
         return False
 
+    def ip_discarded(self, ip):
+        for instance_id in self.instances.list():
+            if ip in self.instance_ips.get(instance_id):
+                # If this belongs to an instance of ours,
+                # then decommission the instance.
+                self._decommission_instances([instance_id], discarded=True)
+                return True
+        return False
+
     def inactive_ips(self):
         # These IPs belong to decomissioned instances and
         # specifically should not be doing anything. Note,
@@ -1009,6 +1040,8 @@ class Endpoint(Atomic):
         for instance_id in self.decommissioned.list():
             ips.extend(self.instance_ips.get(instance_id))
         for instance_id in self.errored.list():
+            ips.extend(self.instance_ips.get(instance_id))
+        for instance_id in self.discarded.list():
             ips.extend(self.instance_ips.get(instance_id))
         return ips
 

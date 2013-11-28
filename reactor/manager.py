@@ -490,7 +490,8 @@ class ScaleManager(AtomicRunnable):
                         config=config,
                         zkobj=self.zkobj.loadbalancers().tree(name),
                         this_ip=self._ip,
-                        error_notify=self.error_notify)
+                        error_notify=self.error_notify,
+                        discard_notify=self.discard_notify)
             except Exception:
                 # This isn't expected.
                 traceback.print_exc()
@@ -668,6 +669,19 @@ class ScaleManager(AtomicRunnable):
         if ":" in ip:
             (ip, _) = ip.split(":", 1)
             return self.error_notify(ip)
+
+        return False
+
+    def discard_notify(self, ip):
+        # Call into the endpoint to discard the backend.
+        for endpoint in self._endpoint_data.values():
+            if endpoint.ip_discarded(ip):
+                return True
+
+        # Check if we need to strip a port.
+        if ":" in ip:
+            (ip, _) = ip.split(":", 1)
+            return self.discard_notify(ip)
 
         return False
 
