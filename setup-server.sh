@@ -46,8 +46,10 @@ if dpkg -l coreutils >/dev/null 2>&1; then
     cat >/etc/apt/sources.list.d/reactor.list <<-EOF
 	deb http://downloads.gridcentric.com/packages/reactor/reactor-core/precise gridcentric multiverse
 	deb http://downloads.gridcentric.com/packages/cobaltclient/grizzly/precise gridcentric multiverse
-        deb http://ubuntu-cloud.archive.canonical.com/ubuntu precise-updates/havana main
 	EOF
+
+    # Add Ubuntu Cloud Archive repo for novaclient
+    add-apt-repository -y cloud-archive:havana
 
     # Update all repos.
     apt-get update
