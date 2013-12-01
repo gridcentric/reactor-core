@@ -383,7 +383,7 @@ class ConnectionConsumer(AtomicRunnable):
                 metric_map[ip] = [{ "active" : (1, 0) }]
 
         # Add 1 for every active connection we're tracking.
-        ports = ["%s:%d" % (ip, port) for (ip, port, _, _) in self.children.values()]
+        ports = ["%s:%d" % (ip, port) for (ip, port, _, _, _) in self.children.values()]
         ports.extend(["%s:%d" % (ip, port) for (ip, port) in self.standby.keys()])
 
         for port in ports:
@@ -402,7 +402,7 @@ class ConnectionConsumer(AtomicRunnable):
     @Atomic.sync
     def sessions(self):
         session_map = {}
-        for (ip, port, conn, _) in self.children.values():
+        for (ip, port, conn, _, _) in self.children.values():
             (src_ip, src_port) = conn.src
             portinfo = "%s:%d" % (ip, port)
             # We store clients as ip:port pairs.
@@ -416,7 +416,7 @@ class ConnectionConsumer(AtomicRunnable):
     @Atomic.sync
     def drop_session(self, client, backend):
         for child in self.children.keys():
-            (ip, port, conn, _) = self.children[child]
+            (ip, port, conn, _, _) = self.children[child]
             (src_ip, src_port) = conn.src
             portinfo = "%s:%d" % (ip, port)
             if client == _as_client(src_ip, src_port) and backend == portinfo:

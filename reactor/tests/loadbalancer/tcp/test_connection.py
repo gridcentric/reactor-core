@@ -406,7 +406,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
             mock_consumer._cond = mock.Mock()
-            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, FAKE_BACKEND_PORT, mock_accept, 0 ) }
+            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, FAKE_BACKEND_PORT, mock_accept, 0, False ) }
             mock_ac.return_value = FAKE_CLIENT_SESSION
             sessions = connection.ConnectionConsumer.sessions(mock_consumer)
             self.assertIn(FAKE_BACKEND_ID, sessions)
@@ -428,7 +428,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
             mock_consumer._cond = mock.Mock()
-            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, FAKE_BACKEND_PORT, mock_accept, 0 ) }
+            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, FAKE_BACKEND_PORT, mock_accept, 0, False ) }
             mock_ac.return_value = FAKE_CLIENT_SESSION
             connection.ConnectionConsumer.drop_session(mock_consumer, FAKE_CLIENT_SESSION, FAKE_BACKEND_ID)
             self.assertEquals(mock_kill.call_count, 1)
@@ -443,7 +443,7 @@ class ConnectionConsumerTests(unittest.TestCase):
             mock_accept.dst = FAKE_SOCKNAME
             mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
             mock_consumer._cond = mock.Mock()
-            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, FAKE_BACKEND_PORT, mock_accept, 0 ) }
+            mock_consumer.children = { FAKE_GRANDCHILD_PID : ( FAKE_BACKEND_IP, FAKE_BACKEND_PORT, mock_accept, 0, False ) }
             mock_ac.return_value = FAKE_CLIENT_SESSION
             connection.ConnectionConsumer.drop_session(mock_consumer, FAKE_CLIENT_SESSION_BOGUS, FAKE_BACKEND_ID)
             self.assertEquals(mock_kill.call_count, 0)
