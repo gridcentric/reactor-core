@@ -366,7 +366,7 @@ class ConnectionConsumer(AtomicRunnable):
                 continue
 
             # Get the associated URL for the postponed connection.
-            (url, _, _, _, _) = self.portmap[port]
+            (url, _, _, _, _, _) = self.portmap[port]
             if not pending.has_key(url):
                 pending[url] = 1
             else:
@@ -378,7 +378,7 @@ class ConnectionConsumer(AtomicRunnable):
         metric_map = {}
 
         # Set the active metric for all known backends to zero.
-        for (_, _, _, backends, _) in self.portmap.values():
+        for (_, _, _, _, backends, _) in self.portmap.values():
             for (ip, port) in backends:
                 metric_map[ip] = [{ "active" : (1, 0) }]
 
