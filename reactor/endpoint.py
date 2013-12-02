@@ -731,7 +731,7 @@ class Endpoint(Atomic):
                 self.logging.info(self.logging.DROP_IP, ip, "decomission")
                 self.confirmed_ips.remove(ip)
 
-    def _delete_instance(self, instance_id, cloud=True, errored=False, decommissioned=False):
+    def _delete_instance(self, instance_id, cloud=True, errored=False, decommissioned=False, discarded=False):
         # Grab our cloud connection.
         cloud_conn = self._find_cloud_connection(self.config.cloud)
         if cloud_conn is None:
@@ -762,7 +762,7 @@ class Endpoint(Atomic):
                 return
 
         # Cleanup the leftover state from the instance.
-        self._clean_instance(instance_id, errored=errored, decommissioned=decommissioned)
+        self._clean_instance(instance_id, errored=errored, decommissioned=decommissioned, discarded=discarded)
 
     def _clean_instance(self, instance_id, errored=False, decommissioned=False, discarded=False):
         self.logging.info(self.logging.CLEAN_INSTANCE, instance_id)
