@@ -269,6 +269,7 @@ class Endpoint(Atomic):
 
     def __init__(self, zkobj,
                  collect=None,
+                 clean_ip=None,
                  find_cloud_connection=None,
                  find_loadbalancer_connection=None):
         super(Endpoint, self).__init__()
@@ -278,6 +279,7 @@ class Endpoint(Atomic):
 
         # Values from our scale manager.
         self._collect = utils.callback(collect)
+        self._clean_ip = utils.callback(clean_ip)
         self._find_cloud_connection = utils.callback(find_cloud_connection)
         self._find_loadbalancer_connection = utils.callback(find_loadbalancer_connection)
 
@@ -782,6 +784,13 @@ class Endpoint(Atomic):
             lb_conn.cleanup(self.config, name)
 
         # Clear out all IP data.
+        #
+        # This happens through a call to the manager.
+        # The reason for this is so that any stale LB
+        # data related to this IP is cleaned up, as we
+        # may have switched our loadbalancer at some point
+        # and still have old data hanging around.
+        #
         # NOTE: There may also be decommissioned data
         # and marked data associated with this instance,
         # but we will allow that to be cleaned up naturally
@@ -789,8 +798,8 @@ class Endpoint(Atomic):
         ips = self.instance_ips.get(instance_id)
         for ip in ips:
             self.logging.info(self.logging.DROP_IP, ip, "clean")
-            self.confirmed_ips.remove(ip)
             self.zkobj.ip_metrics().remove(ip)
+            self._clean_ip(ip)
 
         # Drop the basic instance information.
         if errored:
@@ -1027,6 +1036,8 @@ class Endpoint(Atomic):
                 # If this belongs to an instance of ours,
                 # then decommission the instance.
                 self._decommission_instances([instance_id], discarded=True)
+                self.logging.info(self.logging.DROP_IP, ip, "discarded")
+                self.confirmed_ips.remove(ip)
                 return True
         return False
 

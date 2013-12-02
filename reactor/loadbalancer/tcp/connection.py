@@ -273,9 +273,8 @@ class ConnectionConsumer(AtomicRunnable):
                 # If backends are disposable, discard this backend.
                 if disposable:
                     self.discard_notify(ip)
-                else:
-                    # Remove the named lock (w/ port).
-                    self.locks.remove("%s:%d" % (ip, port))
+                # Remove the named lock (w/ port).
+                self.locks.remove("%s:%d" % (ip, port))
                 removed.append((ip, port))
         for (ip, port) in removed:
             del self.standby[(ip, port)]
@@ -349,8 +348,7 @@ class ConnectionConsumer(AtomicRunnable):
                 else:
                     if disposable:
                         self.discard_notify(ip)
-                    else:
-                        self.locks.remove("%s:%d" % (ip, port))
+                    self.locks.remove("%s:%d" % (ip, port))
 
         # Return the number of children reaped.
         # This means that callers can do if self.reap_children().
@@ -586,8 +584,11 @@ class Connection(LoadBalancerConnection):
     producer = None
     consumer = None
 
-    def __init__(self, zkobj=None, error_notify=None,
-                 discard_notify=None, **kwargs):
+    def __init__(self,
+                 zkobj=None,
+                 error_notify=None,
+                 discard_notify=None,
+                 **kwargs):
         super(Connection, self).__init__(**kwargs)
 
         self.portmap = {}
@@ -595,8 +596,11 @@ class Connection(LoadBalancerConnection):
         self.locks = zkobj and zkobj._cast_as(IPAddresses)
 
         self.producer = ConnectionProducer()
-        self.consumer = ConnectionConsumer(self.locks, error_notify,
-                                           discard_notify, self.producer)
+        self.consumer = ConnectionConsumer(
+            self.locks,
+            error_notify,
+            discard_notify,
+            self.producer)
 
     def __del__(self):
         if self.producer:

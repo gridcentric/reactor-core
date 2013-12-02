@@ -374,6 +374,7 @@ class ScaleManager(AtomicRunnable):
                     endpoint = Endpoint(
                         zkobj,
                         collect=self.collect,
+                        clean_ip=self.clean_ip,
                         find_cloud_connection=self._find_cloud_connection,
                         find_loadbalancer_connection=self._find_loadbalancer_connection)
                 else:
@@ -628,35 +629,41 @@ class ScaleManager(AtomicRunnable):
                 # Write out the set of matching endpoints.
                 self.endpoint_ips.add(ip, matching_uuid)
 
-            # Always remove the IP.
+            # Remove from the new IP list.
             self._new_ips_zkobj.remove(ip)
+
+    @Atomic.sync
+    def clean_ip(self, ip):
+        matching_uuid = None
+
+        # Find the owning endpoint for this
+        # IP and confirmed it there.
+        for (endpoint_uuid, endpoint) in self._endpoint_data.items():
+            if endpoint.ip_dropped(ip):
+                matching_uuid = endpoint_uuid
+                break
+
+        if matching_uuid:
+            # Remove the ip from the ip address set.
+            self.endpoint_ips.remove(ip)
+
+        # Give notice to all loadbalancers.
+        # They may use this to cleanup any stale state.
+        for lb in self._loadbalancers.values():
+            lb.dropped(ip)
 
     @Atomic.sync
     def drop_ip(self, ips):
         for ip in ips:
-            matching_uuid = None
 
             # Skip the IP if we don't own it.
             if not self._is_owned(utils.sha_hash(ip)):
                 continue
 
-            # Find the owning endpoint for this
-            # IP and confirmed it there.
-            for (endpoint_uuid, endpoint) in self._endpoint_data.items():
-                if endpoint.ip_dropped(ip):
-                    matching_uuid = endpoint_uuid
-                    break
+            # Clean-up data related to this IP.
+            self.clean_ip(ip)
 
-            if matching_uuid:
-                # Remove the ip from the ip address set.
-                self.endpoint_ips.remove(ip)
-
-            # Give notice to all loadbalancers.
-            # They may use this to cleanup any stale state.
-            for lb in self._loadbalancers.values():
-                lb.dropped(ip)
-
-            # Always remove the IP.
+            # Remove from the drop IP list.
             self._drop_ips_zkobj.remove(ip)
 
     def error_notify(self, ip):
