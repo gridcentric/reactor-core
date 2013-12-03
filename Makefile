@@ -70,7 +70,7 @@ endif
 	@$(INSTALL_DIR) $(DESTDIR)/etc/logrotate.d
 	@$(INSTALL_DATA) etc/logrotate.d/reactor-server $(DESTDIR)/etc/logrotate.d
 	@$(INSTALL_DIR) $(DESTDIR)/etc/cron.hourly
-	@$(INSTALL_DATA) etc/cron.hourly/clean-zk-logs $(DESTDIR)/etc/cron.hourly
+	@$(INSTALL_BIN) etc/cron.hourly/clean-zk-logs $(DESTDIR)/etc/cron.hourly
 	@$(INSTALL_DIR) $(DESTDIR)/etc/reactor/example
 	@$(INSTALL_DIR) $(DESTDIR)/etc/reactor/default
 	@rsync -ruav example/ $(DESTDIR)/etc/reactor/example
