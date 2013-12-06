@@ -32,7 +32,6 @@ from . config import Config
 from . eventlog import EventLog, Event
 from . zookeeper.client import ZookeeperClient
 from . zookeeper.connection import ZookeeperException
-from . zookeeper.cache import Cache
 from . objects.root import Reactor
 from . objects.endpoint import EndpointNotFound
 from . threadpool import Threadpool
@@ -186,7 +185,7 @@ class ScaleManager(AtomicRunnable):
         self._endpoints_zkobj = self.zkobj.endpoints()
         self._new_ips_zkobj = self.zkobj.new_ips()
         self._drop_ips_zkobj = self.zkobj.drop_ips()
-        self.endpoint_ips = Cache(self.zkobj.endpoint_ips())
+        self.endpoint_ips = self.zkobj.endpoint_ips()
 
         # Our configuration.
         self.config = ManagerConfig()

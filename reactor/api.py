@@ -43,7 +43,6 @@ from . objects.endpoint import EndpointExists
 from . objects.endpoint import EndpointNotFound
 from . zookeeper.connection import ZookeeperException
 from . zookeeper.client import ZookeeperClient
-from . zookeeper.cache import Cache
 
 def authorized(forbidden_view=None, allow_endpoint=False):
     """
@@ -127,7 +126,6 @@ class ReactorApi(Atomic):
         self.client = ZookeeperClient(zk_servers)
         self.zkobj = Reactor(self.client)
         self.config = Configurator()
-        self._lookup_cache = None
         self._endpoints_zkobj = self.zkobj.endpoints()
 
         # Set up auth-ticket authentication.
@@ -260,15 +258,10 @@ class ReactorApi(Atomic):
                 route_name=route_name, accept="application/json")
 
     def disconnect(self):
-        self._lookup_cache = None
         self.client.disconnect()
 
     def connect(self):
         self.client.connect()
-        self._lookup_cache = Cache(
-            self.zkobj.endpoint_ips(),
-            populate=self._endpoint_name_for_ip)
-        self._endpoints_zkobj.list(watch=self._endpoint_names_purge)
 
     def _endpoint_name_for_ip(self, ip):
         uuid = self.zkobj.endpoint_ips().get(ip)
@@ -277,12 +270,6 @@ class ReactorApi(Atomic):
             if endpoint_names and len(endpoint_names) > 0:
                 return endpoint_names[0]
         return None
-
-    def _endpoint_names_purge(self, endpoints=None):
-        # Regardless of the currently available endpoints,
-        # we purge all cached IPs values. Things may have
-        # changed UUID, or become invalidated in other ways.
-        self._lookup_cache.clear()
 
     def servers(self):
         return self.client.servers()
@@ -320,7 +307,7 @@ class ReactorApi(Atomic):
                 # address -- this is for security reasons. You can't add
                 # arbitrary IPs to your endpoint by simply changing your
                 # configuration.
-                endpoint_name = self._lookup_cache.get(endpoint_ip)
+                endpoint_name = self._endpoint_name_for_ip(endpoint_ip)
 
         if endpoint_name is None:
             return False
@@ -380,7 +367,7 @@ class ReactorApi(Atomic):
                 # we will update the request to confine it to the endpoint with
                 # this address.
                 request_ip = self._extract_remote_ip(context, request)
-                endpoint_name = self._lookup_cache.get(request_ip)
+                endpoint_name = self._endpoint_name_for_ip(request_ip)
                 if endpoint_name:
                     # Authorize this request and set the endpoint_name.
                     request.matchdict['endpoint_name'] = endpoint_name
