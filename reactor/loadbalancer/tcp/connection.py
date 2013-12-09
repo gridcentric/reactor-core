@@ -268,7 +268,8 @@ class ConnectionConsumer(AtomicRunnable):
     def clear_standby(self, force=False):
         removed = []
         now = time.time()
-        for ((ip, port), timeout, disposable) in self.standby.items():
+        for (ip, port) in self.standby:
+            (timeout, disposable) = self.standby[(ip, port)]
             if force or timeout < now:
                 # If backends are disposable, discard this backend.
                 if disposable:
@@ -378,7 +379,7 @@ class ConnectionConsumer(AtomicRunnable):
         # Set the active metric for all known backends to zero.
         for (_, _, _, _, backends, _) in self.portmap.values():
             for (ip, port) in backends:
-                metric_map[ip] = [{ "active" : (1, 0) }]
+                metric_map["%s:%d" % (ip, port)] = [{ "active" : (1, 0) }]
 
         # Add 1 for every active connection we're tracking.
         ports = ["%s:%d" % (ip, port) for (ip, port, _, _, _) in self.children.values()]
@@ -392,8 +393,8 @@ class ConnectionConsumer(AtomicRunnable):
                 metric_map[port] = [{ "active" : (1, 1) }]
             else:
                 # Add one to our current active count.
-                cur_count = metric_map[ip]["active"][0][1]
-                metric_map[port]["active"][0] = (1, cur_count+1)
+                cur_count = metric_map[port][0]["active"][1]
+                metric_map[port][0]["active"] = (1, cur_count+1)
 
         return metric_map
 
