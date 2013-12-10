@@ -207,7 +207,7 @@ class ConnectionConsumerTests(unittest.TestCase):
         mock_consumer.locks.find.return_value = ["%s:%d" % (FAKE_BACKEND_IP, FAKE_PORT)]
         mock_consumer.error_notify = mock.Mock()
         mock_consumer.portmap = {}
-        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, False, FAKE_RECONNECT, [FAKE_BACKEND], [])
+        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, None, FAKE_RECONNECT, [FAKE_BACKEND], [])
         mock_consumer.children = {}
         mock_consumer.standby = {}
         handled = connection.ConnectionConsumer.handle(mock_consumer, mock_accept)
@@ -229,7 +229,7 @@ class ConnectionConsumerTests(unittest.TestCase):
         mock_consumer.locks.lock.return_value = FAKE_BACKEND_ID
         mock_consumer.error_notify = mock.Mock()
         mock_consumer.portmap = {}
-        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, False, FAKE_RECONNECT, [FAKE_BACKEND], [])
+        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, None, FAKE_RECONNECT, [FAKE_BACKEND], [])
         mock_consumer.children = {}
         handled = connection.ConnectionConsumer.handle(mock_consumer, mock_accept)
         self.assertTrue(handled)
@@ -249,7 +249,7 @@ class ConnectionConsumerTests(unittest.TestCase):
         mock_consumer.locks.lock.return_value = None
         mock_consumer.error_notify = mock.Mock()
         mock_consumer.portmap = {}
-        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, False, FAKE_RECONNECT, [FAKE_BACKEND], [])
+        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, None, FAKE_RECONNECT, [FAKE_BACKEND], [])
         mock_consumer.children = {}
         handled = connection.ConnectionConsumer.handle(mock_consumer, mock_accept)
         self.assertFalse(handled)
@@ -264,7 +264,7 @@ class ConnectionConsumerTests(unittest.TestCase):
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
         mock_consumer._cond = mock.Mock()
         mock_consumer.portmap = {}
-        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, False, False, 0, [FAKE_BACKEND], [])
+        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, False, None, 0, [FAKE_BACKEND], [])
         mock_consumer.children = {}
         mock_consumer.error_notify = mock.Mock()
         handled = connection.ConnectionConsumer.handle(mock_consumer, mock_accept)
@@ -296,7 +296,7 @@ class ConnectionConsumerTests(unittest.TestCase):
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
         mock_consumer._cond = mock.Mock()
         mock_consumer.portmap = {}
-        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, False, False, 0, [FAKE_BACKEND], [])
+        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, False, None, 0, [FAKE_BACKEND], [])
         mock_consumer.children = {}
         handled = connection.ConnectionConsumer.handle(mock_consumer, mock_accept)
         self.assertFalse(handled)
@@ -642,7 +642,7 @@ class ConnectionTests(unittest.TestCase):
     def test_change_remove_ip(self):
         mock_conn = mock.Mock(spec=connection.Connection)
         mock_conn.url_info.return_value = FAKE_PORT
-        mock_conn.portmap = { FAKE_PORT : (FAKE_URL, True, False, FAKE_RECONNECT, [(FAKE_BACKEND_IP, FAKE_BACKEND_PORT)], []) }
+        mock_conn.portmap = { FAKE_PORT : (FAKE_URL, True, None, FAKE_RECONNECT, [(FAKE_BACKEND_IP, FAKE_BACKEND_PORT)], []) }
         connection.Connection.change(mock_conn, FAKE_URL, [])
         self.assertEquals(mock_conn.portmap, {})
 
@@ -661,7 +661,7 @@ class ConnectionTests(unittest.TestCase):
         mock_conn._endpoint_config.return_value = mock_config
         connection.Connection.change(mock_conn, FAKE_URL, [mock_backend])
         self.assertIn(FAKE_PORT, mock_conn.portmap)
-        self.assertEquals(mock_conn.portmap[FAKE_PORT], (FAKE_URL, True, False, FAKE_RECONNECT, [(FAKE_BACKEND_IP, FAKE_BACKEND_PORT)], []))
+        self.assertEquals(mock_conn.portmap[FAKE_PORT], (FAKE_URL, True, None, FAKE_RECONNECT, [(FAKE_BACKEND_IP, FAKE_BACKEND_PORT)], []))
 
     def test_save(self):
         # No logic in save.
@@ -678,7 +678,7 @@ class ConnectionTests(unittest.TestCase):
         mock_consumer.locks.find.return_value = [FAKE_BACKEND_ID]
         mock_consumer.error_notify = mock.Mock()
         mock_consumer.portmap = {}
-        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, False, FAKE_RECONNECT, [FAKE_BACKEND], [])
+        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, None, FAKE_RECONNECT, [FAKE_BACKEND], [])
         mock_consumer.children = {}
         mock_consumer.standby = {}
         handled = connection.ConnectionConsumer.handle(mock_consumer, mock_accept)
@@ -697,7 +697,7 @@ class ConnectionTests(unittest.TestCase):
         mock_consumer.locks.find.return_value = ["%s:%d" % (FAKE_BACKEND_IP, FAKE_PORT)]
         mock_consumer.error_notify = mock.Mock()
         mock_consumer.portmap = {}
-        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, False, FAKE_RECONNECT, [FAKE_BACKEND], ["%s/32" % FAKE_CLIENT_IP])
+        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, None, FAKE_RECONNECT, [FAKE_BACKEND], ["%s/32" % FAKE_CLIENT_IP])
         mock_consumer.children = {}
         mock_consumer.standby = {}
         handled = connection.ConnectionConsumer.handle(mock_consumer, mock_accept)
@@ -716,7 +716,7 @@ class ConnectionTests(unittest.TestCase):
         mock_consumer.locks.find.return_value = ["%s:%d" % (FAKE_BACKEND_IP, FAKE_PORT)]
         mock_consumer.error_notify = mock.Mock()
         mock_consumer.portmap = {}
-        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, False, FAKE_RECONNECT, [FAKE_BACKEND], ["1.2.3.4/24", "%s/32" % FAKE_CLIENT_IP])
+        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, None, FAKE_RECONNECT, [FAKE_BACKEND], ["1.2.3.4/24", "%s/32" % FAKE_CLIENT_IP])
         mock_consumer.children = {}
         mock_consumer.standby = {}
         handled = connection.ConnectionConsumer.handle(mock_consumer, mock_accept)
@@ -732,7 +732,7 @@ class ConnectionTests(unittest.TestCase):
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
         mock_consumer._cond = mock.Mock()
         mock_consumer.portmap = {}
-        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, False, FAKE_RECONNECT, [FAKE_BACKEND], ["1.2.3.4/24"])
+        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, None, FAKE_RECONNECT, [FAKE_BACKEND], ["1.2.3.4/24"])
         mock_consumer.children = {}
         mock_consumer.standby = {}
         handled = connection.ConnectionConsumer.handle(mock_consumer, mock_accept)
@@ -748,7 +748,7 @@ class ConnectionTests(unittest.TestCase):
         mock_consumer = mock.Mock(spec=connection.ConnectionConsumer)
         mock_consumer._cond = mock.Mock()
         mock_consumer.portmap = {}
-        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, False, FAKE_RECONNECT, [FAKE_BACKEND], ["1.2.3.4/24", "5.6.7.8/16"])
+        mock_consumer.portmap[FAKE_PORT] = (FAKE_URL, True, None, FAKE_RECONNECT, [FAKE_BACKEND], ["1.2.3.4/24", "5.6.7.8/16"])
         mock_consumer.children = {}
         mock_consumer.standby = {}
         handled = connection.ConnectionConsumer.handle(mock_consumer, mock_accept)

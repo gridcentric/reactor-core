@@ -212,6 +212,10 @@ class ConnectionConsumer(AtomicRunnable):
             # Either redirect or drop the connection.
             child = connection.redirect(ip, port)
             standby_time = (exclusive and reconnect)
+            # Note: disposable is either None or a mimumum session time.
+            # So set the time to dispose as now + minimum session time,
+            # or False.
+            dispose_time = (disposable is not None and time.time() + disposable)
 
             if child is not None:
                 # Start a notification thread. This will
@@ -258,7 +262,7 @@ class ConnectionConsumer(AtomicRunnable):
                     port,
                     connection,
                     standby_time,
-                    disposable)
+                    dispose_time)
 
                 return True
 
@@ -269,10 +273,10 @@ class ConnectionConsumer(AtomicRunnable):
         removed = []
         now = time.time()
         for (ip, port) in self.standby:
-            (timeout, disposable) = self.standby[(ip, port)]
+            (timeout, dispose) = self.standby[(ip, port)]
             if force or timeout < now:
                 # If backends are disposable, discard this backend.
-                if disposable:
+                if dispose:
                     self.discard_notify(ip)
                 # Remove the named lock (w/ port).
                 self.locks.remove("%s:%d" % (ip, port))
@@ -332,9 +336,13 @@ class ConnectionConsumer(AtomicRunnable):
                 os.kill(child, 0)
             except OSError:
                 # Not alive - remove from children list.
-                (ip, port, _, standby_time, disposable) = self.children[child]
+                (ip, port, _, standby_time, dispose_time) = self.children[child]
                 del self.children[child]
                 reaped += 1
+
+                # If VMs are disposable, make sure the minimum
+                # amount of session time has passed.
+                dispose = dispose_time and time.time() >= dispose_time
 
                 # If reconnect and exclusive is on, then
                 # we add this connection to the standby list.
@@ -345,9 +353,9 @@ class ConnectionConsumer(AtomicRunnable):
                 # is through the clear_standby() hook.
                 if standby_time:
                     self.standby[(ip, port)] = \
-                        (time.time() + standby_time, disposable)
+                        (time.time() + standby_time, dispose)
                 else:
-                    if disposable:
+                    if dispose:
                         self.discard_notify(ip)
                     self.locks.remove("%s:%d" % (ip, port))
 
@@ -564,6 +572,12 @@ class TcpEndpointConfig(Config):
         description="Discard backend instances on disconnect. Requires" \
                     + " 'One VM per connection'.")
 
+    dispose_min = Config.integer(label="Minimum session time", default=30,
+        validate=lambda self: self.dispose_min >= 0 or \
+            Config.error("Minimum session time must be non-negative."),
+        description="Minimum session time (in seconds) before a session is" \
+                    + " killed on disconnect.")
+
     reconnect = Config.integer(label="Reconnect Timeout", default=60,
         validate=lambda self: self.reconnect >= 0 or \
             Config.error("The reconnect must be non-negative."),
@@ -650,7 +664,7 @@ class Connection(LoadBalancerConnection):
         self.portmap[listen] = (
             url,
             config.exclusive,
-            config.disposable,
+            config.disposable and config.dispose_min or None,
             config.reconnect,
             portmap_backends,
             config.client_subnets)
