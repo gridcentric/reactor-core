@@ -664,7 +664,9 @@ class Connection(LoadBalancerConnection):
         self.portmap[listen] = (
             url,
             config.exclusive,
-            config.disposable and config.dispose_min or None,
+            # If disposable is True, pass dispose_min (which
+            # may be 0). Else pass None.
+            (config.disposable or None) and config.dispose_min,
             config.reconnect,
             portmap_backends,
             config.client_subnets)
