@@ -57,10 +57,10 @@ class Connection(BaseOsConnection):
                               security_groups=config.security_groups,
                               availability_zone=config.availability_zone,
                               guest_params=params,
-                              userdata=self._user_data(config.user_data))
+                              user_data=self._user_data(config.user_data))
         else:
             instance = server.launch(security_groups=config.security_groups,
                               availability_zone=config.availability_zone,
                               guest_params=params,
-                              userdata=self._user_data(config.user_data))
+                              user_data=self._user_data(config.user_data))
         return instance[0]
