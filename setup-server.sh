@@ -48,7 +48,14 @@ if dpkg -l coreutils >/dev/null 2>&1; then
 	deb http://downloads.gridcentric.com/packages/cobaltclient/grizzly/precise gridcentric multiverse
 	EOF
 
+    # Update all repos since there may have been changes upstream since machine
+    # was last updated. Failing to refresh the cache may prevent us from
+    # fetching the latest version of python-software-properties, which in turn
+    # may not have the latest cloud-archive repository info.
+    apt-get update
+
     # Add Ubuntu Cloud Archive repo for novaclient
+    apt-get -y install python-software-properties
     add-apt-repository -y cloud-archive:havana
 
     # Update all repos.
