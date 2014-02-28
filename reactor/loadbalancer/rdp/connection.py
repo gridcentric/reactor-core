@@ -438,13 +438,15 @@ class Connection(TcpConnection):
     def cleanup(self, config, name):
         config = self._endpoint_config(config)
         connection = config.ldap_connection()
+        name = name.lower()
         if connection:
             try:
                 # Look for machine that matches the name.
                 machines = connection.list_machines(name)
                 connection.remove_machine(machines[name])
-            except Exception:
-                logging.warn("Unable to remove machine account %s", name)
+            except Exception as e:
+                logging.warn("Unable to remove machine account %s. %s: %s",
+                             name, type(e), e)
             else:
                 logging.info("Removed machine account %s", name)
 
