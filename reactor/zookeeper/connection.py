@@ -301,9 +301,10 @@ class ZookeeperConnection(object):
                 self.content_watches[path] = []
             if not(fn in self.content_watches.get(path, [])):
                 self.content_watches[path] = self.content_watches.get(path, []) + [fn]
-            value, _ = zookeeper.get(self.handle, path, self.zookeeper_watch)
         finally:
             self.cond.release()
+
+        value, _ = zookeeper.get(self.handle, path, self.zookeeper_watch)
         return value
 
     @log
@@ -312,52 +313,51 @@ class ZookeeperConnection(object):
         if not (path and fn):
             raise BadArgumentsException("Invalid path/fn: %s/%s" % (path, fn))
 
-        self.cond.acquire()
         if not zookeeper.exists(self.handle, path):
             self.write(path, "")
 
+        self.cond.acquire()
         try:
             if clean:
                 self.child_watches[path] = []
             if not(fn in self.child_watches.get(path, [])):
                 self.child_watches[path] = self.child_watches.get(path, []) + [fn]
-            rval = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
         finally:
             self.cond.release()
+
+        rval = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
         return rval
 
     def zookeeper_watch(self, zh, event, state, path):
         self.cond.acquire()
         try:
-            result = None
             if event == zookeeper.CHILD_EVENT:
                 fns = self.child_watches.get(path, None)
-                if fns:
-                    try:
-                        result = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
-                    except zookeeper.NoNodeException:
-                        result = None
             elif event == zookeeper.CHANGED_EVENT:
                 fns = self.content_watches.get(path, None)
-                if fns:
-                    try:
-                        result, _ = zookeeper.get(self.handle, path, self.zookeeper_watch)
-                    except zookeeper.NoNodeException:
-                        result = None
             else:
-                return
-
-            if result != None and fns != None:
-                for fn in fns:
-                    # Don't allow an individual watch firing an exception to
-                    # prevent all other watches from being fired. Just log an
-                    # error message and moved on to the next callback.
-                    try:
-                        fn(result)
-                    except Exception:
-                        logging.exception("Error executing watch for %s.", path)
+                fns = None
         finally:
             self.cond.release()
+
+        result = None
+        try:
+            if fns and event == zookeeper.CHILD_EVENT:
+                result = zookeeper.get_children(self.handle, path, self.zookeeper_watch)
+            elif fns and event == zookeeper.CHANGED_EVENT:
+                result, _ = zookeeper.get(self.handle, path, self.zookeeper_watch)
+        except zookeeper.NoNodeException:
+            pass
+
+        if result != None and fns != None:
+            for fn in fns:
+                # Don't allow an individual watch firing an exception to
+                # prevent all other watches from being fired. Just log an
+                # error message and moved on to the next callback.
+                try:
+                    fn(result)
+                except Exception:
+                    logging.exception("Error executing watch for %s.", path)
 
     @log
     @wrap_exceptions
